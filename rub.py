@@ -695,12 +695,12 @@ def process_task(task: dict):
         local_path = Path(task.get("path", ""))
         if not local_path.exists():
             raise RuntimeError("Local file not found.")
-        token = (os.getenv("BALE_BOT_TOKEN") or "").strip()
+        token = str(task.get("bale_bot_token") or os.getenv("BALE_BOT_TOKEN") or "").strip()
         chat_id = str(task.get("bale_chat_id") or "").strip()
         if not token:
-            raise RuntimeError("BALE_BOT_TOKEN is not set on the server.")
+            raise RuntimeError("Bale bot token missing. Use /bale_connect in the bot.")
         if not chat_id:
-            raise RuntimeError("Bale chat_id missing. Use /bale_set_chat in the bot.")
+            raise RuntimeError("Bale chat_id missing. Use /bale_connect in the bot.")
         from v2.transfer.bale_client import send_file_auto
 
         push_status(task, "در حال ارسال به بله ...", "uploading")
@@ -718,8 +718,15 @@ def process_task(task: dict):
             raise RuntimeError("Local file not found.")
         from v2.transfer.drive_client import upload_file
 
+        sa_path = str(task.get("drive_sa_path") or "").strip() or None
+        folder_id = str(task.get("drive_folder_id") or "").strip() or None
         push_status(task, "در حال آپلود به Google Drive ...", "uploading")
-        ok, link, _meta = upload_file(local_path, file_name=task.get("file_name") or local_path.name)
+        ok, link, _meta = upload_file(
+            local_path,
+            file_name=task.get("file_name") or local_path.name,
+            service_account_path=sa_path,
+            folder_id=folder_id,
+        )
         if not ok:
             raise RuntimeError(link)
         bill_upload_usage(task, local_path.stat().st_size)
@@ -790,8 +797,9 @@ def process_task(task: dict):
         from v2.transfer.drive_client import download_file
         from v2.transfer.telegram_notify import send_document
 
+        sa_path = str(task.get("drive_sa_path") or "").strip() or None
         push_status(task, "در حال دانلود از Drive ...", "downloading")
-        ok, detail = download_file(file_id, dest)
+        ok, detail = download_file(file_id, dest, service_account_path=sa_path)
         if not ok:
             raise RuntimeError(detail)
         ok2, err = send_document(int(chat_id or 0), dest, caption=f"Drive: {file_id}")

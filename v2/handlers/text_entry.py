@@ -28,6 +28,8 @@ class TextEntryDeps:
     enqueue_rubika_text_message: Callable[[Message, str], Awaitable[None]]
     dispatch_rubika_connect_wizard: AsyncWizardFn
     rubika_wizard_deps: Any
+    dispatch_provider_connect_wizard: AsyncWizardFn
+    provider_connect_wizard_deps: Any
     dispatch_zip_batch_wizard: AsyncWizardFn
     zip_batch_wizard_deps: Any
     handle_zip_password_text: AsyncWizardFn
@@ -80,6 +82,15 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         state,
         text,
         deps.rubika_wizard_deps,
+    ):
+        return
+
+    if await deps.dispatch_provider_connect_wizard(
+        message,
+        user_id,
+        state,
+        text,
+        deps.provider_connect_wizard_deps,
     ):
         return
 

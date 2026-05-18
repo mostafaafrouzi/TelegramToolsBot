@@ -81,6 +81,18 @@ class QueueDB:
         if "bale_chat_id" not in cols:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN bale_chat_id TEXT")
 
+    def _migrate_v2_user_prefs_provider_creds(self, conn):
+        rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
+        if not rows:
+            return
+        cols = {r[1] for r in rows}
+        if "bale_bot_token" not in cols:
+            conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN bale_bot_token TEXT")
+        if "drive_folder_id" not in cols:
+            conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN drive_folder_id TEXT")
+        if "drive_sa_path" not in cols:
+            conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN drive_sa_path TEXT")
+
     def _init_db(self):
         with self._connect() as conn:
             conn.execute(
@@ -131,6 +143,7 @@ class QueueDB:
             self._migrate_v2_user_prefs_direct_mode(conn)
             self._migrate_v2_user_prefs_rubika_session(conn)
             self._migrate_v2_user_prefs_bale_chat(conn)
+            self._migrate_v2_user_prefs_provider_creds(conn)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS v2_user_state_mirror (
@@ -520,16 +533,164 @@ class QueueDB:
                     )
                 conn.commit()
 
-    def get_bale_chat_id(self, telegram_user_id: int) -> Optional[str]:
+    def get_bale_credentials(self, telegram_user_id: int) -> tuple[Optional[str], Optional[str]]:
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT bale_chat_id FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                """
+                SELECT bale_bot_token, bale_chat_id
+                FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1
+                """,
                 (int(telegram_user_id),),
             ).fetchone()
-        if not row or row["bale_chat_id"] is None:
+        if not row:
+            return None, None
+        token = str(row["bale_bot_token"]).strip() if row["bale_bot_token"] else None
+        chat = str(row["bale_chat_id"]).strip() if row["bale_chat_id"] else None
+        return token or None, chat or None
+
+    def get_bale_chat_id(self, telegram_user_id: int) -> Optional[str]:
+        _token, chat = self.get_bale_credentials(telegram_user_id)
+        return chat
+
+    def upsert_bale_bot_token(self, telegram_user_id: int, bot_token: str) -> None:
+        tok = (bot_token or "").strip()
+        if not tok:
+            return
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        """
+                        UPDATE v2_user_prefs
+                        SET bale_bot_token = ?, updated_at = ?
+                        WHERE telegram_user_id = ?
+                        """,
+                        (tok, now, int(telegram_user_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO v2_user_prefs (telegram_user_id, menu_section, bale_bot_token, updated_at)
+                        VALUES (?, 'main', ?, ?)
+                        """,
+                        (int(telegram_user_id), tok, now),
+                    )
+                conn.commit()
+
+    def clear_bale_credentials(self, telegram_user_id: int) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    UPDATE v2_user_prefs
+                    SET bale_bot_token = NULL, bale_chat_id = NULL, updated_at = ?
+                    WHERE telegram_user_id = ?
+                    """,
+                    (now, int(telegram_user_id)),
+                )
+                conn.commit()
+
+    def get_drive_folder_id(self, telegram_user_id: int) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT drive_folder_id FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                (int(telegram_user_id),),
+            ).fetchone()
+        if not row or row["drive_folder_id"] is None:
             return None
-        s = str(row["bale_chat_id"]).strip()
+        s = str(row["drive_folder_id"]).strip()
         return s or None
+
+    def get_drive_sa_path(self, telegram_user_id: int) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT drive_sa_path FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                (int(telegram_user_id),),
+            ).fetchone()
+        if not row or row["drive_sa_path"] is None:
+            return None
+        s = str(row["drive_sa_path"]).strip()
+        return s or None
+
+    def upsert_drive_folder_id(self, telegram_user_id: int, folder_id: str) -> None:
+        fid = (folder_id or "").strip()
+        if not fid:
+            return
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        """
+                        UPDATE v2_user_prefs
+                        SET drive_folder_id = ?, updated_at = ?
+                        WHERE telegram_user_id = ?
+                        """,
+                        (fid, now, int(telegram_user_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO v2_user_prefs (telegram_user_id, menu_section, drive_folder_id, updated_at)
+                        VALUES (?, 'main', ?, ?)
+                        """,
+                        (int(telegram_user_id), fid, now),
+                    )
+                conn.commit()
+
+    def upsert_drive_sa_path(self, telegram_user_id: int, relative_path: str) -> None:
+        rel = (relative_path or "").strip().replace("\\", "/")
+        if not rel:
+            return
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        """
+                        UPDATE v2_user_prefs
+                        SET drive_sa_path = ?, updated_at = ?
+                        WHERE telegram_user_id = ?
+                        """,
+                        (rel, now, int(telegram_user_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO v2_user_prefs (telegram_user_id, menu_section, drive_sa_path, updated_at)
+                        VALUES (?, 'main', ?, ?)
+                        """,
+                        (int(telegram_user_id), rel, now),
+                    )
+                conn.commit()
+
+    def clear_drive_credentials(self, telegram_user_id: int) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    UPDATE v2_user_prefs
+                    SET drive_folder_id = NULL, drive_sa_path = NULL, updated_at = ?
+                    WHERE telegram_user_id = ?
+                    """,
+                    (now, int(telegram_user_id)),
+                )
+                conn.commit()
 
     def upsert_bale_chat_id(self, telegram_user_id: int, chat_id: str) -> None:
         cid = (chat_id or "").strip()

@@ -29,7 +29,11 @@ class ReplyRouteDeps:
     rubika_connect_handler: MessageHandler
     rubika_status_handler: MessageHandler
     bale_status_handler: MessageHandler
+    bale_connect_handler: MessageHandler
+    bale_disconnect_handler: MessageHandler
     drive_status_handler: MessageHandler
+    drive_connect_handler: MessageHandler
+    drive_disconnect_handler: MessageHandler
     ssh_list_handler: MessageHandler
     new_batch_handler: MessageHandler
     done_batch_handler: MessageHandler
@@ -114,8 +118,20 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/bale_status":
         await deps.bale_status_handler(client, message)
         return True
+    if mapped == "/bale_connect":
+        await deps.bale_connect_handler(client, message)
+        return True
+    if mapped == "/bale_disconnect":
+        await deps.bale_disconnect_handler(client, message)
+        return True
     if mapped == "/drive_status":
         await deps.drive_status_handler(client, message)
+        return True
+    if mapped == "/drive_connect":
+        await deps.drive_connect_handler(client, message)
+        return True
+    if mapped == "/drive_disconnect":
+        await deps.drive_disconnect_handler(client, message)
         return True
     if mapped == "/ssh_list":
         await deps.ssh_list_handler(client, message)

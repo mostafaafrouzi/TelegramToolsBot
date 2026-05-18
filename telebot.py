@@ -40,6 +40,15 @@ from v2.core import menu_engine
 from v2.core.menu_sections import MenuSection
 from v2.handlers.reply_routes import ReplyRouteDeps, dispatch_reply_keyboard_route
 from v2.handlers.rubika_wizard import RubikaWizardDeps, dispatch_rubika_connect_wizard
+from v2.handlers.provider_connect_wizards import (
+    ProviderConnectWizardDeps,
+    dispatch_provider_connect_wizard,
+    handle_bale_connect,
+    handle_bale_disconnect,
+    handle_drive_connect,
+    handle_drive_disconnect,
+    save_drive_sa_from_downloaded_file,
+)
 from v2.handlers.zip_batch_wizard import ZipBatchWizardDeps, dispatch_zip_batch_wizard
 from v2.handlers.zip_password_prompt import ZipPasswordPromptDeps, handle_zip_password_text
 from v2.handlers.direct_mode_text import DirectModeTextDeps, handle_direct_mode_plain_text
@@ -347,18 +356,42 @@ I18N = {
         ),
         "queue_processing_none": "`—`",
         "queue_processing_detail": "`{job_id}` نوع `{task_type}` — `{file}` (~{size})",
-        "bale_not_configured_server": (
-            "بله روی سرور پیکربندی نشده.\n"
-            "در `.env` مقدار `BALE_BOT_TOKEN` را بگذار و سرویس را restart کن."
+        "bale_not_connected": "بله متصل نیست. `/bale_connect` — ربات بله خودت را بساز و توکن را وارد کن.",
+        "bale_ask_token": (
+            "توکن ربات بله خودت را بفرست (از @botfather در بله).\n"
+            "این توکن فقط برای حساب تلگرام تو ذخیره می‌شود."
         ),
-        "bale_status_no_chat": "توکن بله روی سرور OK است ({detail}).\nمقصد: `/bale_set_chat <chat_id>`",
+        "bale_token_invalid": "توکن بله نامعتبر است: {detail}",
+        "bale_token_ok": "ربات بله تأیید شد (@{bot}).\nحالا `chat_id` مقصد را بفرست (گروه/کاربر در بله).",
+        "bale_chat_id_empty": "chat_id خالی است. دوباره بفرست.",
+        "bale_connected_ok": "بله متصل شد ✅ مقصد: `{chat_id}`",
+        "bale_already_connected": "بله قبلاً متصل است. برای اتصال مجدد `/bale_disconnect` سپس `/bale_connect`.",
+        "bale_disconnected": "اتصال بله قطع شد.",
+        "btn_bale_connect": "اتصال بله",
+        "btn_bale_status": "وضعیت بله",
+        "btn_bale_disconnect": "قطع بله",
+        "bale_status_no_chat": "توکن OK ({detail}). chat_id نداری — در ویزارد `/bale_connect` ادامه بده.",
         "bale_status_ok": "بله: chat_id=`{chat_id}` — {detail}",
-        "bale_set_chat_usage": "استفاده: `/bale_set_chat <bale_chat_id>`",
+        "bale_set_chat_usage": "استفاده: `/bale_set_chat <bale_chat_id>` (بعد از `/bale_connect`)",
         "bale_set_chat_saved": "مقصد بله ذخیره شد: `{chat_id}`",
-        "drive_not_configured": (
-            "گوگل درایو روی سرور پیکربندی نشده.\n"
-            "`GOOGLE_DRIVE_CLIENT_ID` و `GOOGLE_DRIVE_CLIENT_SECRET` در `.env`."
+        "drive_not_connected": (
+            "گوگل درایو متصل نیست. `/drive_connect` — فایل JSON سرویس‌اکانت خودت را آپلود کن."
         ),
+        "drive_ask_sa_json": (
+            "فایل JSON سرویس‌اکانت Google (Drive API) را به‌صورت **سند** بفرست.\n"
+            "پوشه Drive را با ایمیل سرویس‌اکانت Share کن."
+        ),
+        "drive_ask_folder_id": "شناسه پوشه Drive (folder ID از URL) را بفرست:",
+        "drive_folder_empty": "folder_id خالی است.",
+        "drive_sa_missing_retry": "فایل سرویس‌اکانت پیدا نشد. دوباره `/drive_connect`.",
+        "drive_connected_ok": "درایو متصل شد ✅ folder=`{folder_id}`",
+        "drive_disconnected": "اتصال درایو قطع شد.",
+        "btn_drive_connect": "اتصال درایو",
+        "btn_drive_status": "وضعیت درایو",
+        "btn_drive_disconnect": "قطع درایو",
+        "drive_sa_need_document": "JSON را به‌صورت فایل (document) بفرست، نه متن.",
+        "drive_sa_need_json": "نام فایل باید `.json` باشد.",
+        "drive_sa_invalid": "JSON نامعتبر: {error}",
         "drive_status_line": "Drive configured: {ok}\n{detail}",
         "ssh_list_empty": "هیچ سرور SSH ثبت نشده. `/ssh_add label host port user`",
         "ssh_list_title": "سرورهای SSH:",
@@ -369,16 +402,16 @@ I18N = {
         "ssh_put_await_file": "مسیر روی سرور ثبت شد. حالا فایل را در تلگرام بفرست.",
         "ssh_server_not_found": "سرور SSH پیدا نشد.",
         "ssh_auth_missing": "برای این سرور رمز یا کلید SSH ثبت نشده. دوباره با `/ssh_add` و رمز اضافه کن.",
-        "bale_active_hint": "پس از `/bale_set_chat`، همین‌جا فایل بفرست تا به بله برود (حداکثر ~۲۰ مگابایت).",
-        "drive_active_hint": "فایل بفرست تا در Drive آپلود شود. دانلود: `/drive_download <file_id>`",
+        "bale_active_hint": "پس از `/bale_connect`، همین‌جا فایل بفرست تا با ربات بله خودت ارسال شود (~۲۰ مگ).",
+        "drive_active_hint": "پس از `/drive_connect`، فایل بفرست تا در Drive خودت آپلود شود. دانلود: `/drive_download <id>`",
         "drive_download_usage": "استفاده: `/drive_download <google_drive_file_id>`",
         "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "راهنمای سریع:\n\n"
             "انتقال:\n"
             "- روبیکا: `/rubika_connect` · `/rubika_status`\n"
-            "- بله: `/bale_status` · `/bale_set_chat <id>`\n"
-            "- درایو: `/drive_status`\n"
+            "- بله: `/bale_connect` · `/bale_status` · `/bale_disconnect`\n"
+            "- درایو: `/drive_connect` · `/drive_status` · `/drive_disconnect`\n"
             "- SSH: `/ssh_list` · `/ssh_add label host port user`\n"
             "- فایل/ZIP: `/newbatch` · `/done` · `/sendtext` · `/sendlink`\n\n"
             "ابزارها: `/dns` · `/myip` · `/ping` · `/md5` · `/sha256` · `/b64e` · `/b64d`\n\n"
@@ -700,18 +733,34 @@ I18N = {
         ),
         "queue_processing_none": "`—`",
         "queue_processing_detail": "`{job_id}` type `{task_type}` — `{file}` (~{size})",
-        "bale_not_configured_server": (
-            "Bale is not configured on the server.\n"
-            "Set `BALE_BOT_TOKEN` in `.env` and restart the service."
-        ),
-        "bale_status_no_chat": "Bale token OK ({detail}).\nSet destination: `/bale_set_chat <chat_id>`",
+        "bale_not_connected": "Bale is not linked. Use `/bale_connect` with your own Bale bot token.",
+        "bale_ask_token": "Send your Bale bot token (from Bale @botfather). Stored only for your Telegram account.",
+        "bale_token_invalid": "Invalid Bale token: {detail}",
+        "bale_token_ok": "Bale bot verified (@{bot}). Send the destination `chat_id`.",
+        "bale_chat_id_empty": "chat_id is empty.",
+        "bale_connected_ok": "Bale linked ✅ destination: `{chat_id}`",
+        "bale_already_connected": "Bale already linked. `/bale_disconnect` then `/bale_connect` to replace.",
+        "bale_disconnected": "Bale disconnected.",
+        "btn_bale_connect": "Connect Bale",
+        "btn_bale_status": "Bale status",
+        "btn_bale_disconnect": "Disconnect Bale",
+        "bale_status_no_chat": "Token OK ({detail}). Missing chat_id — continue `/bale_connect`.",
         "bale_status_ok": "Bale: chat_id=`{chat_id}` — {detail}",
-        "bale_set_chat_usage": "Usage: `/bale_set_chat <bale_chat_id>`",
+        "bale_set_chat_usage": "Usage: `/bale_set_chat <bale_chat_id>` (after `/bale_connect`)",
         "bale_set_chat_saved": "Bale destination saved: `{chat_id}`",
-        "drive_not_configured": (
-            "Google Drive is not configured.\n"
-            "Set `GOOGLE_DRIVE_CLIENT_ID` and `GOOGLE_DRIVE_CLIENT_SECRET` in `.env`."
-        ),
+        "drive_not_connected": "Google Drive not linked. Use `/drive_connect` and upload your service-account JSON.",
+        "drive_ask_sa_json": "Send your Google service-account JSON as a **document** file.",
+        "drive_ask_folder_id": "Send the Drive folder ID (from the folder URL):",
+        "drive_folder_empty": "folder_id is empty.",
+        "drive_sa_missing_retry": "Service account file missing. Run `/drive_connect` again.",
+        "drive_connected_ok": "Drive linked ✅ folder=`{folder_id}`",
+        "drive_disconnected": "Drive disconnected.",
+        "btn_drive_connect": "Connect Drive",
+        "btn_drive_status": "Drive status",
+        "btn_drive_disconnect": "Disconnect Drive",
+        "drive_sa_need_document": "Send the JSON as a document file, not plain text.",
+        "drive_sa_need_json": "File name must end with `.json`.",
+        "drive_sa_invalid": "Invalid JSON: {error}",
         "drive_status_line": "Drive configured: {ok}\n{detail}",
         "ssh_list_empty": "No SSH servers. Use `/ssh_add label host port user`",
         "ssh_list_title": "SSH servers:",
@@ -722,16 +771,16 @@ I18N = {
         "ssh_put_await_file": "Remote path saved. Send the file in Telegram now.",
         "ssh_server_not_found": "SSH server not found.",
         "ssh_auth_missing": "No password/key for this server. Re-add with `/ssh_add` and password.",
-        "bale_active_hint": "After `/bale_set_chat`, send a file here to upload to Bale (~20 MB max).",
-        "drive_active_hint": "Send a file to upload to Drive. Download: `/drive_download <file_id>`",
+        "bale_active_hint": "After `/bale_connect`, send a file here to upload via your Bale bot (~20 MB max).",
+        "drive_active_hint": "After `/drive_connect`, send a file to upload to your Drive. Download: `/drive_download <id>`",
         "drive_download_usage": "Usage: `/drive_download <google_drive_file_id>`",
         "ssh_get_usage": "Usage: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "Quick help:\n\n"
             "Transfer:\n"
             "- Rubika: `/rubika_connect` · `/rubika_status`\n"
-            "- Bale: `/bale_status` · `/bale_set_chat <id>`\n"
-            "- Drive: `/drive_status`\n"
+            "- Bale: `/bale_connect` · `/bale_status` · `/bale_disconnect`\n"
+            "- Drive: `/drive_connect` · `/drive_status` · `/drive_disconnect`\n"
             "- SSH: `/ssh_list` · `/ssh_add label host port user`\n"
             "- Files/ZIP: `/newbatch` · `/done` · `/sendtext` · `/sendlink`\n\n"
             "Tools: `/dns` · `/myip` · `/ping` · `/md5` · `/sha256` · `/b64e` · `/b64d`\n\n"
@@ -2020,6 +2069,8 @@ TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
 
 TRANSFER_HUB_DEPS = TransferHubDeps(
     tr=tr,
+    base_dir=BASE_DIR,
+    queue=queue,
     set_menu_section=set_menu_section,
     build_transfer_menu=build_transfer_menu,
     build_rubika_menu=build_rubika_menu,
@@ -2027,11 +2078,27 @@ TRANSFER_HUB_DEPS = TransferHubDeps(
     build_bale_menu=build_bale_menu,
     build_drive_menu=build_drive_menu,
     build_ssh_menu=build_ssh_menu,
-    get_bale_chat_id=queue.get_bale_chat_id,
+    get_bale_credentials=queue.get_bale_credentials,
     set_bale_chat_id=queue.upsert_bale_chat_id,
     list_ssh_servers=queue.list_ssh_servers,
     get_ssh_server=queue.get_ssh_server,
     ssh_add_server=queue.add_ssh_server,
+)
+
+PROVIDER_CONNECT_DEPS = ProviderConnectWizardDeps(
+    tr=tr,
+    base_dir=BASE_DIR,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    get_bale_credentials=queue.get_bale_credentials,
+    upsert_bale_bot_token=queue.upsert_bale_bot_token,
+    upsert_bale_chat_id=queue.upsert_bale_chat_id,
+    clear_bale_credentials=queue.clear_bale_credentials,
+    upsert_drive_folder_id=queue.upsert_drive_folder_id,
+    upsert_drive_sa_path=queue.upsert_drive_sa_path,
+    clear_drive_credentials=queue.clear_drive_credentials,
+    log_event=log_event,
 )
 
 
@@ -2069,6 +2136,22 @@ async def bale_status_handler(client: Client, message: Message):
 
 async def bale_set_chat_handler(client: Client, message: Message):
     await handle_bale_set_chat(TRANSFER_HUB_DEPS, client, message)
+
+
+async def bale_connect_handler(client: Client, message: Message):
+    await handle_bale_connect(PROVIDER_CONNECT_DEPS, client, message)
+
+
+async def bale_disconnect_handler(client: Client, message: Message):
+    await handle_bale_disconnect(PROVIDER_CONNECT_DEPS, client, message)
+
+
+async def drive_connect_handler(client: Client, message: Message):
+    await handle_drive_connect(PROVIDER_CONNECT_DEPS, client, message)
+
+
+async def drive_disconnect_handler(client: Client, message: Message):
+    await handle_drive_disconnect(PROVIDER_CONNECT_DEPS, client, message)
 
 
 async def drive_status_handler(client: Client, message: Message):
@@ -2615,7 +2698,11 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     rubika_connect_handler=rubika_connect_handler,
     rubika_status_handler=rubika_status_handler,
     bale_status_handler=bale_status_handler,
+    bale_connect_handler=bale_connect_handler,
+    bale_disconnect_handler=bale_disconnect_handler,
     drive_status_handler=drive_status_handler,
+    drive_connect_handler=drive_connect_handler,
+    drive_disconnect_handler=drive_disconnect_handler,
     ssh_list_handler=ssh_list_handler,
     new_batch_handler=new_batch_handler,
     done_batch_handler=done_batch_handler,
@@ -2638,6 +2725,10 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     build_settings_menu=build_settings_menu,
     build_admin_menu=build_admin_menu,
 )
+
+async def _save_drive_sa_file(user_id: int, local_path: Path) -> tuple[bool, str]:
+    return await save_drive_sa_from_downloaded_file(PROVIDER_CONNECT_DEPS, user_id, local_path)
+
 
 RUBIKA_WIZARD_DEPS = RubikaWizardDeps(
     tr=tr,
@@ -2735,6 +2826,8 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     enqueue_rubika_text_message=enqueue_rubika_text_message,
     dispatch_rubika_connect_wizard=dispatch_rubika_connect_wizard,
     rubika_wizard_deps=RUBIKA_WIZARD_DEPS,
+    dispatch_provider_connect_wizard=dispatch_provider_connect_wizard,
+    provider_connect_wizard_deps=PROVIDER_CONNECT_DEPS,
     dispatch_zip_batch_wizard=dispatch_zip_batch_wizard,
     zip_batch_wizard_deps=ZIP_BATCH_WIZARD_DEPS,
     handle_zip_password_text=handle_zip_password_text,
@@ -2747,10 +2840,14 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
 
 MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     tr=tr,
+    base_dir=BASE_DIR,
+    queue=queue,
     get_user_session=get_user_session,
     get_menu_section=queue.get_menu_section,
-    get_bale_chat_id=queue.get_bale_chat_id,
+    get_bale_credentials=queue.get_bale_credentials,
     get_state=get_state,
+    set_state_preserving_menu=set_state_preserving_menu,
+    save_drive_sa_file=_save_drive_sa_file,
     get_ssh_server=queue.get_ssh_server,
     get_media=get_media,
     build_download_filename=build_download_filename,

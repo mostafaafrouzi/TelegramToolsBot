@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
-from v2.transfer.drive_client import drive_configured
+from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
 TranslateFn = Callable[..., str]
 
@@ -19,10 +19,14 @@ TranslateFn = Callable[..., str]
 @dataclass(frozen=True)
 class MediaHandlerDeps:
     tr: TranslateFn
+    base_dir: Path
+    queue: Any
     get_user_session: Callable[[int], Optional[str]]
     get_menu_section: Callable[[int], Optional[str]]
-    get_bale_chat_id: Callable[[int], Optional[str]]
+    get_bale_credentials: Callable[[int], tuple[Optional[str], Optional[str]]]
     get_state: Callable[[int], dict]
+    set_state_preserving_menu: Callable[..., None]
+    save_drive_sa_file: Callable[[int, Path], Any]
     get_ssh_server: Callable[[int, int], Optional[dict]]
     get_media: Callable[[Message], tuple[str, Any]]
     build_download_filename: Callable[[Message, str, Any], str]
@@ -40,14 +44,36 @@ class MediaHandlerDeps:
     log_event: Callable[..., None]
 
 
-def _bale_ready() -> bool:
-    return bool((os.getenv("BALE_BOT_TOKEN") or "").strip())
-
-
 async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Message) -> None:
     user_id = message.from_user.id
     state = deps.get_state(user_id)
     section = (deps.get_menu_section(user_id) or MenuSection.MAIN.value).strip().lower()
+
+    if state.get("step") == "await_drive_sa_json":
+        if not message.document:
+            await message.reply_text(deps.tr(user_id, "drive_sa_need_document"), parse_mode=None)
+            return
+        fname = (message.document.file_name or "sa.json").lower()
+        if not fname.endswith(".json"):
+            await message.reply_text(deps.tr(user_id, "drive_sa_need_json"), parse_mode=None)
+            return
+        tmp = deps.download_dir / f"drive_sa_upload_{user_id}_{int(time.time())}.json"
+        try:
+            downloaded = await client.download_media(message, file_name=str(tmp))
+            if not downloaded:
+                raise RuntimeError("download failed")
+            ok, err = await deps.save_drive_sa_file(user_id, Path(downloaded))
+            if not ok:
+                await message.reply_text(
+                    deps.tr(user_id, "drive_sa_invalid", error=err),
+                    parse_mode=None,
+                )
+                return
+            deps.set_state_preserving_menu(user_id, {"step": "await_drive_folder_id"})
+            await message.reply_text(deps.tr(user_id, "drive_ask_folder_id"), parse_mode=None)
+        except Exception as e:
+            await message.reply_text(deps.tr(user_id, "media_error", error=str(e)), parse_mode=None)
+        return
 
     # SSH put: after /ssh_put <id> <remote_path>, next file is uploaded.
     if state.get("step") == "await_ssh_put_file":
@@ -88,20 +114,21 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
     if section == MenuSection.BALE.value:
         task_type = "transfer_to_bale"
         require_rubika = False
-        chat_id = deps.get_bale_chat_id(user_id)
-        if not _bale_ready():
-            await message.reply_text(deps.tr(user_id, "bale_not_configured_server"), parse_mode=None)
+        bale = load_bale_credentials(deps.queue, user_id)
+        if not bale.ready:
+            await message.reply_text(deps.tr(user_id, "bale_not_connected"), parse_mode=None)
             return
-        if not chat_id:
-            await message.reply_text(deps.tr(user_id, "bale_set_chat_usage"), parse_mode=None)
-            return
-        extra["bale_chat_id"] = chat_id
+        extra["bale_chat_id"] = bale.chat_id
+        extra["bale_bot_token"] = bale.bot_token
     elif section == MenuSection.DRIVE.value:
         task_type = "transfer_to_drive"
         require_rubika = False
-        if not drive_configured():
-            await message.reply_text(deps.tr(user_id, "drive_not_configured"), parse_mode=None)
+        drive = load_drive_credentials(deps.queue, deps.base_dir, user_id)
+        if not drive.ready:
+            await message.reply_text(deps.tr(user_id, "drive_not_connected"), parse_mode=None)
             return
+        extra["drive_sa_path"] = str(drive.service_account_path)
+        extra["drive_folder_id"] = drive.folder_id
 
     session_name = deps.get_user_session(user_id) if require_rubika else None
     if require_rubika and not session_name:

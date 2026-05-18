@@ -16,6 +16,27 @@ def _api_url(token: str, method: str) -> str:
     return f"{BALE_API_BASE}/bot{token}/{method}"
 
 
+def validate_bot_token(token: str) -> tuple[bool, str]:
+    """Call Bale ``getMe`` for the user's bot token. Returns ``(ok, bot_username_or_error)``."""
+    tok = (token or "").strip()
+    if not tok:
+        return False, "empty token"
+    try:
+        r = requests.get(_api_url(tok, "getMe"), timeout=30)
+        body = r.json() if r.content else {}
+        if r.ok and body.get("ok"):
+            uname = ""
+            try:
+                uname = body["result"].get("username") or body["result"].get("first_name") or ""
+            except (KeyError, TypeError, AttributeError):
+                uname = "ok"
+            return True, str(uname)
+        desc = body.get("description") or r.text or f"HTTP {r.status_code}"
+        return False, str(desc)[:900]
+    except requests.RequestException as e:
+        return False, str(e)[:900]
+
+
 def send_document(
     token: str,
     chat_id: str,

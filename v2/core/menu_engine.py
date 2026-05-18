@@ -65,7 +65,15 @@ _REPLY_BUTTON_ROUTE_MAP: Dict[str, str] = {
     "/drive_download": "/drive_download",
     "/drive_status": "/drive_status",
     "/bale_status": "/bale_status",
+    "/bale_connect": "/bale_connect",
+    "/bale_disconnect": "/bale_disconnect",
     "/bale_set_chat": "/bale_set_chat",
+    "اتصال بله": "/bale_connect",
+    "connect bale": "/bale_connect",
+    "/drive_connect": "/drive_connect",
+    "/drive_disconnect": "/drive_disconnect",
+    "اتصال درایو": "/drive_connect",
+    "connect drive": "/drive_connect",
     "ارسال فایل به بله": "/show_bale_menu",
     "send file to bale": "/show_bale_menu",
     "ارسال فایل به درایو": "/show_drive_menu",
@@ -158,7 +166,8 @@ def build_rubika_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     rows = [
-        ["/bale_status", "/bale_set_chat"],
+        [tr(user_id, "btn_bale_connect"), tr(user_id, "btn_bale_status")],
+        [tr(user_id, "btn_bale_disconnect")],
         [tr(user_id, "btn_back_transfer")],
         [tr(user_id, "btn_back_main")],
     ]
@@ -167,7 +176,8 @@ def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     rows = [
-        ["/drive_status", "/drive_download"],
+        [tr(user_id, "btn_drive_connect"), tr(user_id, "btn_drive_status")],
+        ["/drive_download", tr(user_id, "btn_drive_disconnect")],
         [tr(user_id, "btn_back_transfer")],
         [tr(user_id, "btn_back_main")],
     ]

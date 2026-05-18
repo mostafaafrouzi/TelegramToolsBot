@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from pyrogram.types import Message
@@ -11,6 +11,7 @@ from pyrogram.types import Message
 from v2.core.menu_sections import MenuSection
 from v2.transfer.bale_adapter import BaleTransferAdapter
 from v2.transfer.drive_adapter import GoogleDriveTransferAdapter
+from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
 TranslateFn = Callable[..., str]
 MenuBuilder = Callable[[int], Any]
@@ -19,6 +20,8 @@ MenuBuilder = Callable[[int], Any]
 @dataclass(frozen=True)
 class TransferHubDeps:
     tr: TranslateFn
+    base_dir: Path
+    queue: Any
     set_menu_section: Callable[[int, MenuSection], None]
     build_transfer_menu: MenuBuilder
     build_rubika_menu: MenuBuilder
@@ -26,22 +29,11 @@ class TransferHubDeps:
     build_bale_menu: MenuBuilder
     build_drive_menu: MenuBuilder
     build_ssh_menu: MenuBuilder
-    get_bale_chat_id: Callable[[int], Optional[str]]
+    get_bale_credentials: Callable[[int], tuple[Optional[str], Optional[str]]]
     set_bale_chat_id: Callable[[int, str], None]
     list_ssh_servers: Callable[[int], list[dict]]
     get_ssh_server: Callable[[int, int], Optional[dict]]
     ssh_add_server: Callable[..., tuple[bool, str]]
-
-
-def _bale_token_configured() -> bool:
-    return bool((os.getenv("BALE_BOT_TOKEN") or "").strip())
-
-
-def _drive_configured() -> bool:
-    return bool(
-        (os.getenv("GOOGLE_DRIVE_CLIENT_ID") or "").strip()
-        and (os.getenv("GOOGLE_DRIVE_CLIENT_SECRET") or "").strip()
-    )
 
 
 async def handle_show_transfer_menu(deps: TransferHubDeps, client: Any, message: Message) -> None:
@@ -83,31 +75,36 @@ async def handle_show_bale_menu(deps: TransferHubDeps, client: Any, message: Mes
 async def handle_bale_status(deps: TransferHubDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.BALE)
-    chat_id = deps.get_bale_chat_id(uid)
-    ok, detail = BaleTransferAdapter().healthcheck()
-    if not _bale_token_configured():
-        await message.reply_text(deps.tr(uid, "bale_not_configured_server"), parse_mode=None)
+    creds = load_bale_credentials(deps.queue, uid)
+    if not creds.bot_token:
+        await message.reply_text(deps.tr(uid, "bale_not_connected"), parse_mode=None)
         return
-    if not chat_id:
+    ok, detail = BaleTransferAdapter().healthcheck(creds.bot_token)
+    if not creds.chat_id:
         await message.reply_text(
             deps.tr(uid, "bale_status_no_chat", detail=detail if ok else detail),
             parse_mode=None,
         )
         return
     await message.reply_text(
-        deps.tr(uid, "bale_status_ok", chat_id=chat_id, detail=detail),
+        deps.tr(uid, "bale_status_ok", chat_id=creds.chat_id, detail=detail),
         parse_mode=None,
     )
 
 
 async def handle_bale_set_chat(deps: TransferHubDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
+    token, _chat = deps.get_bale_credentials(uid)
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2 or not parts[1].strip():
         await message.reply_text(deps.tr(uid, "bale_set_chat_usage"), parse_mode=None)
         return
-    deps.set_bale_chat_id(uid, parts[1].strip())
-    await message.reply_text(deps.tr(uid, "bale_set_chat_saved", chat_id=parts[1].strip()), parse_mode=None)
+    if not token:
+        await message.reply_text(deps.tr(uid, "bale_not_connected"), parse_mode=None)
+        return
+    chat_id = parts[1].strip()
+    deps.set_bale_chat_id(uid, chat_id)
+    await message.reply_text(deps.tr(uid, "bale_set_chat_saved", chat_id=chat_id), parse_mode=None)
 
 
 async def handle_show_drive_menu(deps: TransferHubDeps, client: Any, message: Message) -> None:
@@ -122,10 +119,14 @@ async def handle_show_drive_menu(deps: TransferHubDeps, client: Any, message: Me
 async def handle_drive_status(deps: TransferHubDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.DRIVE)
-    ok, detail = GoogleDriveTransferAdapter().healthcheck()
-    if not _drive_configured():
-        await message.reply_text(deps.tr(uid, "drive_not_configured"), parse_mode=None)
+    dc = load_drive_credentials(deps.queue, deps.base_dir, uid)
+    if not dc.ready:
+        await message.reply_text(deps.tr(uid, "drive_not_connected"), parse_mode=None)
         return
+    ok, detail = GoogleDriveTransferAdapter().healthcheck(
+        service_account_path=str(dc.service_account_path),
+        folder_id=dc.folder_id,
+    )
     await message.reply_text(
         deps.tr(uid, "drive_status_line", ok="yes" if ok else "no", detail=detail),
         parse_mode=None,
@@ -223,8 +224,9 @@ async def handle_drive_download_command(
     if len(parts) < 2 or not parts[1].strip():
         await message.reply_text(deps.tr(uid, "drive_download_usage"), parse_mode=None)
         return
-    if not _drive_configured():
-        await message.reply_text(deps.tr(uid, "drive_not_configured"), parse_mode=None)
+    dc = load_drive_credentials(deps.queue, deps.base_dir, uid)
+    if not dc.ready:
+        await message.reply_text(deps.tr(uid, "drive_not_connected"), parse_mode=None)
         return
     file_id = parts[1].strip()
     task = {
@@ -232,6 +234,7 @@ async def handle_drive_download_command(
         "drive_file_id": file_id,
         "telegram_user_id": uid,
         "chat_id": message.chat.id,
+        "drive_sa_path": str(dc.service_account_path),
     }
     await push_task_direct(message, task)
 
