@@ -23,13 +23,21 @@ curl -fsSL http://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main
 sudo bash installer.sh
 ```
 
-One-line update mode:
+One-line update mode (pulls code, refreshes `venv`, merges new `.env` keys from `.env.example`, restarts service):
 
 ```bash
-curl -fsSL http://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --update
+curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --update
+```
+
+Sync only missing environment variables (no code update):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --env-sync
 ```
 
 In non-interactive flag mode, the installer auto-selects the first detected instance.
+
+After install/update, the installer prints a checklist (Transfer hub: Rubika/Bale/Drive/SSH, toolkit commands, optional `BALE_BOT_TOKEN` and Google Drive service-account paths under `secrets/`).
 
 ## Required environment values
 

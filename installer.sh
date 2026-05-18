@@ -2,7 +2,7 @@
 set -euo pipefail
 
 APP_NAME="tele2rub"
-REPO_URL="http://github.com/mostafaafrouzi/telegramtorubika"
+REPO_URL="https://github.com/mostafaafrouzi/telegramtorubika.git"
 DEFAULT_INSTALL_DIR="/opt/tele2rub"
 DEFAULT_SERVICE_NAME="tele2rub"
 DEFAULT_BACKUP_DIR="/opt/tele2rub-backups"
@@ -191,11 +191,15 @@ select_instance(){
 install_deps(){
   if command -v apt-get >/dev/null 2>&1; then
     run_cmd "apt update" apt-get update
-    run_cmd "install dependencies" apt-get install -y python3 python3-venv python3-pip git ffmpeg curl
+    run_cmd "install dependencies" apt-get install -y \
+      python3 python3-venv python3-pip git ffmpeg curl rsync ca-certificates \
+      build-essential libffi-dev
     return
   fi
   if command -v dnf >/dev/null 2>&1; then
-    run_cmd "install dependencies" dnf install -y python3 python3-pip python3-virtualenv git ffmpeg curl
+    run_cmd "install dependencies" dnf install -y \
+      python3 python3-pip python3-virtualenv git ffmpeg curl rsync ca-certificates \
+      gcc libffi-devel
     return
   fi
   err "No supported package manager found (apt/dnf)."; return 1
@@ -207,7 +211,13 @@ clone_or_update_repo(){
 
   if [[ -d "$dir/.git" ]]; then
     run_cmd "git fetch" git -C "$dir" fetch --all --tags || return 1
-    run_cmd "git reset to origin/main" git -C "$dir" reset --hard origin/main || return 1
+    if git -C "$dir" rev-parse --verify origin/main >/dev/null 2>&1; then
+      run_cmd "git reset to origin/main" git -C "$dir" reset --hard origin/main || return 1
+    elif git -C "$dir" rev-parse --verify origin/master >/dev/null 2>&1; then
+      run_cmd "git reset to origin/master" git -C "$dir" reset --hard origin/master || return 1
+    else
+      run_cmd "git pull" git -C "$dir" pull --ff-only || return 1
+    fi
     return 0
   fi
 
@@ -226,6 +236,7 @@ clone_or_update_repo(){
     --exclude "venv" \
     --exclude "queue" \
     --exclude "downloads" \
+    --exclude "secrets" \
     --exclude "*.session" \
     --exclude "*.session-journal" \
     --exclude "*.sqlite" \
@@ -238,8 +249,12 @@ clone_or_update_repo(){
 
 setup_venv(){
   local dir="$1"
-  run_cmd "create venv" python3 -m venv "$dir/venv"
-  run_cmd "upgrade pip" "$dir/venv/bin/pip" install --upgrade pip
+  if [[ ! -x "$dir/venv/bin/python" ]]; then
+    run_cmd "create venv" python3 -m venv "$dir/venv"
+  else
+    info "Reusing existing virtualenv: $dir/venv"
+  fi
+  run_cmd "upgrade pip" "$dir/venv/bin/pip" install --upgrade pip wheel
   run_cmd "install requirements" "$dir/venv/bin/pip" install -r "$dir/requirements.txt"
 }
 
@@ -272,33 +287,143 @@ update_build_version_in_env(){
   fi
 }
 
-# Append missing keys from v2 defaults without overwriting existing secrets/settings.
-merge_env_defaults(){
-  local dir="$1" env_file="$dir/.env"
+# Normalize empty toolkit flags (legacy installs had KEY= with no value).
+env_normalize_toolkit_flags(){
+  local env_file="${1:-}"
   [[ -f "$env_file" ]] || return 0
-  local -a pairs=(
-    "TOOLKIT_NETWORK_LIGHT=1"
-    "TOOLKIT_UTILITY_LIGHT=1"
-    "TOOLKIT_DAILY_LIMIT_PER_USER=0"
-    "TRANSFER_V2_VALIDATE="
-    "BALE_BOT_TOKEN="
-    "BALE_API_BASE=https://tapi.bale.ai"
-    "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON="
-    "GOOGLE_DRIVE_FOLDER_ID="
-    "GOOGLE_DRIVE_CLIENT_ID="
-    "GOOGLE_DRIVE_CLIENT_SECRET="
-    "BILLING_STUB_CHECKOUT="
-    "BILLING_RECONCILE_ENABLE="
-    "V2_EPHEMERAL_READ_PRIMARY_SQLITE="
-  )
-  local pair key
-  for pair in "${pairs[@]}"; do
-    key="${pair%%=*}"
-    if ! grep -q "^${key}=" "$env_file" 2>/dev/null; then
-      echo "$pair" >> "$env_file"
-      info "Added missing env key: $key"
+  local key
+  for key in TOOLKIT_NETWORK_LIGHT TOOLKIT_UTILITY_LIGHT; do
+    if grep -q "^${key}=$" "$env_file" 2>/dev/null; then
+      sed -i "s/^${key}=$/${key}=1/" "$env_file"
+      info "Normalized ${key}=1 (was empty)"
     fi
   done
+}
+
+# Append missing keys from .env.example (preferred) without overwriting existing values.
+merge_env_defaults(){
+  local dir="$1" env_file="$dir/.env" example="$dir/.env.example"
+  [[ -f "$env_file" ]] || return 0
+  local added=0
+  if [[ -f "$example" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      line="${line%%$'\r'}"
+      [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+      [[ "$line" == *"="* ]] || continue
+      local key="${line%%=*}"
+      key="$(echo "$key" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+      [[ -z "$key" ]] && continue
+      if ! grep -q "^${key}=" "$env_file" 2>/dev/null; then
+        echo "$line" >> "$env_file"
+        info "Added env key from .env.example: $key"
+        added=$((added + 1))
+      fi
+    done < "$example"
+  else
+    warn "Missing $example — using built-in fallback keys"
+    local -a pairs=(
+      "TOOLKIT_NETWORK_LIGHT=1"
+      "TOOLKIT_UTILITY_LIGHT=1"
+      "TOOLKIT_DAILY_LIMIT_PER_USER=0"
+      "MAX_FILE_MB="
+      "DISABLE_USAGE_LIMITS="
+      "UPLOAD_TIMEOUT_SECONDS=21600"
+      "TRANSFER_V2_VALIDATE="
+      "BALE_BOT_TOKEN="
+      "BALE_API_BASE=https://tapi.bale.ai"
+      "BALE_MAX_FILE_MB=20"
+      "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON="
+      "GOOGLE_DRIVE_FOLDER_ID="
+      "BILLING_STUB_CHECKOUT="
+      "BILLING_RECONCILE_ENABLE="
+      "BILLING_RECONCILE_INTERVAL_SEC=600"
+      "BILLING_RECONCILE_PENDING_MAX_AGE_SEC=86400"
+      "V2_EPHEMERAL_READ_PRIMARY_SQLITE="
+      "PAYMENT_WEBHOOK_SECRET="
+      "WEBHOOK_PORT=8787"
+    )
+    local pair key
+    for pair in "${pairs[@]}"; do
+      key="${pair%%=*}"
+      if ! grep -q "^${key}=" "$env_file" 2>/dev/null; then
+        echo "$pair" >> "$env_file"
+        info "Added env key (fallback): $key"
+        added=$((added + 1))
+      fi
+    done
+  fi
+  env_normalize_toolkit_flags "$env_file"
+  ok "Env merge complete ($added new keys, existing values kept)"
+}
+
+ensure_install_layout(){
+  local dir="$1"
+  run_cmd "ensure runtime directories" mkdir -p "$dir/queue" "$dir/downloads" "$dir/secrets"
+  if [[ -d "$dir/secrets" ]]; then
+    chmod 700 "$dir/secrets" 2>/dev/null || true
+  fi
+  if [[ ! -f "$dir/queue/.gitkeep" ]]; then
+    touch "$dir/queue/.gitkeep" 2>/dev/null || true
+  fi
+}
+
+chown_install_dir(){
+  local dir="$1" user="${2:-root}"
+  [[ -d "$dir" ]] || return 0
+  if [[ "$user" == "root" ]]; then
+    return 0
+  fi
+  if id "$user" >/dev/null 2>&1; then
+    run_cmd "chown install directory to $user" chown -R "${user}:${user}" "$dir"
+  else
+    warn "User $user not found; skipping chown"
+  fi
+}
+
+verify_python_imports(){
+  local dir="$1"
+  run_cmd "python core import smoke test" "$dir/venv/bin/python" -c "
+import pyrogram
+import rubpy
+import requests
+import pyzipper
+import paramiko
+print('core-imports-ok')
+" || return 1
+  if "$dir/venv/bin/python" -c "import google.oauth2; import googleapiclient" 2>/dev/null; then
+    ok "Google Drive Python libraries available"
+  else
+    warn "Google Drive libraries not importable (optional until GOOGLE_DRIVE_* configured)"
+  fi
+  return 0
+}
+
+show_post_deploy_summary(){
+  local dir="$1" split="${2:-0}"
+  local ver
+  ver="$(read_app_version "$dir/.env" 2>/dev/null || echo unknown)"
+  echo
+  echo "=============================================="
+  echo " Tele2Rub deploy summary (v2 menus + transfers)"
+  echo "=============================================="
+  echo "Install dir : $dir"
+  echo "Version     : $ver"
+  echo "Systemd     : $([[ "$split" == "1" ]] && echo "split (bot + worker)" || echo "combined (main.py)")"
+  echo
+  echo "Telegram bot quick test:"
+  echo "  /start  /menu  — main menus (Transfer, Tools, Plan)"
+  echo "  /dns google.com  — toolkit"
+  echo
+  echo "Transfer hub (reply menu):"
+  echo "  Rubika — connect then send files (default FILES section)"
+  echo "  Bale   — set BALE_BOT_TOKEN in .env, /bale_set_chat, open Bale menu, send file"
+  echo "  Drive  — GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON + FOLDER_ID, open Drive menu, send file"
+  echo "  SSH    — /ssh_add label host port user password  then  /ssh_put id /remote/path"
+  echo
+  echo "Config file : $dir/.env"
+  echo "Secrets dir : $dir/secrets  (place Drive service-account JSON here)"
+  echo "Logs        : journalctl -u SERVICE -f"
+  echo "=============================================="
 }
 
 read_app_version(){
@@ -431,6 +556,8 @@ EOF
 post_deploy_health_check(){
   local base="$1" dir="$2" split="${3:-0}"
   info "Running post-deploy health checks..."
+  [[ -f "$dir/.env" ]] || { err "Missing $dir/.env"; return 1; }
+  [[ -f "$dir/requirements.txt" ]] || { err "Missing $dir/requirements.txt"; return 1; }
   if [[ "$split" == "1" ]]; then
     run_cmd "bot is-active" systemctl is-active --quiet "${base}-bot"
     run_cmd "worker is-active" systemctl is-active --quiet "${base}-worker"
@@ -442,19 +569,26 @@ post_deploy_health_check(){
   fi
   run_cmd "python syntax smoke check" "$dir/venv/bin/python" -m py_compile \
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
-    "$dir/v2/core/menu_engine.py" "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py"
+    "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" \
+    "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py" \
+    "$dir/v2/handlers/media_handler.py" \
+    "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
+  verify_python_imports "$dir" || return 1
   ok "Health check passed for systemd_base=$base split=$split dir=$dir"
   log_event "OK" "health_check_passed" "systemd_base=$base split=$split dir=$dir"
 }
 
 show_requirements_reminder(){
   echo "Before installation, prepare these values:"
-  echo "- Telegram API_ID"
-  echo "- Telegram API_HASH"
+  echo "- Telegram API_ID / API_HASH (my.telegram.org)"
   echo "- Telegram BOT_TOKEN (BotFather)"
   echo "- ADMIN_IDS (comma-separated Telegram user IDs)"
-  echo "- Optional: RUBIKA_SESSION name"
-  echo "- Optional: DEFAULT_PART_SIZE_MB"
+  echo "- Optional: RUBIKA_SESSION, DEFAULT_PART_SIZE_MB, MAX_FILE_MB"
+  echo
+  echo "Optional v2 features (can add to .env after install):"
+  echo "- BALE_BOT_TOKEN — Telegram→Bale file bridge"
+  echo "- GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON + GOOGLE_DRIVE_FOLDER_ID"
+  echo "- Toolkit is ON by default (TOOLKIT_NETWORK_LIGHT=1, TOOLKIT_UTILITY_LIGHT=1)"
 }
 
 install_flow(){
@@ -474,14 +608,18 @@ install_flow(){
   fi
   install_deps
   clone_or_update_repo "$dir" || return 1
+  ensure_install_layout "$dir"
   setup_venv "$dir" || return 1
   write_env "$dir" "$api_id" "$api_hash" "$bot_token" "$rub_sess" "$admin_ids" "$part_size" || return 1
   merge_env_defaults "$dir"
+  chown_install_dir "$dir" "$user"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
   post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
   local ver
   ver="$(read_app_version "$dir/.env")"
-  notify_admin "$bot_token" "$admin_ids" "telegramtorubika install successful on $(hostname) version=${ver}"
+  notify_admin "$bot_token" "$admin_ids" \
+    "telegramtorubika installed on $(hostname) v=${ver}. Use /start — menus: Transfer, Tools, Plan. See server log for Bale/Drive/SSH .env hints."
+  show_post_deploy_summary "$dir" "$split_flag"
   ok "Install completed."
 }
 
@@ -507,9 +645,11 @@ update_flow(){
   stop_instance_services "$svc" "$split_flag"
   install_deps || return 1
   clone_or_update_repo "$dir" || return 1
+  ensure_install_layout "$dir"
   setup_venv "$dir" || return 1
   update_build_version_in_env "$dir"
   merge_env_defaults "$dir"
+  chown_install_dir "$dir" "$user"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
   post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
   if [[ -f "$dir/.env" ]]; then
@@ -517,9 +657,38 @@ update_flow(){
     admin_ids="$(grep '^ADMIN_IDS=' "$dir/.env" | sed 's/^ADMIN_IDS=//' || true)"
     local ver
     ver="$(read_app_version "$dir/.env")"
-    [[ -n "$bot_token" && -n "$admin_ids" ]] && notify_admin "$bot_token" "$admin_ids" "telegramtorubika update successful on $(hostname) version=${ver}"
+    [[ -n "$bot_token" && -n "$admin_ids" ]] && notify_admin "$bot_token" "$admin_ids" \
+      "telegramtorubika updated on $(hostname) v=${ver}. Send /start to refresh menus (Transfer/Tools). Toolkit defaults merged if missing."
   fi
+  show_post_deploy_summary "$dir" "$split_flag"
   ok "Update completed."
+}
+
+# Sync .env keys from .env.example without pulling new code (safe repair).
+env_sync_flow(){
+  ensure_root; os_check
+  local dir
+  if select_instance; then
+    dir="$SELECTED_DIR"
+    info "Selected instance: $SELECTED_LABEL ($dir)"
+  else
+    dir="$(ask "Install directory" "$DEFAULT_INSTALL_DIR")"
+  fi
+  [[ -d "$dir" ]] || { err "Install directory not found: $dir"; return 1; }
+  [[ -f "$dir/.env" ]] || { err "Missing $dir/.env"; return 1; }
+  merge_env_defaults "$dir"
+  ok "Env sync done. Restart the service to apply new flags."
+  if ask_yn "Restart service now?" "y"; then
+    local svc split_flag=0
+    if [[ -n "${SELECTED_BASE:-}" ]]; then
+      svc="$SELECTED_BASE"
+      split_flag="${SELECTED_SPLIT:-0}"
+    else
+      svc="$(ask "Systemd service name (base)" "$DEFAULT_SERVICE_NAME")"
+      [[ -f "/etc/systemd/system/${svc}-bot.service" ]] && split_flag=1
+    fi
+    restart_instance_services "$svc" "$split_flag"
+  fi
 }
 
 backup_flow(){
@@ -560,6 +729,11 @@ restore_flow(){
   stop_instance_services "$base" "$split_flag"
   run_cmd "create install directory" mkdir -p "$dir"
   run_cmd "restore archive" tar -xzf "$archive" -C "$dir"
+  ensure_install_layout "$dir"
+  if [[ -x "$dir/venv/bin/pip" ]]; then
+    setup_venv "$dir" || warn "venv refresh after restore failed — run Update from menu"
+  fi
+  merge_env_defaults "$dir"
   restart_instance_services "$base" "$split_flag"
   if [[ "$split_flag" == "1" ]]; then
     run_cmd "service status (bot)" systemctl --no-pager --full status "${base}-bot" || true
@@ -728,9 +902,10 @@ menu(){
     echo "9) Show Bot Logs"
     echo "10) Show Worker Logs"
     echo "11) Export + Show All Logs (copy-friendly)"
-    echo "12) Exit"
+    echo "12) Sync .env defaults only (no code update)"
+    echo "13) Exit"
     echo
-    read -r -p "Choose [1-12]: " c
+    read -r -p "Choose [1-13]: " c
     case "$c" in
       1) install_flow || err "Install failed"; pause ;;
       2) update_flow || err "Update failed"; pause ;;
@@ -743,7 +918,8 @@ menu(){
       9) bot_logs_flow || true; pause ;;
       10) worker_logs_flow || true; pause ;;
       11) all_logs_flow || true; pause ;;
-      12) exit 0 ;;
+      12) env_sync_flow || err "Env sync failed"; pause ;;
+      13) exit 0 ;;
       *) warn "Invalid choice"; pause ;;
     esac
   done
@@ -763,10 +939,11 @@ run_quick_flag(){
     --bot-logs) bot_logs_flow; exit $? ;;
     --worker-logs) worker_logs_flow; exit $? ;;
     --all-logs) all_logs_flow; exit $? ;;
+    --env-sync) env_sync_flow; exit $? ;;
     "") return 0 ;;
     *)
       err "Unknown flag: $flag"
-      echo "Usage: bash installer.sh [--install|--update|--uninstall|--backup|--restore|--logs|--installer-logs|--installer-json-logs|--bot-logs|--worker-logs|--all-logs]"
+      echo "Usage: bash installer.sh [--install|--update|--env-sync|--uninstall|--backup|--restore|--logs|--installer-logs|--installer-json-logs|--bot-logs|--worker-logs|--all-logs]"
       exit 1
       ;;
   esac
