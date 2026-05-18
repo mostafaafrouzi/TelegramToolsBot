@@ -51,6 +51,20 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         )
         return
 
+    if text.strip() == deps.tr(user_id, "btn_main_transfer"):
+        mapped_transfer = "/show_transfer_menu"
+        if await deps.dispatch_reply_keyboard_route(
+            client, message, user_id, mapped_transfer, deps.reply_route_deps
+        ):
+            return
+
+    if text.strip() == deps.tr(user_id, "btn_main_toolkit"):
+        mapped_toolkit = "/show_toolkit_menu"
+        if await deps.dispatch_reply_keyboard_route(
+            client, message, user_id, mapped_toolkit, deps.reply_route_deps
+        ):
+            return
+
     mapped = deps.resolve_reply_button_route(text)
     if await deps.dispatch_reply_keyboard_route(client, message, user_id, mapped, deps.reply_route_deps):
         return

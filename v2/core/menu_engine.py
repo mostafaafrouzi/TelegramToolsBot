@@ -17,14 +17,34 @@ _REPLY_BUTTON_ROUTE_MAP: Dict[str, str] = {
     "راهنمای لاگ": "/loghelp",
     "back to main menu": "/menu",
     "بازگشت به منوی اصلی": "/menu",
-    "rubika menu": "/show_rubika_menu",
-    "منوی اتصال": "/show_rubika_menu",
+    "main menu": "/menu",
+    "back to transfer menu": "/show_transfer_menu",
+    "بازگشت به منوی انتقال": "/show_transfer_menu",
+    # Transfer hub
+    "📁 انتقال و ارسال": "/show_transfer_menu",
+    "📁 transfer & send": "/show_transfer_menu",
+    "transfer & send": "/show_transfer_menu",
+    "انتقال و ارسال": "/show_transfer_menu",
+    "🧰 ابزارها": "/show_toolkit_menu",
+    "🧰 tools": "/show_toolkit_menu",
+    "tools": "/show_toolkit_menu",
+    "ابزارها": "/show_toolkit_menu",
+    "rubika (transfer)": "/show_rubika_menu",
+    "روبیکا (انتقال)": "/show_rubika_menu",
+    "bale messenger": "/show_bale_menu",
+    "پیام‌رسان بله": "/show_bale_menu",
+    "google drive": "/show_drive_menu",
+    "گوگل درایو": "/show_drive_menu",
+    "ssh servers": "/show_ssh_menu",
+    "سرورهای ssh": "/show_ssh_menu",
+    "files & zip queue": "/show_files_menu",
+    "فایل‌ها و صف zip": "/show_files_menu",
     "files menu": "/show_files_menu",
     "منوی فایل‌ها": "/show_files_menu",
-    "zip files start": "/newbatch",
-    "شروع فایل zip": "/newbatch",
-    "zip files done": "/done",
-    "پایان فایل zip": "/done",
+    "rubika menu": "/show_rubika_menu",
+    "منوی اتصال": "/show_rubika_menu",
+    "منوی روبیکا": "/show_rubika_menu",
+    "connection menu": "/show_rubika_menu",
     "settings menu": "/show_settings_menu",
     "منوی تنظیمات": "/show_settings_menu",
     "admin menu": "/show_admin_menu",
@@ -33,12 +53,20 @@ _REPLY_BUTTON_ROUTE_MAP: Dict[str, str] = {
     "اتصال روبیکا": "/rubika_connect",
     "rubika status": "/rubika_status",
     "وضعیت روبیکا": "/rubika_status",
+    "bale status": "/bale_status",
+    "وضعیت بله": "/bale_status",
+    "drive status": "/drive_status",
+    "وضعیت درایو": "/drive_status",
+    "ssh list": "/ssh_list",
+    "لیست ssh": "/ssh_list",
     "new batch": "/newbatch",
     "شروع بچ": "/newbatch",
-    "شروع بچ فایل zip": "/newbatch",
+    "شروع فایل zip": "/newbatch",
+    "zip files start": "/newbatch",
     "done batch": "/done",
     "پایان بچ": "/done",
-    "پایان بچ فایل zip": "/done",
+    "پایان فایل zip": "/done",
+    "zip files done": "/done",
     "send text or link": "/quick_send_prompt",
     "ارسال متن یا لینک": "/quick_send_prompt",
     "send text": "/quick_send_prompt",
@@ -57,10 +85,8 @@ _REPLY_BUTTON_ROUTE_MAP: Dict[str, str] = {
     "حالت مستقیم روشن": "/directmode on",
     "direct mode off": "/directmode off",
     "حالت مستقیم خاموش": "/directmode off",
-    "connection menu": "/show_rubika_menu",
     "start zip": "/newbatch",
     "end zip": "/done",
-    "main menu": "/menu",
     "queue": "/queue",
 }
 
@@ -81,7 +107,7 @@ def _reply(rows: List[List[str]]) -> ReplyKeyboardMarkup:
 def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboardMarkup:
     rows: List[List[str]] = [
         [tr(user_id, "btn_main_plan_section")],
-        [tr(user_id, "btn_main_connection"), tr(user_id, "btn_main_files")],
+        [tr(user_id, "btn_main_transfer"), tr(user_id, "btn_main_toolkit")],
         [tr(user_id, "btn_main_settings"), tr(user_id, "btn_main_help")],
         [tr(user_id, "btn_main_net"), tr(user_id, "btn_main_queue")],
     ]
@@ -99,9 +125,58 @@ def build_plan_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(rows)
 
 
+def build_transfer_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    rows = [
+        [tr(user_id, "btn_transfer_rubika")],
+        [tr(user_id, "btn_transfer_bale"), tr(user_id, "btn_transfer_drive")],
+        [tr(user_id, "btn_transfer_ssh")],
+        [tr(user_id, "btn_transfer_files")],
+        [tr(user_id, "btn_back_main")],
+    ]
+    return _reply(rows)
+
+
 def build_rubika_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     rows = [
         [tr(user_id, "btn_rub_connect"), tr(user_id, "btn_rub_status")],
+        [tr(user_id, "btn_back_transfer")],
+        [tr(user_id, "btn_back_main")],
+    ]
+    return _reply(rows)
+
+
+def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    rows = [
+        ["/bale_status", "/bale_set_chat"],
+        [tr(user_id, "btn_back_transfer")],
+        [tr(user_id, "btn_back_main")],
+    ]
+    return _reply(rows)
+
+
+def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    rows = [
+        ["/drive_status"],
+        [tr(user_id, "btn_back_transfer")],
+        [tr(user_id, "btn_back_main")],
+    ]
+    return _reply(rows)
+
+
+def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    rows = [
+        ["/ssh_list"],
+        [tr(user_id, "btn_back_transfer")],
+        [tr(user_id, "btn_back_main")],
+    ]
+    return _reply(rows)
+
+
+def build_toolkit_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    rows = [
+        ["/dns", "/myip", "/ping"],
+        ["/md5", "/sha256"],
+        ["/b64e", "/b64d"],
         [tr(user_id, "btn_back_main")],
     ]
     return _reply(rows)
@@ -109,10 +184,10 @@ def build_rubika_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     rows = [
-        [tr(user_id, "btn_main_plan_section")],
         [tr(user_id, "btn_zip_start"), tr(user_id, "btn_zip_end")],
         [tr(user_id, "btn_send_content")],
         [tr(user_id, "btn_queue"), tr(user_id, "btn_clear_all")],
+        [tr(user_id, "btn_back_transfer")],
         [tr(user_id, "btn_back_main")],
     ]
     return _reply(rows)

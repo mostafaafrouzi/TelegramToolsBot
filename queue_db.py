@@ -63,6 +63,14 @@ class QueueDB:
         if "rubika_session" not in cols:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN rubika_session TEXT")
 
+    def _migrate_v2_user_prefs_bale_chat(self, conn):
+        rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
+        if not rows:
+            return
+        cols = {r[1] for r in rows}
+        if "bale_chat_id" not in cols:
+            conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN bale_chat_id TEXT")
+
     def _init_db(self):
         with self._connect() as conn:
             conn.execute(
@@ -112,6 +120,7 @@ class QueueDB:
             self._migrate_v2_user_prefs_lang(conn)
             self._migrate_v2_user_prefs_direct_mode(conn)
             self._migrate_v2_user_prefs_rubika_session(conn)
+            self._migrate_v2_user_prefs_bale_chat(conn)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS v2_user_state_mirror (
@@ -169,6 +178,22 @@ class QueueDB:
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_v2_toolkit_daily_day ON v2_toolkit_daily(day_ymd)"
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS v2_ssh_servers (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_user_id INTEGER NOT NULL,
+                    label TEXT NOT NULL,
+                    host TEXT NOT NULL,
+                    port INTEGER NOT NULL DEFAULT 22,
+                    ssh_user TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_v2_ssh_servers_user ON v2_ssh_servers(telegram_user_id)"
             )
             conn.commit()
 
@@ -481,6 +506,96 @@ class QueueDB:
                         (int(telegram_user_id), name, now),
                     )
                 conn.commit()
+
+    def get_bale_chat_id(self, telegram_user_id: int) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT bale_chat_id FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                (int(telegram_user_id),),
+            ).fetchone()
+        if not row or row["bale_chat_id"] is None:
+            return None
+        s = str(row["bale_chat_id"]).strip()
+        return s or None
+
+    def upsert_bale_chat_id(self, telegram_user_id: int, chat_id: str) -> None:
+        cid = (chat_id or "").strip()
+        if not cid:
+            return
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        """
+                        UPDATE v2_user_prefs
+                        SET bale_chat_id = ?, updated_at = ?
+                        WHERE telegram_user_id = ?
+                        """,
+                        (cid, now, int(telegram_user_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO v2_user_prefs (telegram_user_id, menu_section, bale_chat_id, updated_at)
+                        VALUES (?, 'main', ?, ?)
+                        """,
+                        (int(telegram_user_id), cid, now),
+                    )
+                conn.commit()
+
+    def list_ssh_servers(self, telegram_user_id: int, *, limit: int = 20) -> list[dict]:
+        lim = max(1, min(int(limit), 50))
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, label, host, port, ssh_user, created_at
+                FROM v2_ssh_servers
+                WHERE telegram_user_id = ?
+                ORDER BY id ASC
+                LIMIT ?
+                """,
+                (int(telegram_user_id), lim),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def add_ssh_server(
+        self,
+        telegram_user_id: int,
+        label: str,
+        host: str,
+        port: int,
+        ssh_user: str,
+    ) -> tuple[bool, str]:
+        label = (label or "").strip()[:64]
+        host = (host or "").strip()[:255]
+        ssh_user = (ssh_user or "").strip()[:64]
+        if not label or not host or not ssh_user:
+            return False, "label, host, and ssh_user required"
+        if port < 1 or port > 65535:
+            return False, "port must be 1-65535"
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                n = conn.execute(
+                    "SELECT COUNT(1) AS c FROM v2_ssh_servers WHERE telegram_user_id = ?",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if n and int(n["c"]) >= 20:
+                    return False, "max 20 SSH servers per user"
+                conn.execute(
+                    """
+                    INSERT INTO v2_ssh_servers (telegram_user_id, label, host, port, ssh_user, created_at)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    (int(telegram_user_id), label, host, int(port), ssh_user, now),
+                )
+                conn.commit()
+        return True, "ok"
 
     def get_user_state_mirror(self, telegram_user_id: int) -> Optional[dict]:
         """Shadow copy of ``user_states.json`` entry for migration / recovery."""

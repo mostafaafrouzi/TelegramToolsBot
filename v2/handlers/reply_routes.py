@@ -28,6 +28,9 @@ class ReplyRouteDeps:
     log_help_handler: MessageHandler
     rubika_connect_handler: MessageHandler
     rubika_status_handler: MessageHandler
+    bale_status_handler: MessageHandler
+    drive_status_handler: MessageHandler
+    ssh_list_handler: MessageHandler
     new_batch_handler: MessageHandler
     done_batch_handler: MessageHandler
     clear_queue_handler: MessageHandler
@@ -35,6 +38,15 @@ class ReplyRouteDeps:
     netstatus_handler: MessageHandler
     admin_handler: MessageHandler
     direct_mode_handler: MessageHandler
+    show_transfer_menu_handler: MessageHandler
+    show_toolkit_menu_handler: MessageHandler
+    show_rubika_menu_handler: MessageHandler
+    show_bale_menu_handler: MessageHandler
+    show_drive_menu_handler: MessageHandler
+    show_ssh_menu_handler: MessageHandler
+    show_files_menu_handler: MessageHandler
+    build_transfer_menu: MenuBuilder
+    build_toolkit_menu: MenuBuilder
     build_rubika_menu: MenuBuilder
     build_files_menu: MenuBuilder
     build_settings_menu: MenuBuilder
@@ -61,13 +73,26 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/loghelp":
         await deps.log_help_handler(client, message)
         return True
+    if mapped == "/show_transfer_menu":
+        await deps.show_transfer_menu_handler(client, message)
+        return True
+    if mapped == "/show_toolkit_menu":
+        await deps.show_toolkit_menu_handler(client, message)
+        return True
     if mapped == "/show_rubika_menu":
-        deps.set_menu_section(user_id, MenuSection.RUBIKA)
-        await message.reply_text(tr(user_id, "rubika_menu_title"), reply_markup=deps.build_rubika_menu(user_id))
+        await deps.show_rubika_menu_handler(client, message)
+        return True
+    if mapped == "/show_bale_menu":
+        await deps.show_bale_menu_handler(client, message)
+        return True
+    if mapped == "/show_drive_menu":
+        await deps.show_drive_menu_handler(client, message)
+        return True
+    if mapped == "/show_ssh_menu":
+        await deps.show_ssh_menu_handler(client, message)
         return True
     if mapped == "/show_files_menu":
-        deps.set_menu_section(user_id, MenuSection.FILES)
-        await message.reply_text(tr(user_id, "files_menu_title"), reply_markup=deps.build_files_menu(user_id))
+        await deps.show_files_menu_handler(client, message)
         return True
     if mapped == "/show_settings_menu":
         deps.set_menu_section(user_id, MenuSection.SETTINGS)
@@ -85,6 +110,15 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/rubika_status":
         await deps.rubika_status_handler(client, message)
+        return True
+    if mapped == "/bale_status":
+        await deps.bale_status_handler(client, message)
+        return True
+    if mapped == "/drive_status":
+        await deps.drive_status_handler(client, message)
+        return True
+    if mapped == "/ssh_list":
+        await deps.ssh_list_handler(client, message)
         return True
     if mapped == "/newbatch":
         await deps.new_batch_handler(client, message)

@@ -45,6 +45,11 @@ _TEXT_EXCLUDED_COMMANDS = [
     "sha256",
     "b64e",
     "b64d",
+    "bale_status",
+    "bale_set_chat",
+    "drive_status",
+    "ssh_list",
+    "ssh_add",
     "admin_tier",
     "admin_bonus",
     "admin_clear_prefs",
@@ -97,6 +102,11 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.sha256_handler, priv & cmd("sha256"))
     mh(tb.b64_encode_handler, priv & cmd("b64e"))
     mh(tb.b64_decode_handler, priv & cmd("b64d"))
+    mh(tb.bale_status_handler, priv & cmd("bale_status"))
+    mh(tb.bale_set_chat_handler, priv & cmd("bale_set_chat"))
+    mh(tb.drive_status_handler, priv & cmd("drive_status"))
+    mh(tb.ssh_list_handler, priv & cmd("ssh_list"))
+    mh(tb.ssh_add_handler, priv & cmd("ssh_add"))
     mh(tb.admin_tier_handler, priv & cmd("admin_tier"))
     mh(tb.admin_bonus_handler, priv & cmd("admin_bonus"))
     mh(tb.admin_clear_prefs_handler, priv & cmd("admin_clear_prefs"))

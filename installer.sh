@@ -272,6 +272,32 @@ update_build_version_in_env(){
   fi
 }
 
+# Append missing keys from v2 defaults without overwriting existing secrets/settings.
+merge_env_defaults(){
+  local dir="$1" env_file="$dir/.env"
+  [[ -f "$env_file" ]] || return 0
+  local -a pairs=(
+    "TOOLKIT_NETWORK_LIGHT=1"
+    "TOOLKIT_UTILITY_LIGHT=1"
+    "TOOLKIT_DAILY_LIMIT_PER_USER=0"
+    "TRANSFER_V2_VALIDATE="
+    "BALE_BOT_TOKEN="
+    "GOOGLE_DRIVE_CLIENT_ID="
+    "GOOGLE_DRIVE_CLIENT_SECRET="
+    "BILLING_STUB_CHECKOUT="
+    "BILLING_RECONCILE_ENABLE="
+    "V2_EPHEMERAL_READ_PRIMARY_SQLITE="
+  )
+  local pair key
+  for pair in "${pairs[@]}"; do
+    key="${pair%%=*}"
+    if ! grep -q "^${key}=" "$env_file" 2>/dev/null; then
+      echo "$pair" >> "$env_file"
+      info "Added missing env key: $key"
+    fi
+  done
+}
+
 read_app_version(){
   local env_file="${1:-}"
   [[ -n "$env_file" && -f "$env_file" ]] || { echo "unknown"; return; }
@@ -411,7 +437,9 @@ post_deploy_health_check(){
     run_cmd "service is-active check" systemctl is-active --quiet "$base"
     run_cmd "service is-enabled check" systemctl is-enabled --quiet "$base"
   fi
-  run_cmd "python syntax smoke check" "$dir/venv/bin/python" -m py_compile "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py"
+  run_cmd "python syntax smoke check" "$dir/venv/bin/python" -m py_compile \
+    "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
+    "$dir/v2/core/menu_engine.py" "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py"
   ok "Health check passed for systemd_base=$base split=$split dir=$dir"
   log_event "OK" "health_check_passed" "systemd_base=$base split=$split dir=$dir"
 }
@@ -445,6 +473,7 @@ install_flow(){
   clone_or_update_repo "$dir" || return 1
   setup_venv "$dir" || return 1
   write_env "$dir" "$api_id" "$api_hash" "$bot_token" "$rub_sess" "$admin_ids" "$part_size" || return 1
+  merge_env_defaults "$dir"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
   post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
   local ver
@@ -477,6 +506,7 @@ update_flow(){
   clone_or_update_repo "$dir" || return 1
   setup_venv "$dir" || return 1
   update_build_version_in_env "$dir"
+  merge_env_defaults "$dir"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
   post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
   if [[ -f "$dir/.env" ]]; then
