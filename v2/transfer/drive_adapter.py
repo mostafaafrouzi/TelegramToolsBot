@@ -24,4 +24,12 @@ class GoogleDriveTransferAdapter:
         return {"ok": False, "error": "drive_download_not_implemented"}
 
     def upload(self, local_path: str, destination_ref: Any) -> dict:
-        return {"ok": False, "error": "drive_upload_not_implemented"}
+        from v2.transfer.drive_client import upload_file
+
+        name = None
+        if isinstance(destination_ref, dict):
+            name = destination_ref.get("file_name")
+        ok, msg, meta = upload_file(local_path, file_name=name)
+        if not ok:
+            return {"ok": False, "error": msg}
+        return {"ok": True, "provider_id": meta.get("id", ""), "webViewLink": msg, "metadata": meta}

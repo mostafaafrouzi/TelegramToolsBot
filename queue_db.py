@@ -63,6 +63,16 @@ class QueueDB:
         if "rubika_session" not in cols:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN rubika_session TEXT")
 
+    def _migrate_v2_ssh_servers_secret(self, conn):
+        rows = conn.execute("PRAGMA table_info(v2_ssh_servers)").fetchall()
+        if not rows:
+            return
+        cols = {r[1] for r in rows}
+        if "ssh_secret" not in cols:
+            conn.execute("ALTER TABLE v2_ssh_servers ADD COLUMN ssh_secret TEXT")
+        if "ssh_key_path" not in cols:
+            conn.execute("ALTER TABLE v2_ssh_servers ADD COLUMN ssh_key_path TEXT")
+
     def _migrate_v2_user_prefs_bale_chat(self, conn):
         rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
         if not rows:
@@ -188,6 +198,8 @@ class QueueDB:
                     host TEXT NOT NULL,
                     port INTEGER NOT NULL DEFAULT 22,
                     ssh_user TEXT NOT NULL,
+                    ssh_secret TEXT,
+                    ssh_key_path TEXT,
                     created_at INTEGER NOT NULL
                 )
                 """
@@ -195,6 +207,7 @@ class QueueDB:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_v2_ssh_servers_user ON v2_ssh_servers(telegram_user_id)"
             )
+            self._migrate_v2_ssh_servers_secret(conn)
             conn.commit()
 
     def get_direct_mode(self, telegram_user_id: int) -> Optional[bool]:
@@ -563,6 +576,18 @@ class QueueDB:
             ).fetchall()
         return [dict(r) for r in rows]
 
+    def get_ssh_server(self, telegram_user_id: int, server_id: int) -> Optional[dict]:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, label, host, port, ssh_user, ssh_secret, ssh_key_path
+                FROM v2_ssh_servers
+                WHERE telegram_user_id = ? AND id = ?
+                """,
+                (int(telegram_user_id), int(server_id)),
+            ).fetchone()
+        return dict(row) if row else None
+
     def add_ssh_server(
         self,
         telegram_user_id: int,
@@ -570,6 +595,9 @@ class QueueDB:
         host: str,
         port: int,
         ssh_user: str,
+        *,
+        ssh_secret: str = "",
+        ssh_key_path: str = "",
     ) -> tuple[bool, str]:
         label = (label or "").strip()[:64]
         host = (host or "").strip()[:255]
@@ -589,10 +617,21 @@ class QueueDB:
                     return False, "max 20 SSH servers per user"
                 conn.execute(
                     """
-                    INSERT INTO v2_ssh_servers (telegram_user_id, label, host, port, ssh_user, created_at)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    INSERT INTO v2_ssh_servers (
+                        telegram_user_id, label, host, port, ssh_user, ssh_secret, ssh_key_path, created_at
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
-                    (int(telegram_user_id), label, host, int(port), ssh_user, now),
+                    (
+                        int(telegram_user_id),
+                        label,
+                        host,
+                        int(port),
+                        ssh_user,
+                        (ssh_secret or "").strip() or None,
+                        (ssh_key_path or "").strip() or None,
+                        now,
+                    ),
                 )
                 conn.commit()
         return True, "ok"

@@ -29,7 +29,8 @@ class TransferHubDeps:
     get_bale_chat_id: Callable[[int], Optional[str]]
     set_bale_chat_id: Callable[[int, str], None]
     list_ssh_servers: Callable[[int], list[dict]]
-    ssh_add_server: Callable[[int, str, str, int, str], tuple[bool, str]]
+    get_ssh_server: Callable[[int, int], Optional[dict]]
+    ssh_add_server: Callable[..., tuple[bool, str]]
 
 
 def _bale_token_configured() -> bool:
@@ -74,7 +75,7 @@ async def handle_show_bale_menu(deps: TransferHubDeps, client: Any, message: Mes
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.BALE)
     await message.reply_text(
-        deps.tr(uid, "bale_menu_title"),
+        deps.tr(uid, "bale_menu_title") + "\n\n" + deps.tr(uid, "bale_active_hint"),
         reply_markup=deps.build_bale_menu(uid),
     )
 
@@ -113,7 +114,7 @@ async def handle_show_drive_menu(deps: TransferHubDeps, client: Any, message: Me
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.DRIVE)
     await message.reply_text(
-        deps.tr(uid, "drive_menu_title"),
+        deps.tr(uid, "drive_menu_title") + "\n\n" + deps.tr(uid, "drive_active_hint"),
         reply_markup=deps.build_drive_menu(uid),
     )
 
@@ -164,18 +165,112 @@ async def handle_ssh_list(deps: TransferHubDeps, client: Any, message: Message) 
 
 async def handle_ssh_add(deps: TransferHubDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    parts = (message.text or "").split()
+    parts = (message.text or "").split(maxsplit=5)
     if len(parts) < 5:
         await message.reply_text(deps.tr(uid, "ssh_add_usage"), parse_mode=None)
         return
     label, host, port_s, ssh_user = parts[1], parts[2], parts[3], parts[4]
+    ssh_secret = parts[5] if len(parts) >= 6 else ""
     try:
         port = int(port_s)
     except ValueError:
         await message.reply_text(deps.tr(uid, "ssh_add_usage"), parse_mode=None)
         return
-    ok, msg = deps.ssh_add_server(uid, label, host, port, ssh_user)
+    ok, msg = deps.ssh_add_server(uid, label, host, port, ssh_user, ssh_secret=ssh_secret)
     if not ok:
         await message.reply_text(msg, parse_mode=None)
         return
     await message.reply_text(deps.tr(uid, "ssh_add_ok", label=label, host=host, port=port), parse_mode=None)
+
+
+async def handle_ssh_put_command(
+    deps: TransferHubDeps,
+    client: Any,
+    message: Message,
+    *,
+    set_state_preserving_menu: Callable[..., None],
+) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 3:
+        await message.reply_text(deps.tr(uid, "ssh_put_usage"), parse_mode=None)
+        return
+    try:
+        server_id = int(parts[1])
+    except ValueError:
+        await message.reply_text(deps.tr(uid, "ssh_put_usage"), parse_mode=None)
+        return
+    remote_path = parts[2].strip()
+    if not deps.get_ssh_server(uid, server_id):
+        await message.reply_text(deps.tr(uid, "ssh_server_not_found"), parse_mode=None)
+        return
+    set_state_preserving_menu(
+        uid,
+        {"step": "await_ssh_put_file", "ssh_server_id": server_id, "ssh_remote_path": remote_path},
+    )
+    await message.reply_text(deps.tr(uid, "ssh_put_await_file"), parse_mode=None)
+
+
+async def handle_drive_download_command(
+    deps: TransferHubDeps,
+    client: Any,
+    message: Message,
+    *,
+    push_task_direct: Callable[..., Any],
+) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2 or not parts[1].strip():
+        await message.reply_text(deps.tr(uid, "drive_download_usage"), parse_mode=None)
+        return
+    if not _drive_configured():
+        await message.reply_text(deps.tr(uid, "drive_not_configured"), parse_mode=None)
+        return
+    file_id = parts[1].strip()
+    task = {
+        "type": "drive_download",
+        "drive_file_id": file_id,
+        "telegram_user_id": uid,
+        "chat_id": message.chat.id,
+    }
+    await push_task_direct(message, task)
+
+
+async def handle_ssh_get_command(
+    deps: TransferHubDeps,
+    client: Any,
+    message: Message,
+    *,
+    push_task_direct: Callable[..., Any],
+) -> None:
+    uid = message.from_user.id
+    parts = (message.text or "").split(maxsplit=2)
+    if len(parts) < 3:
+        await message.reply_text(deps.tr(uid, "ssh_get_usage"), parse_mode=None)
+        return
+    try:
+        server_id = int(parts[1])
+    except ValueError:
+        await message.reply_text(deps.tr(uid, "ssh_get_usage"), parse_mode=None)
+        return
+    srv = deps.get_ssh_server(uid, server_id)
+    if not srv:
+        await message.reply_text(deps.tr(uid, "ssh_server_not_found"), parse_mode=None)
+        return
+    if not srv.get("ssh_secret") and not srv.get("ssh_key_path"):
+        await message.reply_text(deps.tr(uid, "ssh_auth_missing"), parse_mode=None)
+        return
+    task = {
+        "type": "ssh_get",
+        "remote_path": parts[2].strip(),
+        "telegram_user_id": uid,
+        "chat_id": message.chat.id,
+        "ssh_server": {
+            "host": srv["host"],
+            "port": srv["port"],
+            "ssh_user": srv["ssh_user"],
+            "ssh_secret": srv.get("ssh_secret"),
+            "ssh_key_path": srv.get("ssh_key_path"),
+        },
+    }
+    await push_task_direct(message, task)

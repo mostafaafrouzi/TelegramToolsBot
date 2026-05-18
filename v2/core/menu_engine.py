@@ -59,6 +59,17 @@ _REPLY_BUTTON_ROUTE_MAP: Dict[str, str] = {
     "وضعیت درایو": "/drive_status",
     "ssh list": "/ssh_list",
     "لیست ssh": "/ssh_list",
+    "/ssh_add": "/ssh_add",
+    "/ssh_put": "/ssh_put",
+    "/ssh_list": "/ssh_list",
+    "/drive_download": "/drive_download",
+    "/drive_status": "/drive_status",
+    "/bale_status": "/bale_status",
+    "/bale_set_chat": "/bale_set_chat",
+    "ارسال فایل به بله": "/show_bale_menu",
+    "send file to bale": "/show_bale_menu",
+    "ارسال فایل به درایو": "/show_drive_menu",
+    "send file to drive": "/show_drive_menu",
     "new batch": "/newbatch",
     "شروع بچ": "/newbatch",
     "شروع فایل zip": "/newbatch",
@@ -156,7 +167,7 @@ def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     rows = [
-        ["/drive_status"],
+        ["/drive_status", "/drive_download"],
         [tr(user_id, "btn_back_transfer")],
         [tr(user_id, "btn_back_main")],
     ]
@@ -165,7 +176,8 @@ def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     rows = [
-        ["/ssh_list"],
+        ["/ssh_list", "/ssh_add"],
+        ["/ssh_put", "/ssh_get"],
         [tr(user_id, "btn_back_transfer")],
         [tr(user_id, "btn_back_main")],
     ]

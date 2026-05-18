@@ -363,8 +363,16 @@ I18N = {
         "ssh_list_empty": "هیچ سرور SSH ثبت نشده. `/ssh_add label host port user`",
         "ssh_list_title": "سرورهای SSH:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
-        "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <ssh_user>`",
+        "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`",
         "ssh_add_ok": "سرور `{label}` ({host}:{port}) ذخیره شد.",
+        "ssh_put_usage": "استفاده: `/ssh_put <server_id> <remote_path>` سپس فایل را بفرست",
+        "ssh_put_await_file": "مسیر روی سرور ثبت شد. حالا فایل را در تلگرام بفرست.",
+        "ssh_server_not_found": "سرور SSH پیدا نشد.",
+        "ssh_auth_missing": "برای این سرور رمز یا کلید SSH ثبت نشده. دوباره با `/ssh_add` و رمز اضافه کن.",
+        "bale_active_hint": "پس از `/bale_set_chat`، همین‌جا فایل بفرست تا به بله برود (حداکثر ~۲۰ مگابایت).",
+        "drive_active_hint": "فایل بفرست تا در Drive آپلود شود. دانلود: `/drive_download <file_id>`",
+        "drive_download_usage": "استفاده: `/drive_download <google_drive_file_id>`",
+        "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "راهنمای سریع:\n\n"
             "انتقال:\n"
@@ -708,8 +716,16 @@ I18N = {
         "ssh_list_empty": "No SSH servers. Use `/ssh_add label host port user`",
         "ssh_list_title": "SSH servers:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
-        "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <ssh_user>`",
+        "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`",
         "ssh_add_ok": "Saved server `{label}` ({host}:{port}).",
+        "ssh_put_usage": "Usage: `/ssh_put <server_id> <remote_path>` then send the file",
+        "ssh_put_await_file": "Remote path saved. Send the file in Telegram now.",
+        "ssh_server_not_found": "SSH server not found.",
+        "ssh_auth_missing": "No password/key for this server. Re-add with `/ssh_add` and password.",
+        "bale_active_hint": "After `/bale_set_chat`, send a file here to upload to Bale (~20 MB max).",
+        "drive_active_hint": "Send a file to upload to Drive. Download: `/drive_download <file_id>`",
+        "drive_download_usage": "Usage: `/drive_download <google_drive_file_id>`",
+        "ssh_get_usage": "Usage: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "Quick help:\n\n"
             "Transfer:\n"
@@ -2014,6 +2030,7 @@ TRANSFER_HUB_DEPS = TransferHubDeps(
     get_bale_chat_id=queue.get_bale_chat_id,
     set_bale_chat_id=queue.upsert_bale_chat_id,
     list_ssh_servers=queue.list_ssh_servers,
+    get_ssh_server=queue.get_ssh_server,
     ssh_add_server=queue.add_ssh_server,
 )
 
@@ -2064,6 +2081,39 @@ async def ssh_list_handler(client: Client, message: Message):
 
 async def ssh_add_handler(client: Client, message: Message):
     await handle_ssh_add(TRANSFER_HUB_DEPS, client, message)
+
+
+async def ssh_put_handler(client: Client, message: Message):
+    from v2.handlers.transfer_hub_commands import handle_ssh_put_command
+
+    await handle_ssh_put_command(
+        TRANSFER_HUB_DEPS,
+        client,
+        message,
+        set_state_preserving_menu=set_state_preserving_menu,
+    )
+
+
+async def drive_download_handler(client: Client, message: Message):
+    from v2.handlers.transfer_hub_commands import handle_drive_download_command
+
+    await handle_drive_download_command(
+        TRANSFER_HUB_DEPS,
+        client,
+        message,
+        push_task_direct=push_task_direct,
+    )
+
+
+async def ssh_get_handler(client: Client, message: Message):
+    from v2.handlers.transfer_hub_commands import handle_ssh_get_command
+
+    await handle_ssh_get_command(
+        TRANSFER_HUB_DEPS,
+        client,
+        message,
+        push_task_direct=push_task_direct,
+    )
 
 
 async def start_handler(client: Client, message: Message):
@@ -2317,7 +2367,43 @@ async def queue_or_confirm(
         user_id=user_id,
         task_type=task.get("type"),
     )
-    
+
+
+async def push_task_direct(
+    message: Message,
+    task: dict,
+    status_message: Optional[Message] = None,
+) -> None:
+    """Queue non-Rubika transfer tasks immediately (Bale, Drive, SSH)."""
+    user_id = message.from_user.id
+    task["telegram_user_id"] = user_id
+    task["chat_id"] = message.chat.id
+    if not await gate_quota(message, user_id, task):
+        return
+    anchor = status_message
+    if not anchor:
+        anchor = await message.reply_text(tr(user_id, "text_queueing"), parse_mode=None)
+    task["status_message_id"] = anchor.id
+    pushed = queue.push_task(task)
+    qpos = queue.count_tasks_for_user(user_id)
+    log_event(
+        "task_queued",
+        user_id=user_id,
+        job_id=pushed.get("job_id"),
+        task_type=task.get("type"),
+        direct_mode=True,
+    )
+    try:
+        await anchor.edit_text(
+            tr(user_id, "text_queued", job_id=pushed["job_id"], qpos=qpos),
+            parse_mode=None,
+        )
+    except MessageNotModified:
+        pass
+    st = get_state(user_id)
+    if st.get("step") == "await_ssh_put_file":
+        clear_state(user_id)
+
 
 async def safe_delete_user_message(message: Message):
     try:
@@ -2662,6 +2748,10 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
 MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     tr=tr,
     get_user_session=get_user_session,
+    get_menu_section=queue.get_menu_section,
+    get_bale_chat_id=queue.get_bale_chat_id,
+    get_state=get_state,
+    get_ssh_server=queue.get_ssh_server,
     get_media=get_media,
     build_download_filename=build_download_filename,
     download_dir=DOWNLOAD_DIR,
@@ -2674,6 +2764,7 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     set_batch=set_batch,
     pretty_size=pretty_size,
     queue_or_confirm=queue_or_confirm,
+    push_task_direct=push_task_direct,
     log_event=log_event,
 )
 

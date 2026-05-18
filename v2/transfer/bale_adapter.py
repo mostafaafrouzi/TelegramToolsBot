@@ -26,4 +26,16 @@ class BaleTransferAdapter:
         return {"ok": False, "error": "bale_download_not_implemented"}
 
     def upload(self, local_path: str, destination_ref: Any) -> dict:
-        return {"ok": False, "error": "bale_upload_not_implemented"}
+        token = (os.getenv("BALE_BOT_TOKEN") or "").strip()
+        chat_id = ""
+        if isinstance(destination_ref, dict):
+            chat_id = str(destination_ref.get("chat_id") or "")
+        if not token or not chat_id:
+            return {"ok": False, "error": "bale_token_or_chat_missing"}
+        from v2.transfer.bale_client import send_file_auto
+
+        caption = ""
+        if isinstance(destination_ref, dict):
+            caption = str(destination_ref.get("caption") or "")
+        ok, msg = send_file_auto(token, chat_id, local_path, caption=caption)
+        return {"ok": ok, "provider_id": msg if ok else "", "error": "" if ok else msg}

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import os
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
 
 from pyrogram.types import Message
+
+from v2.core.menu_sections import MenuSection
+from v2.transfer.drive_client import drive_configured
 
 TranslateFn = Callable[..., str]
 
@@ -16,6 +20,10 @@ TranslateFn = Callable[..., str]
 class MediaHandlerDeps:
     tr: TranslateFn
     get_user_session: Callable[[int], Optional[str]]
+    get_menu_section: Callable[[int], Optional[str]]
+    get_bale_chat_id: Callable[[int], Optional[str]]
+    get_state: Callable[[int], dict]
+    get_ssh_server: Callable[[int, int], Optional[dict]]
     get_media: Callable[[Message], tuple[str, Any]]
     build_download_filename: Callable[[Message, str, Any], str]
     download_dir: Path
@@ -28,24 +36,111 @@ class MediaHandlerDeps:
     set_batch: Callable[[int, dict], None]
     pretty_size: Callable[[int], str]
     queue_or_confirm: Callable[..., Any]
+    push_task_direct: Callable[[Message, dict], Any]
     log_event: Callable[..., None]
+
+
+def _bale_ready() -> bool:
+    return bool((os.getenv("BALE_BOT_TOKEN") or "").strip())
 
 
 async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Message) -> None:
     user_id = message.from_user.id
-    session_name = deps.get_user_session(user_id)
-    if not session_name:
-        await message.reply_text(deps.tr(user_id, "media_need_rubika"))
+    state = deps.get_state(user_id)
+    section = (deps.get_menu_section(user_id) or MenuSection.MAIN.value).strip().lower()
+
+    # SSH put: after /ssh_put <id> <remote_path>, next file is uploaded.
+    if state.get("step") == "await_ssh_put_file":
+        server_id = int(state.get("ssh_server_id") or 0)
+        remote_path = str(state.get("ssh_remote_path") or "")
+        srv = deps.get_ssh_server(user_id, server_id)
+        if not srv:
+            await message.reply_text(deps.tr(user_id, "ssh_server_not_found"), parse_mode=None)
+            return
+        if not srv.get("ssh_secret") and not srv.get("ssh_key_path"):
+            await message.reply_text(deps.tr(user_id, "ssh_auth_missing"), parse_mode=None)
+            return
+        await _download_and_queue(
+            deps,
+            client,
+            message,
+            user_id,
+            task_type="ssh_put",
+            extra={
+                "ssh_server": {
+                    "host": srv["host"],
+                    "port": srv["port"],
+                    "ssh_user": srv["ssh_user"],
+                    "ssh_secret": srv.get("ssh_secret"),
+                    "ssh_key_path": srv.get("ssh_key_path"),
+                },
+                "remote_path": remote_path,
+            },
+            require_rubika=False,
+            batch_allowed=False,
+        )
         return
 
+    task_type = "local_file"
+    require_rubika = True
+    extra: dict = {}
+
+    if section == MenuSection.BALE.value:
+        task_type = "transfer_to_bale"
+        require_rubika = False
+        chat_id = deps.get_bale_chat_id(user_id)
+        if not _bale_ready():
+            await message.reply_text(deps.tr(user_id, "bale_not_configured_server"), parse_mode=None)
+            return
+        if not chat_id:
+            await message.reply_text(deps.tr(user_id, "bale_set_chat_usage"), parse_mode=None)
+            return
+        extra["bale_chat_id"] = chat_id
+    elif section == MenuSection.DRIVE.value:
+        task_type = "transfer_to_drive"
+        require_rubika = False
+        if not drive_configured():
+            await message.reply_text(deps.tr(user_id, "drive_not_configured"), parse_mode=None)
+            return
+
+    session_name = deps.get_user_session(user_id) if require_rubika else None
+    if require_rubika and not session_name:
+        await message.reply_text(deps.tr(user_id, "media_need_rubika"), parse_mode=None)
+        return
+
+    await _download_and_queue(
+        deps,
+        client,
+        message,
+        user_id,
+        task_type=task_type,
+        extra=extra,
+        require_rubika=require_rubika,
+        session_name=session_name,
+        batch_allowed=require_rubika and task_type == "local_file",
+    )
+
+
+async def _download_and_queue(
+    deps: MediaHandlerDeps,
+    client: Any,
+    message: Message,
+    user_id: int,
+    *,
+    task_type: str,
+    extra: dict,
+    require_rubika: bool,
+    session_name: Optional[str] = None,
+    batch_allowed: bool = True,
+) -> None:
     media_type, media = deps.get_media(message)
     if not media:
-        await message.reply_text(deps.tr(user_id, "media_bad_type"))
+        await message.reply_text(deps.tr(user_id, "media_bad_type"), parse_mode=None)
         return
 
     download_name = deps.build_download_filename(message, media_type, media)
     download_path = deps.download_dir / download_name
-    status = await message.reply_text(deps.tr(user_id, "media_download_status"))
+    status = await message.reply_text(deps.tr(user_id, "media_download_status"), parse_mode=None)
 
     try:
         started_at = time.time()
@@ -84,7 +179,7 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
 
         settings = deps.load_settings()
         batch = deps.get_batch(user_id)
-        if batch.get("active"):
+        if batch_allowed and batch.get("active"):
             files = batch.get("files", [])
             files.append(str(downloaded_path))
             batch["files"] = files
@@ -109,16 +204,20 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
             return
 
         task = {
-            "type": "local_file",
+            "type": task_type,
             "path": str(downloaded_path),
             "caption": message.caption or "",
             "file_name": download_name,
             "file_size": file_size,
             "safe_mode": settings.get("safe_mode", False),
             "zip_password": settings.get("zip_password", ""),
-            "rubika_session": session_name,
             "telegram_user_id": user_id,
+            "chat_id": message.chat.id,
+            **extra,
         }
+        if session_name:
+            task["rubika_session"] = session_name
+
         await status.edit_text(
             deps.tr(
                 user_id,
@@ -128,18 +227,19 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
             ),
             parse_mode=None,
         )
-        await deps.queue_or_confirm(
-            message,
-            task,
-            deps.tr(user_id, "file_prepared_summary", name=download_name),
-            status_message=status,
-        )
+
+        if task_type == "local_file":
+            summary = deps.tr(user_id, "file_prepared_summary", name=download_name)
+            await deps.queue_or_confirm(message, task, summary, status_message=status)
+        else:
+            await deps.push_task_direct(message, task, status_message=status)
+
         deps.log_event(
             "media_prepared",
             user_id=user_id,
             file_name=download_name,
             file_size=file_size,
-            task_type="local_file",
+            task_type=task_type,
         )
 
     except Exception as e:

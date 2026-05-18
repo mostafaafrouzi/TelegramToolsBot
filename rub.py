@@ -548,7 +548,8 @@ def process_task(task: dict):
         task_type=task_type,
         session=session_name,
     )
-    if TRANSFER_V2_VALIDATE:
+    _rubika_task_types = {"local_file", "direct_url", "text_message", "bundle_local_files"}
+    if TRANSFER_V2_VALIDATE and task_type in _rubika_task_types:
         from v2.transfer.integration import validate_transfer_task_v2
 
         ok_v2, reason_v2 = validate_transfer_task_v2(task, fallback_session=SESSION)
@@ -688,6 +689,120 @@ def process_task(task: dict):
                     bundle.unlink()
             except Exception:
                 pass
+        return
+
+    elif task_type == "transfer_to_bale":
+        local_path = Path(task.get("path", ""))
+        if not local_path.exists():
+            raise RuntimeError("Local file not found.")
+        token = (os.getenv("BALE_BOT_TOKEN") or "").strip()
+        chat_id = str(task.get("bale_chat_id") or "").strip()
+        if not token:
+            raise RuntimeError("BALE_BOT_TOKEN is not set on the server.")
+        if not chat_id:
+            raise RuntimeError("Bale chat_id missing. Use /bale_set_chat in the bot.")
+        from v2.transfer.bale_client import send_file_auto
+
+        push_status(task, "در حال ارسال به بله ...", "uploading")
+        ok, detail = send_file_auto(token, chat_id, local_path, caption=caption)
+        if not ok:
+            raise RuntimeError(detail)
+        bill_upload_usage(task, local_path.stat().st_size)
+        push_status(task, f"فایل با موفقیت به بله ارسال شد.\n{detail}", "done")
+        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        return
+
+    elif task_type == "transfer_to_drive":
+        local_path = Path(task.get("path", ""))
+        if not local_path.exists():
+            raise RuntimeError("Local file not found.")
+        from v2.transfer.drive_client import upload_file
+
+        push_status(task, "در حال آپلود به Google Drive ...", "uploading")
+        ok, link, _meta = upload_file(local_path, file_name=task.get("file_name") or local_path.name)
+        if not ok:
+            raise RuntimeError(link)
+        bill_upload_usage(task, local_path.stat().st_size)
+        push_status(task, f"آپلود Drive انجام شد.\n{link}", "done")
+        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        return
+
+    elif task_type == "ssh_put":
+        local_path = Path(task.get("path", ""))
+        if not local_path.exists():
+            raise RuntimeError("Local file not found.")
+        srv = task.get("ssh_server") or {}
+        from v2.transfer.ssh_client import sftp_put
+
+        push_status(task, "در حال SFTP put ...", "uploading")
+        ok, detail = sftp_put(
+            srv.get("host", ""),
+            int(srv.get("port") or 22),
+            srv.get("ssh_user", ""),
+            local_path,
+            str(task.get("remote_path") or ""),
+            password=srv.get("ssh_secret"),
+            key_filename=srv.get("ssh_key_path"),
+        )
+        if not ok:
+            raise RuntimeError(detail)
+        bill_upload_usage(task, local_path.stat().st_size)
+        push_status(task, f"SFTP put OK → {detail}", "done")
+        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        return
+
+    elif task_type == "ssh_get":
+        srv = task.get("ssh_server") or {}
+        remote_path = str(task.get("remote_path") or "")
+        dest = DOWNLOAD_DIR / safe_filename(Path(remote_path).name or "ssh_download.bin")
+        from v2.transfer.ssh_client import sftp_get
+
+        push_status(task, "در حال SFTP get ...", "downloading")
+        ok, detail = sftp_get(
+            srv.get("host", ""),
+            int(srv.get("port") or 22),
+            srv.get("ssh_user", ""),
+            remote_path,
+            dest,
+            password=srv.get("ssh_secret"),
+            key_filename=srv.get("ssh_key_path"),
+        )
+        if not ok:
+            raise RuntimeError(detail)
+        from v2.transfer.telegram_notify import send_document
+
+        ok2, err = send_document(int(chat_id or 0), dest, caption=f"SSH get: {remote_path}")
+        if not ok2:
+            raise RuntimeError(err)
+        try:
+            dest.unlink()
+        except Exception:
+            pass
+        push_status(task, "فایل از SSH به تلگرام ارسال شد.", "done")
+        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        return
+
+    elif task_type == "drive_download":
+        file_id = str(task.get("drive_file_id") or "").strip()
+        if not file_id:
+            raise RuntimeError("drive_file_id missing")
+        dest = DOWNLOAD_DIR / f"drive_{file_id}_{int(time.time())}.bin"
+        from v2.transfer.drive_client import download_file
+        from v2.transfer.telegram_notify import send_document
+
+        push_status(task, "در حال دانلود از Drive ...", "downloading")
+        ok, detail = download_file(file_id, dest)
+        if not ok:
+            raise RuntimeError(detail)
+        ok2, err = send_document(int(chat_id or 0), dest, caption=f"Drive: {file_id}")
+        if not ok2:
+            raise RuntimeError(err)
+        try:
+            dest.unlink()
+        except Exception:
+            pass
+        push_status(task, "فایل از Drive به تلگرام ارسال شد.", "done")
+        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
         return
 
     else:

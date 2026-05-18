@@ -50,6 +50,9 @@ _TEXT_EXCLUDED_COMMANDS = [
     "drive_status",
     "ssh_list",
     "ssh_add",
+    "ssh_put",
+    "drive_download",
+    "ssh_get",
     "admin_tier",
     "admin_bonus",
     "admin_clear_prefs",
@@ -107,6 +110,9 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.drive_status_handler, priv & cmd("drive_status"))
     mh(tb.ssh_list_handler, priv & cmd("ssh_list"))
     mh(tb.ssh_add_handler, priv & cmd("ssh_add"))
+    mh(tb.ssh_put_handler, priv & cmd("ssh_put"))
+    mh(tb.drive_download_handler, priv & cmd("drive_download"))
+    mh(tb.ssh_get_handler, priv & cmd("ssh_get"))
     mh(tb.admin_tier_handler, priv & cmd("admin_tier"))
     mh(tb.admin_bonus_handler, priv & cmd("admin_bonus"))
     mh(tb.admin_clear_prefs_handler, priv & cmd("admin_clear_prefs"))
