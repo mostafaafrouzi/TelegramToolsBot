@@ -1,4 +1,4 @@
-"""Menu rendering helpers for incremental v2 extraction."""
+"""Menu rendering and reply-keyboard routing (hierarchical, icon labels)."""
 
 from __future__ import annotations
 
@@ -8,111 +8,119 @@ from pyrogram.types import KeyboardButton, ReplyKeyboardMarkup
 
 Translator = Callable[[int, str], str]
 
-# Maps trimmed lowercase reply text -> pseudo-route consumed by telebot text_handler.
-_REPLY_BUTTON_ROUTE_MAP: Dict[str, str] = {
+# i18n key -> internal route (resolved against tr(user_id, key)).
+_I18N_BUTTON_ROUTES: Dict[str, str] = {
+    # Main
+    "btn_main_transfer": "/show_transfer_menu",
+    "btn_main_toolkit": "/show_toolkit_menu",
+    "btn_main_plan_section": "/show_plan_menu",
+    "btn_main_settings": "/show_settings_menu",
+    "btn_main_help": "/help",
+    "btn_main_admin": "/show_admin_menu",
+    "btn_back_main": "/menu",
+    "btn_back_transfer": "/show_transfer_menu",
+    "btn_back_toolkit": "/show_toolkit_menu",
+    # Transfer destinations
+    "btn_transfer_rubika": "/show_rubika_menu",
+    "btn_transfer_bale": "/show_bale_menu",
+    "btn_transfer_drive": "/show_drive_menu",
+    "btn_transfer_ssh": "/show_ssh_menu",
+    "btn_transfer_files": "/show_files_menu",
+    # Rubika
+    "btn_rub_connect": "/rubika_connect",
+    "btn_rub_status": "/rubika_status",
+    # Bale
+    "btn_bale_connect": "/bale_connect",
+    "btn_bale_status": "/bale_status",
+    "btn_bale_disconnect": "/bale_disconnect",
+    # Drive
+    "btn_drive_connect": "/drive_connect",
+    "btn_drive_status": "/drive_status",
+    "btn_drive_disconnect": "/drive_disconnect",
+    "btn_drive_download_help": "/drive_download_help",
+    # SSH
+    "btn_ssh_list": "/ssh_list",
+    "btn_ssh_add_help": "/ssh_add_help",
+    # Files / queue
+    "btn_zip_start": "/newbatch",
+    "btn_zip_end": "/done",
+    "btn_send_content": "/quick_send_prompt",
+    "btn_queue": "/queue",
+    "btn_clear_all": "/delall",
+    # Toolkit hub
+    "btn_toolkit_network": "/show_toolkit_network_menu",
+    "btn_toolkit_crypto": "/show_toolkit_crypto_menu",
+    "btn_tool_dns": "/dns",
+    "btn_tool_myip": "/myip",
+    "btn_tool_ping": "/ping",
+    "btn_tool_md5": "/md5",
+    "btn_tool_sha256": "/sha256",
+    "btn_tool_b64e": "/b64e",
+    "btn_tool_b64d": "/b64d",
+    # Settings / plan
+    "btn_direct_on": "/directmode on",
+    "btn_direct_off": "/directmode off",
+    "btn_netstatus": "/netstatus",
+    "btn_plan_plan": "/plan",
+    "btn_plan_usage": "/usage",
+    "btn_plan_buy": "/purchase",
+    "btn_admin_panel": "/admin",
+}
+
+# Literal button text (slashes, aliases) — language-independent.
+_STATIC_BUTTON_ROUTES: Dict[str, str] = {
     "menu": "/menu",
     "منو": "/menu",
     "help": "/help",
     "راهنما": "/help",
     "راهنمای لاگ": "/loghelp",
-    "back to main menu": "/menu",
-    "بازگشت به منوی اصلی": "/menu",
-    "main menu": "/menu",
-    "back to transfer menu": "/show_transfer_menu",
-    "بازگشت به منوی انتقال": "/show_transfer_menu",
-    # Transfer hub
-    "📁 انتقال و ارسال": "/show_transfer_menu",
-    "📁 transfer & send": "/show_transfer_menu",
-    "transfer & send": "/show_transfer_menu",
-    "انتقال و ارسال": "/show_transfer_menu",
-    "🧰 ابزارها": "/show_toolkit_menu",
-    "🧰 tools": "/show_toolkit_menu",
-    "tools": "/show_toolkit_menu",
-    "ابزارها": "/show_toolkit_menu",
-    "rubika (transfer)": "/show_rubika_menu",
-    "روبیکا (انتقال)": "/show_rubika_menu",
-    "bale messenger": "/show_bale_menu",
-    "پیام‌رسان بله": "/show_bale_menu",
-    "google drive": "/show_drive_menu",
-    "گوگل درایو": "/show_drive_menu",
-    "ssh servers": "/show_ssh_menu",
-    "سرورهای ssh": "/show_ssh_menu",
-    "files & zip queue": "/show_files_menu",
-    "فایل‌ها و صف zip": "/show_files_menu",
-    "files menu": "/show_files_menu",
-    "منوی فایل‌ها": "/show_files_menu",
-    "rubika menu": "/show_rubika_menu",
-    "منوی اتصال": "/show_rubika_menu",
-    "منوی روبیکا": "/show_rubika_menu",
-    "connection menu": "/show_rubika_menu",
-    "settings menu": "/show_settings_menu",
-    "منوی تنظیمات": "/show_settings_menu",
-    "admin menu": "/show_admin_menu",
-    "منوی ادمین": "/show_admin_menu",
-    "rubika connect": "/rubika_connect",
-    "اتصال روبیکا": "/rubika_connect",
-    "rubika status": "/rubika_status",
-    "وضعیت روبیکا": "/rubika_status",
-    "bale status": "/bale_status",
-    "وضعیت بله": "/bale_status",
-    "drive status": "/drive_status",
-    "وضعیت درایو": "/drive_status",
-    "ssh list": "/ssh_list",
-    "لیست ssh": "/ssh_list",
-    "/ssh_add": "/ssh_add",
-    "/ssh_put": "/ssh_put",
+    "/plan": "/plan",
+    "/usage": "/usage",
+    "/purchase": "/purchase",
+    "/queue": "/queue",
+    "/dns": "/dns",
+    "/myip": "/myip",
+    "/ping": "/ping",
+    "/md5": "/md5",
+    "/sha256": "/sha256",
+    "/b64e": "/b64e",
+    "/b64d": "/b64d",
     "/ssh_list": "/ssh_list",
-    "/drive_download": "/drive_download",
+    "/ssh_add": "/ssh_add_help",
+    "/ssh_put": "/ssh_put_help",
+    "/ssh_get": "/ssh_get_help",
+    "/drive_download": "/drive_download_help",
     "/drive_status": "/drive_status",
+    "/drive_connect": "/drive_connect",
+    "/drive_disconnect": "/drive_disconnect",
     "/bale_status": "/bale_status",
     "/bale_connect": "/bale_connect",
     "/bale_disconnect": "/bale_disconnect",
     "/bale_set_chat": "/bale_set_chat",
-    "اتصال بله": "/bale_connect",
-    "connect bale": "/bale_connect",
-    "/drive_connect": "/drive_connect",
-    "/drive_disconnect": "/drive_disconnect",
-    "اتصال درایو": "/drive_connect",
-    "connect drive": "/drive_connect",
-    "ارسال فایل به بله": "/show_bale_menu",
-    "send file to bale": "/show_bale_menu",
-    "ارسال فایل به درایو": "/show_drive_menu",
-    "send file to drive": "/show_drive_menu",
-    "new batch": "/newbatch",
-    "شروع بچ": "/newbatch",
-    "شروع فایل zip": "/newbatch",
-    "zip files start": "/newbatch",
-    "done batch": "/done",
-    "پایان بچ": "/done",
-    "پایان فایل zip": "/done",
-    "zip files done": "/done",
-    "send text or link": "/quick_send_prompt",
-    "ارسال متن یا لینک": "/quick_send_prompt",
-    "send text": "/quick_send_prompt",
-    "ارسال متن": "/quick_send_prompt",
-    "send link": "/quick_send_prompt",
-    "ارسال لینک": "/quick_send_prompt",
-    "delete all": "/delall",
-    "حذف همه": "/delall",
-    "queue management": "/queue",
-    "مدیریت صف": "/queue",
-    "network status": "/netstatus",
-    "وضعیت شبکه": "/netstatus",
-    "admin panel": "/admin",
-    "پنل ادمین": "/admin",
-    "direct mode on": "/directmode on",
-    "حالت مستقیم روشن": "/directmode on",
-    "direct mode off": "/directmode off",
-    "حالت مستقیم خاموش": "/directmode off",
-    "start zip": "/newbatch",
-    "end zip": "/done",
-    "queue": "/queue",
+    "/rubika_connect": "/rubika_connect",
+    "/rubika_status": "/rubika_status",
 }
 
 
-def resolve_reply_button_route(text: str) -> Optional[str]:
-    """Return internal route token for a reply-keyboard label, or None."""
-    return _REPLY_BUTTON_ROUTE_MAP.get(text.strip().lower())
+def resolve_reply_button_route(
+    text: str,
+    user_id: Optional[int] = None,
+    tr: Optional[Translator] = None,
+) -> Optional[str]:
+    """Return internal route for a reply-keyboard label."""
+    raw = (text or "").strip()
+    if not raw:
+        return None
+    low = raw.lower()
+    if low in _STATIC_BUTTON_ROUTES:
+        return _STATIC_BUTTON_ROUTES[low]
+    if raw in _STATIC_BUTTON_ROUTES:
+        return _STATIC_BUTTON_ROUTES[raw]
+    if user_id is not None and tr is not None:
+        for i18n_key, route in _I18N_BUTTON_ROUTES.items():
+            if raw == tr(user_id, i18n_key):
+                return route
+    return None
 
 
 def _reply(rows: List[List[str]]) -> ReplyKeyboardMarkup:
@@ -125,10 +133,10 @@ def _reply(rows: List[List[str]]) -> ReplyKeyboardMarkup:
 
 def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboardMarkup:
     rows: List[List[str]] = [
+        [tr(user_id, "btn_main_transfer")],
+        [tr(user_id, "btn_main_toolkit")],
         [tr(user_id, "btn_main_plan_section")],
-        [tr(user_id, "btn_main_transfer"), tr(user_id, "btn_main_toolkit")],
         [tr(user_id, "btn_main_settings"), tr(user_id, "btn_main_help")],
-        [tr(user_id, "btn_main_net"), tr(user_id, "btn_main_queue")],
     ]
     if is_admin:
         rows.append([tr(user_id, "btn_main_admin")])
@@ -136,97 +144,122 @@ def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboa
 
 
 def build_plan_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        ["/plan", "/usage"],
-        ["/queue", "/purchase"],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_plan_plan"), tr(user_id, "btn_plan_usage")],
+            [tr(user_id, "btn_plan_buy")],
+            [tr(user_id, "btn_queue")],
+            [tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_transfer_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        [tr(user_id, "btn_transfer_rubika")],
-        [tr(user_id, "btn_transfer_bale"), tr(user_id, "btn_transfer_drive")],
-        [tr(user_id, "btn_transfer_ssh")],
-        [tr(user_id, "btn_transfer_files")],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_transfer_rubika")],
+            [tr(user_id, "btn_transfer_bale"), tr(user_id, "btn_transfer_drive")],
+            [tr(user_id, "btn_transfer_ssh")],
+            [tr(user_id, "btn_transfer_files")],
+            [tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_rubika_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        [tr(user_id, "btn_rub_connect"), tr(user_id, "btn_rub_status")],
-        [tr(user_id, "btn_back_transfer")],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_rub_connect"), tr(user_id, "btn_rub_status")],
+            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        [tr(user_id, "btn_bale_connect"), tr(user_id, "btn_bale_status")],
-        [tr(user_id, "btn_bale_disconnect")],
-        [tr(user_id, "btn_back_transfer")],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_bale_connect"), tr(user_id, "btn_bale_status")],
+            [tr(user_id, "btn_bale_disconnect")],
+            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        [tr(user_id, "btn_drive_connect"), tr(user_id, "btn_drive_status")],
-        ["/drive_download", tr(user_id, "btn_drive_disconnect")],
-        [tr(user_id, "btn_back_transfer")],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_drive_connect"), tr(user_id, "btn_drive_status")],
+            [tr(user_id, "btn_drive_download_help"), tr(user_id, "btn_drive_disconnect")],
+            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        ["/ssh_list", "/ssh_add"],
-        ["/ssh_put", "/ssh_get"],
-        [tr(user_id, "btn_back_transfer")],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_ssh_list"), tr(user_id, "btn_ssh_add_help")],
+            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_toolkit_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        ["/dns", "/myip", "/ping"],
-        ["/md5", "/sha256"],
-        ["/b64e", "/b64d"],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_toolkit_network")],
+            [tr(user_id, "btn_toolkit_crypto")],
+            [tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_toolkit_network_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_tool_dns"), tr(user_id, "btn_tool_myip")],
+            [tr(user_id, "btn_tool_ping")],
+            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_toolkit_crypto_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_tool_md5"), tr(user_id, "btn_tool_sha256")],
+            [tr(user_id, "btn_tool_b64e"), tr(user_id, "btn_tool_b64d")],
+            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        [tr(user_id, "btn_zip_start"), tr(user_id, "btn_zip_end")],
-        [tr(user_id, "btn_send_content")],
-        [tr(user_id, "btn_queue"), tr(user_id, "btn_clear_all")],
-        [tr(user_id, "btn_back_transfer")],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_zip_start"), tr(user_id, "btn_zip_end")],
+            [tr(user_id, "btn_send_content")],
+            [tr(user_id, "btn_queue"), tr(user_id, "btn_clear_all")],
+            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_settings_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        [tr(user_id, "btn_direct_on"), tr(user_id, "btn_direct_off")],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_direct_on"), tr(user_id, "btn_direct_off")],
+            [tr(user_id, "btn_netstatus")],
+            [tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_admin_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    rows = [
-        [tr(user_id, "btn_main_plan_section")],
-        [tr(user_id, "btn_admin_panel"), "/admin", "/version"],
-        [tr(user_id, "btn_back_main")],
-    ]
-    return _reply(rows)
+    return _reply(
+        [
+            [tr(user_id, "btn_admin_panel"), "/version"],
+            [tr(user_id, "btn_main_plan_section")],
+            [tr(user_id, "btn_back_main")],
+        ]
+    )

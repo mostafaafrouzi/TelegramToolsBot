@@ -90,7 +90,12 @@ from v2.handlers.toolkit_commands import (
     handle_sha256,
     handle_tcp_ping,
 )
-from v2.handlers.toolkit_menu_commands import ToolkitMenuDeps, handle_show_toolkit_menu
+from v2.handlers.toolkit_menu_commands import (
+    ToolkitMenuDeps,
+    handle_show_toolkit_crypto_menu,
+    handle_show_toolkit_menu,
+    handle_show_toolkit_network_menu,
+)
 from v2.handlers.transfer_hub_commands import (
     TransferHubDeps,
     handle_bale_set_chat,
@@ -269,64 +274,81 @@ I18N = {
     "fa": {
         "welcome": (
             "سلام 💙\n\n"
-            "برای هر کاربر، روبیکا به‌صورت جداگانه متصل می‌شود.\n"
-            "ابتدا این دستور را بزن:\n"
-            "`/rubika_connect`\n\n"
-            "از دکمه‌های منو وارد بخش‌های مختلف شو.\n"
-            "`/menu` برای نمایش منوی اصلی\n"
-            "`/lang` برای تغییر زبان"
+            "🏠 **منوی اصلی** — دو بخش جدا:\n"
+            "📁 انتقال فایل (روبیکا، بله، درایو، SSH)\n"
+            "🧰 ابزارها (شبکه، هش، Base64)\n\n"
+            "برای روبیکا یک‌بار `/rubika_connect` بزن.\n"
+            "`/menu` منوی اصلی · `/lang` زبان"
         ),
         "menu_intro": (
-            "منوی اصلی:\n"
-            "- «📋 پلن / خرید / محدودیت»: `/plan` · `/usage` · `/queue` · `/purchase`\n"
-            "- «📁 انتقال و ارسال»: روبیکا، بله، گوگل درایو، SSH، فایل/ZIP\n"
-            "- «🧰 ابزارها»: DNS، ping، هش، Base64\n"
-            "- تنظیمات، راهنما، وضعیت شبکه، صف"
+            "🏠 منوی اصلی\n\n"
+            "📁 **انتقال** — ارسال و انتقال فایل\n"
+            "🧰 **ابزارها** — مستقل از انتقال\n"
+            "📋 **حساب** — پلن و صف\n"
+            "⚙️ **تنظیمات** — حالت مستقیم و شبکه\n\n"
+            "در هر زیرمنو «🏠 منوی اصلی» یا «◀️» برای برگشت."
         ),
         "plan_menu_opened": (
-            "منوی پلن و محدودیت:\n"
-            "از دکمه‌های پایین همان `/plan`، `/usage`، `/queue` و `/purchase` را می‌فرستد."
+            "📋 حساب و پلن\n"
+            "پلن، مصرف، خرید و مدیریت صف."
         ),
         "pick_lang": "زبان را انتخاب کن:",
         "lang_saved": "زبان ذخیره شد.",
-        "transfer_menu_title": "📁 انتقال و ارسال — یک ابزار را انتخاب کن",
-        "toolkit_menu_title": "🧰 ابزارها — دستور را بزن یا تایپ کن",
-        "rubika_menu_title": "روبیکا — اتصال و وضعیت",
-        "bale_menu_title": "بله — وضعیت و مقصد",
-        "drive_menu_title": "گوگل درایو",
-        "ssh_menu_title": "سرورهای SSH",
-        "files_menu_title": "فایل‌ها، ZIP و صف",
-        "settings_menu_title": "منوی تنظیمات",
-        "admin_menu_title": "منوی ادمین",
+        "transfer_menu_title": "📁 انتقال فایل\nمقصد را انتخاب کن — هر سرویس منوی خودش را دارد.",
+        "toolkit_menu_title": "🧰 ابزارها\nمستقل از انتقال — دسته را انتخاب کن.",
+        "toolkit_network_menu_title": "🌐 ابزار شبکه\nبعد از انتخاب، دستور + مقدار را بفرست (مثلاً `/dns google.com`).",
+        "toolkit_crypto_menu_title": "🔐 هش و Base64\nمثلاً `/md5 متن` یا `/b64e سلام`",
+        "rubika_menu_title": "💬 روبیکا\nاتصال و وضعیت حساب خودت.",
+        "bale_menu_title": "📨 بله\nربات و مقصد خودت — `/bale_connect`",
+        "drive_menu_title": "☁️ گوگل درایو\n`/drive_connect` سپس ارسال فایل.",
+        "ssh_menu_title": "🖥 سرور SSH\nلیست سرورهای خودت. آپلود: `/ssh_put id مسیر`",
+        "files_menu_title": "📦 فایل، ZIP و صف\nروبیکا باید متصل باشد.",
+        "settings_menu_title": "⚙️ تنظیمات",
+        "admin_menu_title": "🛡 پنل ادمین",
         "admin_denied": "دسترسی ادمین ندارید.",
         "no_worker_events": "فایل لاگ worker هنوز ساخته نشده.",
         "no_recent_jobs": "برای این چت رویداد task_done/task_failed اخیری ثبت نشده.",
         "recent_jobs_title": "آخرین کارها (worker):",
-        "btn_main_transfer": "📁 انتقال و ارسال",
+        "btn_main_transfer": "📁 انتقال فایل",
         "btn_main_toolkit": "🧰 ابزارها",
-        "btn_main_settings": "منوی تنظیمات",
-        "btn_main_help": "راهنما",
-        "btn_main_net": "وضعیت شبکه",
-        "btn_main_queue": "مدیریت صف",
-        "btn_main_plan_section": "📋 پلن / خرید / محدودیت",
-        "btn_main_admin": "منوی ادمین",
-        "btn_back_main": "بازگشت به منوی اصلی",
-        "btn_back_transfer": "بازگشت به منوی انتقال",
-        "btn_transfer_rubika": "روبیکا (انتقال)",
-        "btn_transfer_bale": "پیام‌رسان بله",
-        "btn_transfer_drive": "گوگل درایو",
-        "btn_transfer_ssh": "سرورهای SSH",
-        "btn_transfer_files": "فایل‌ها و صف ZIP",
-        "btn_rub_connect": "اتصال روبیکا",
-        "btn_rub_status": "وضعیت روبیکا",
-        "btn_zip_start": "شروع فایل ZIP",
-        "btn_zip_end": "پایان فایل ZIP",
-        "btn_send_content": "ارسال متن یا لینک",
-        "btn_queue": "مدیریت صف",
-        "btn_clear_all": "حذف همه",
-        "btn_direct_on": "حالت مستقیم روشن",
-        "btn_direct_off": "حالت مستقیم خاموش",
-        "btn_admin_panel": "پنل ادمین",
+        "btn_main_settings": "⚙️ تنظیمات",
+        "btn_main_help": "❓ راهنما",
+        "btn_main_plan_section": "📋 حساب و پلن",
+        "btn_main_admin": "🛡 پنل ادمین",
+        "btn_back_main": "🏠 منوی اصلی",
+        "btn_back_transfer": "◀️ انتقال",
+        "btn_back_toolkit": "◀️ ابزارها",
+        "btn_transfer_rubika": "💬 روبیکا",
+        "btn_transfer_bale": "📨 بله",
+        "btn_transfer_drive": "☁️ درایو",
+        "btn_transfer_ssh": "🖥 SSH",
+        "btn_transfer_files": "📦 فایل و ZIP",
+        "btn_rub_connect": "🔗 اتصال",
+        "btn_rub_status": "✅ وضعیت",
+        "btn_zip_start": "📥 شروع ZIP",
+        "btn_zip_end": "✅ پایان ZIP",
+        "btn_send_content": "✉️ متن / لینک",
+        "btn_queue": "📋 صف",
+        "btn_clear_all": "🗑 پاکسازی",
+        "btn_toolkit_network": "🌐 شبکه و IP",
+        "btn_toolkit_crypto": "🔐 هش و Base64",
+        "btn_tool_dns": "🔍 DNS",
+        "btn_tool_myip": "📍 IP من",
+        "btn_tool_ping": "📡 Ping",
+        "btn_tool_md5": "#️⃣ MD5",
+        "btn_tool_sha256": "🔒 SHA256",
+        "btn_tool_b64e": "📤 B64 encode",
+        "btn_tool_b64d": "📥 B64 decode",
+        "btn_plan_plan": "📊 پلن",
+        "btn_plan_usage": "📈 مصرف",
+        "btn_plan_buy": "💳 خرید",
+        "btn_direct_on": "🚀 مستقیم ON",
+        "btn_direct_off": "⏸ مستقیم OFF",
+        "btn_netstatus": "📶 وضعیت شبکه",
+        "btn_ssh_list": "📋 لیست سرور",
+        "btn_ssh_add_help": "➕ افزودن سرور",
+        "btn_drive_download_help": "⬇️ دانلود درایو",
+        "btn_admin_panel": "🛡 پنل",
         "btn_inline_refresh": "بروزرسانی",
         "btn_inline_pending": "نمایش Pending",
         "btn_inline_failed": "نمایش Failed",
@@ -367,9 +389,9 @@ I18N = {
         "bale_connected_ok": "بله متصل شد ✅ مقصد: `{chat_id}`",
         "bale_already_connected": "بله قبلاً متصل است. برای اتصال مجدد `/bale_disconnect` سپس `/bale_connect`.",
         "bale_disconnected": "اتصال بله قطع شد.",
-        "btn_bale_connect": "اتصال بله",
-        "btn_bale_status": "وضعیت بله",
-        "btn_bale_disconnect": "قطع بله",
+        "btn_bale_connect": "🔗 اتصال",
+        "btn_bale_status": "✅ وضعیت",
+        "btn_bale_disconnect": "❌ قطع",
         "bale_status_no_chat": "توکن OK ({detail}). chat_id نداری — در ویزارد `/bale_connect` ادامه بده.",
         "bale_status_ok": "بله: chat_id=`{chat_id}` — {detail}",
         "bale_set_chat_usage": "استفاده: `/bale_set_chat <bale_chat_id>` (بعد از `/bale_connect`)",
@@ -386,9 +408,9 @@ I18N = {
         "drive_sa_missing_retry": "فایل سرویس‌اکانت پیدا نشد. دوباره `/drive_connect`.",
         "drive_connected_ok": "درایو متصل شد ✅ folder=`{folder_id}`",
         "drive_disconnected": "اتصال درایو قطع شد.",
-        "btn_drive_connect": "اتصال درایو",
-        "btn_drive_status": "وضعیت درایو",
-        "btn_drive_disconnect": "قطع درایو",
+        "btn_drive_connect": "🔗 اتصال",
+        "btn_drive_status": "✅ وضعیت",
+        "btn_drive_disconnect": "❌ قطع",
         "drive_sa_need_document": "JSON را به‌صورت فایل (document) بفرست، نه متن.",
         "drive_sa_need_json": "نام فایل باید `.json` باشد.",
         "drive_sa_invalid": "JSON نامعتبر: {error}",
@@ -408,16 +430,13 @@ I18N = {
         "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "راهنمای سریع:\n\n"
-            "انتقال:\n"
-            "- روبیکا: `/rubika_connect` · `/rubika_status`\n"
-            "- بله: `/bale_connect` · `/bale_status` · `/bale_disconnect`\n"
-            "- درایو: `/drive_connect` · `/drive_status` · `/drive_disconnect`\n"
-            "- SSH: `/ssh_list` · `/ssh_add label host port user`\n"
-            "- فایل/ZIP: `/newbatch` · `/done` · `/sendtext` · `/sendlink`\n\n"
-            "ابزارها: `/dns` · `/myip` · `/ping` · `/md5` · `/sha256` · `/b64e` · `/b64d`\n\n"
-            "تنظیمات:\n"
-            "- حالت مستقیم: `/directmode on|off`\n"
-            "- safe mode: `/safemode on|off`\n\n"
+            "🏠 منو: `/menu` — 📁 انتقال جدا از 🧰 ابزارها\n\n"
+            "📁 انتقال:\n"
+            "- روبیکا `/rubika_connect` · بله `/bale_connect` · درایو `/drive_connect`\n"
+            "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
+            "🧰 ابزارها (منوی مستقل):\n"
+            "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
+            "⚙️ تنظیمات: `/directmode on|off` · `/safemode on|off`\n\n"
             "عیب‌یابی:\n"
             "- وضعیت شبکه: `/netstatus`\n"
             "- پنل ادمین: `/admin`\n"
@@ -646,64 +665,81 @@ I18N = {
     "en": {
         "welcome": (
             "Hi 💙\n\n"
-            "Rubika is connected per Telegram user.\n"
-            "Run:\n"
-            "`/rubika_connect`\n\n"
-            "Use the menu buttons.\n"
-            "`/menu` main menu\n"
-            "`/lang` change language"
+            "🏠 **Main menu** — two separate areas:\n"
+            "📁 File transfer (Rubika, Bale, Drive, SSH)\n"
+            "🧰 Tools (network, hash, Base64)\n\n"
+            "Link Rubika once: `/rubika_connect`\n"
+            "`/menu` main menu · `/lang` language"
         ),
         "menu_intro": (
-            "Main menu:\n"
-            "- «📋 Plan / billing / limits»: `/plan` · `/usage` · `/queue` · `/purchase`\n"
-            "- «📁 Transfer & send»: Rubika, Bale, Drive, SSH, files/ZIP\n"
-            "- «🧰 Tools»: DNS, ping, hash, Base64\n"
-            "- Settings, help, network, queue"
+            "🏠 Main menu\n\n"
+            "📁 **Transfer** — send & move files\n"
+            "🧰 **Tools** — independent utilities\n"
+            "📋 **Account** — plan & queue\n"
+            "⚙️ **Settings** — direct mode & network\n\n"
+            "Use «🏠 Main menu» or «◀️» to go back."
         ),
         "plan_menu_opened": (
-            "Plan & limits menu:\n"
-            "The buttons below send `/plan`, `/usage`, `/queue`, and `/purchase`."
+            "📋 Account & plan\n"
+            "Plan, usage, purchase, and queue."
         ),
         "pick_lang": "Choose language:",
         "lang_saved": "Language saved.",
-        "transfer_menu_title": "📁 Transfer & send — pick a tool",
-        "toolkit_menu_title": "🧰 Tools — tap a command or type it",
-        "rubika_menu_title": "Rubika — connect & status",
-        "bale_menu_title": "Bale messenger",
-        "drive_menu_title": "Google Drive",
-        "ssh_menu_title": "SSH servers",
-        "files_menu_title": "Files, ZIP & queue",
-        "settings_menu_title": "Settings menu",
-        "admin_menu_title": "Admin menu",
+        "transfer_menu_title": "📁 File transfer\nPick a destination — each has its own submenu.",
+        "toolkit_menu_title": "🧰 Tools\nSeparate from transfer — pick a category.",
+        "toolkit_network_menu_title": "🌐 Network tools\nThen send command + value (e.g. `/dns google.com`).",
+        "toolkit_crypto_menu_title": "🔐 Hash & Base64\ne.g. `/md5 text` or `/b64e hello`",
+        "rubika_menu_title": "💬 Rubika\nConnect and check your account.",
+        "bale_menu_title": "📨 Bale\nYour bot & destination — `/bale_connect`",
+        "drive_menu_title": "☁️ Google Drive\n`/drive_connect` then send files.",
+        "ssh_menu_title": "🖥 SSH servers\nYour servers. Upload: `/ssh_put id path`",
+        "files_menu_title": "📦 Files, ZIP & queue\nRubika must be linked.",
+        "settings_menu_title": "⚙️ Settings",
+        "admin_menu_title": "🛡 Admin",
         "admin_denied": "You are not an admin.",
         "no_worker_events": "Worker log file not found yet.",
         "no_recent_jobs": "No recent task_done/task_failed for this chat.",
         "recent_jobs_title": "Recent jobs (worker):",
-        "btn_main_transfer": "📁 Transfer & send",
+        "btn_main_transfer": "📁 File transfer",
         "btn_main_toolkit": "🧰 Tools",
-        "btn_main_settings": "Settings menu",
-        "btn_main_help": "Help",
-        "btn_main_net": "Network status",
-        "btn_main_queue": "Queue",
-        "btn_main_plan_section": "📋 Plan / billing / limits",
-        "btn_main_admin": "Admin menu",
-        "btn_back_main": "Main menu",
-        "btn_back_transfer": "Back to transfer menu",
-        "btn_transfer_rubika": "Rubika (transfer)",
-        "btn_transfer_bale": "Bale messenger",
-        "btn_transfer_drive": "Google Drive",
-        "btn_transfer_ssh": "SSH servers",
-        "btn_transfer_files": "Files & ZIP queue",
-        "btn_rub_connect": "Connect Rubika",
-        "btn_rub_status": "Rubika status",
-        "btn_zip_start": "Start ZIP",
-        "btn_zip_end": "End ZIP",
-        "btn_send_content": "Send text or link",
-        "btn_queue": "Queue",
-        "btn_clear_all": "Clear all",
-        "btn_direct_on": "Direct mode on",
-        "btn_direct_off": "Direct mode off",
-        "btn_admin_panel": "Admin panel",
+        "btn_main_settings": "⚙️ Settings",
+        "btn_main_help": "❓ Help",
+        "btn_main_plan_section": "📋 Account & plan",
+        "btn_main_admin": "🛡 Admin",
+        "btn_back_main": "🏠 Main menu",
+        "btn_back_transfer": "◀️ Transfer",
+        "btn_back_toolkit": "◀️ Tools",
+        "btn_transfer_rubika": "💬 Rubika",
+        "btn_transfer_bale": "📨 Bale",
+        "btn_transfer_drive": "☁️ Drive",
+        "btn_transfer_ssh": "🖥 SSH",
+        "btn_transfer_files": "📦 Files & ZIP",
+        "btn_rub_connect": "🔗 Connect",
+        "btn_rub_status": "✅ Status",
+        "btn_zip_start": "📥 Start ZIP",
+        "btn_zip_end": "✅ End ZIP",
+        "btn_send_content": "✉️ Text / link",
+        "btn_queue": "📋 Queue",
+        "btn_clear_all": "🗑 Clear all",
+        "btn_toolkit_network": "🌐 Network & IP",
+        "btn_toolkit_crypto": "🔐 Hash & Base64",
+        "btn_tool_dns": "🔍 DNS",
+        "btn_tool_myip": "📍 My IP",
+        "btn_tool_ping": "📡 Ping",
+        "btn_tool_md5": "#️⃣ MD5",
+        "btn_tool_sha256": "🔒 SHA256",
+        "btn_tool_b64e": "📤 B64 encode",
+        "btn_tool_b64d": "📥 B64 decode",
+        "btn_plan_plan": "📊 Plan",
+        "btn_plan_usage": "📈 Usage",
+        "btn_plan_buy": "💳 Purchase",
+        "btn_direct_on": "🚀 Direct ON",
+        "btn_direct_off": "⏸ Direct OFF",
+        "btn_netstatus": "📶 Network",
+        "btn_ssh_list": "📋 Server list",
+        "btn_ssh_add_help": "➕ Add server",
+        "btn_drive_download_help": "⬇️ Drive download",
+        "btn_admin_panel": "🛡 Panel",
         "btn_inline_refresh": "Refresh",
         "btn_inline_pending": "Pending",
         "btn_inline_failed": "Failed",
@@ -741,9 +777,9 @@ I18N = {
         "bale_connected_ok": "Bale linked ✅ destination: `{chat_id}`",
         "bale_already_connected": "Bale already linked. `/bale_disconnect` then `/bale_connect` to replace.",
         "bale_disconnected": "Bale disconnected.",
-        "btn_bale_connect": "Connect Bale",
-        "btn_bale_status": "Bale status",
-        "btn_bale_disconnect": "Disconnect Bale",
+        "btn_bale_connect": "🔗 Connect",
+        "btn_bale_status": "✅ Status",
+        "btn_bale_disconnect": "❌ Disconnect",
         "bale_status_no_chat": "Token OK ({detail}). Missing chat_id — continue `/bale_connect`.",
         "bale_status_ok": "Bale: chat_id=`{chat_id}` — {detail}",
         "bale_set_chat_usage": "Usage: `/bale_set_chat <bale_chat_id>` (after `/bale_connect`)",
@@ -755,9 +791,9 @@ I18N = {
         "drive_sa_missing_retry": "Service account file missing. Run `/drive_connect` again.",
         "drive_connected_ok": "Drive linked ✅ folder=`{folder_id}`",
         "drive_disconnected": "Drive disconnected.",
-        "btn_drive_connect": "Connect Drive",
-        "btn_drive_status": "Drive status",
-        "btn_drive_disconnect": "Disconnect Drive",
+        "btn_drive_connect": "🔗 Connect",
+        "btn_drive_status": "✅ Status",
+        "btn_drive_disconnect": "❌ Disconnect",
         "drive_sa_need_document": "Send the JSON as a document file, not plain text.",
         "drive_sa_need_json": "File name must end with `.json`.",
         "drive_sa_invalid": "Invalid JSON: {error}",
@@ -777,16 +813,13 @@ I18N = {
         "ssh_get_usage": "Usage: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "Quick help:\n\n"
-            "Transfer:\n"
-            "- Rubika: `/rubika_connect` · `/rubika_status`\n"
-            "- Bale: `/bale_connect` · `/bale_status` · `/bale_disconnect`\n"
-            "- Drive: `/drive_connect` · `/drive_status` · `/drive_disconnect`\n"
-            "- SSH: `/ssh_list` · `/ssh_add label host port user`\n"
-            "- Files/ZIP: `/newbatch` · `/done` · `/sendtext` · `/sendlink`\n\n"
-            "Tools: `/dns` · `/myip` · `/ping` · `/md5` · `/sha256` · `/b64e` · `/b64d`\n\n"
-            "Settings:\n"
-            "- Direct mode: `/directmode on|off`\n"
-            "- Safe mode: `/safemode on|off`\n\n"
+            "🏠 `/menu` — 📁 Transfer and 🧰 Tools are separate\n\n"
+            "📁 Transfer:\n"
+            "- Rubika `/rubika_connect` · Bale `/bale_connect` · Drive `/drive_connect`\n"
+            "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
+            "🧰 Tools (own menu):\n"
+            "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
+            "⚙️ Settings: `/directmode on|off` · `/safemode on|off`\n\n"
             "Troubleshooting:\n"
             "- Network: `/netstatus`\n"
             "- Admin: `/admin`\n"
@@ -1179,6 +1212,14 @@ def build_transfer_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_toolkit_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_toolkit_menu(user_id, tr)
+
+
+def build_toolkit_network_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_network_menu(user_id, tr)
+
+
+def build_toolkit_crypto_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_crypto_menu(user_id, tr)
 
 
 def build_bale_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -2065,6 +2106,8 @@ TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
     tr=tr,
     set_menu_section=set_menu_section,
     build_toolkit_menu=build_toolkit_menu,
+    build_toolkit_network_menu=build_toolkit_network_menu,
+    build_toolkit_crypto_menu=build_toolkit_crypto_menu,
 )
 
 TRANSFER_HUB_DEPS = TransferHubDeps(
@@ -2108,6 +2151,14 @@ async def show_transfer_menu_handler(client: Client, message: Message):
 
 async def show_toolkit_menu_handler(client: Client, message: Message):
     await handle_show_toolkit_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_toolkit_network_menu_handler(client: Client, message: Message):
+    await handle_show_toolkit_network_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_toolkit_crypto_menu_handler(client: Client, message: Message):
+    await handle_show_toolkit_crypto_menu(TOOLKIT_MENU_DEPS, client, message)
 
 
 async def show_rubika_menu_handler(client: Client, message: Message):
@@ -2711,13 +2762,26 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     netstatus_handler=netstatus_handler,
     admin_handler=admin_handler,
     direct_mode_handler=direct_mode_handler,
+    plan_handler=plan_handler,
+    usage_handler=usage_handler,
+    purchase_handler=purchase_handler,
     show_transfer_menu_handler=show_transfer_menu_handler,
     show_toolkit_menu_handler=show_toolkit_menu_handler,
+    show_toolkit_network_menu_handler=show_toolkit_network_menu_handler,
+    show_toolkit_crypto_menu_handler=show_toolkit_crypto_menu_handler,
     show_rubika_menu_handler=show_rubika_menu_handler,
     show_bale_menu_handler=show_bale_menu_handler,
     show_drive_menu_handler=show_drive_menu_handler,
     show_ssh_menu_handler=show_ssh_menu_handler,
     show_files_menu_handler=show_files_menu_handler,
+    dns_lookup_handler=dns_lookup_handler,
+    my_ip_handler=my_ip_handler,
+    tcp_ping_handler=tcp_ping_handler,
+    md5_handler=md5_handler,
+    sha256_handler=sha256_handler,
+    b64_encode_handler=b64_encode_handler,
+    b64_decode_handler=b64_decode_handler,
+    build_plan_menu=build_plan_menu,
     build_transfer_menu=build_transfer_menu,
     build_toolkit_menu=build_toolkit_menu,
     build_rubika_menu=build_rubika_menu,

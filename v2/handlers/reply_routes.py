@@ -17,8 +17,6 @@ MenuBuilder = Callable[[int], Any]
 
 @dataclass(frozen=True)
 class ReplyRouteDeps:
-    """Stable dependency bundle built once in telebot (after handlers are defined)."""
-
     admin_ids: FrozenSet[int]
     tr: TranslateFn
     set_menu_section: Callable[[int, MenuSection], None]
@@ -42,19 +40,37 @@ class ReplyRouteDeps:
     netstatus_handler: MessageHandler
     admin_handler: MessageHandler
     direct_mode_handler: MessageHandler
+    plan_handler: MessageHandler
+    usage_handler: MessageHandler
+    purchase_handler: MessageHandler
     show_transfer_menu_handler: MessageHandler
     show_toolkit_menu_handler: MessageHandler
+    show_toolkit_network_menu_handler: MessageHandler
+    show_toolkit_crypto_menu_handler: MessageHandler
     show_rubika_menu_handler: MessageHandler
     show_bale_menu_handler: MessageHandler
     show_drive_menu_handler: MessageHandler
     show_ssh_menu_handler: MessageHandler
     show_files_menu_handler: MessageHandler
+    dns_lookup_handler: MessageHandler
+    my_ip_handler: MessageHandler
+    tcp_ping_handler: MessageHandler
+    md5_handler: MessageHandler
+    sha256_handler: MessageHandler
+    b64_encode_handler: MessageHandler
+    b64_decode_handler: MessageHandler
+    build_plan_menu: MenuBuilder
     build_transfer_menu: MenuBuilder
     build_toolkit_menu: MenuBuilder
     build_rubika_menu: MenuBuilder
     build_files_menu: MenuBuilder
     build_settings_menu: MenuBuilder
     build_admin_menu: MenuBuilder
+
+
+async def _run_slash(handler: MessageHandler, client: ClientRef, message: Message, command: str) -> None:
+    message.text = command
+    await handler(client, message)
 
 
 async def dispatch_reply_keyboard_route(
@@ -68,6 +84,7 @@ async def dispatch_reply_keyboard_route(
     if not mapped:
         return False
     tr = deps.tr
+
     if mapped == "/menu":
         await deps.menu_handler(client, message)
         return True
@@ -77,11 +94,25 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/loghelp":
         await deps.log_help_handler(client, message)
         return True
+
+    if mapped == "/show_plan_menu":
+        deps.set_menu_section(user_id, MenuSection.PLAN)
+        await message.reply_text(
+            tr(user_id, "plan_menu_opened"),
+            reply_markup=deps.build_plan_menu(user_id),
+        )
+        return True
     if mapped == "/show_transfer_menu":
         await deps.show_transfer_menu_handler(client, message)
         return True
     if mapped == "/show_toolkit_menu":
         await deps.show_toolkit_menu_handler(client, message)
+        return True
+    if mapped == "/show_toolkit_network_menu":
+        await deps.show_toolkit_network_menu_handler(client, message)
+        return True
+    if mapped == "/show_toolkit_crypto_menu":
+        await deps.show_toolkit_crypto_menu_handler(client, message)
         return True
     if mapped == "/show_rubika_menu":
         await deps.show_rubika_menu_handler(client, message)
@@ -100,15 +131,32 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/show_settings_menu":
         deps.set_menu_section(user_id, MenuSection.SETTINGS)
-        await message.reply_text(tr(user_id, "settings_menu_title"), reply_markup=deps.build_settings_menu(user_id))
+        await message.reply_text(
+            tr(user_id, "settings_menu_title"),
+            reply_markup=deps.build_settings_menu(user_id),
+        )
         return True
     if mapped == "/show_admin_menu":
         if user_id in deps.admin_ids:
             deps.set_menu_section(user_id, MenuSection.ADMIN)
-            await message.reply_text(tr(user_id, "admin_menu_title"), reply_markup=deps.build_admin_menu(user_id))
+            await message.reply_text(
+                tr(user_id, "admin_menu_title"),
+                reply_markup=deps.build_admin_menu(user_id),
+            )
         else:
             await message.reply_text(tr(user_id, "admin_denied"))
         return True
+
+    if mapped == "/plan":
+        await _run_slash(deps.plan_handler, client, message, "/plan")
+        return True
+    if mapped == "/usage":
+        await _run_slash(deps.usage_handler, client, message, "/usage")
+        return True
+    if mapped == "/purchase":
+        await _run_slash(deps.purchase_handler, client, message, "/purchase")
+        return True
+
     if mapped == "/rubika_connect":
         await deps.rubika_connect_handler(client, message)
         return True
@@ -133,9 +181,44 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/drive_disconnect":
         await deps.drive_disconnect_handler(client, message)
         return True
+    if mapped == "/drive_download_help":
+        await message.reply_text(tr(user_id, "drive_download_usage"), parse_mode=None)
+        return True
     if mapped == "/ssh_list":
         await deps.ssh_list_handler(client, message)
         return True
+    if mapped == "/ssh_add_help":
+        await message.reply_text(tr(user_id, "ssh_add_usage"), parse_mode=None)
+        return True
+    if mapped == "/ssh_put_help":
+        await message.reply_text(tr(user_id, "ssh_put_usage"), parse_mode=None)
+        return True
+    if mapped == "/ssh_get_help":
+        await message.reply_text(tr(user_id, "ssh_get_usage"), parse_mode=None)
+        return True
+
+    if mapped == "/dns":
+        await _run_slash(deps.dns_lookup_handler, client, message, "/dns")
+        return True
+    if mapped == "/myip":
+        await _run_slash(deps.my_ip_handler, client, message, "/myip")
+        return True
+    if mapped == "/ping":
+        await _run_slash(deps.tcp_ping_handler, client, message, "/ping")
+        return True
+    if mapped == "/md5":
+        await _run_slash(deps.md5_handler, client, message, "/md5")
+        return True
+    if mapped == "/sha256":
+        await _run_slash(deps.sha256_handler, client, message, "/sha256")
+        return True
+    if mapped == "/b64e":
+        await _run_slash(deps.b64_encode_handler, client, message, "/b64e")
+        return True
+    if mapped == "/b64d":
+        await _run_slash(deps.b64_decode_handler, client, message, "/b64d")
+        return True
+
     if mapped == "/newbatch":
         await deps.new_batch_handler(client, message)
         return True
@@ -155,12 +238,10 @@ async def dispatch_reply_keyboard_route(
         await deps.admin_handler(client, message)
         return True
     if mapped == "/directmode on":
-        message.text = "/directmode on"
-        await deps.direct_mode_handler(client, message)
+        await _run_slash(deps.direct_mode_handler, client, message, "/directmode on")
         return True
     if mapped == "/directmode off":
-        message.text = "/directmode off"
-        await deps.direct_mode_handler(client, message)
+        await _run_slash(deps.direct_mode_handler, client, message, "/directmode off")
         return True
     if mapped == "/quick_send_prompt":
         deps.set_state_preserving_menu(user_id, {"step": "await_quick_message"})

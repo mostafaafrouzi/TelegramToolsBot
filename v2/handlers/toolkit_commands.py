@@ -43,7 +43,7 @@ async def _guard_toolkit_quota_try(deps: ToolkitCommandDeps, message: Message, u
 
 async def handle_dns_lookup(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_menu_section(uid, MenuSection.MAIN)
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
     if not deps.toolkit_network_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
         return
@@ -70,7 +70,7 @@ async def handle_dns_lookup(deps: ToolkitCommandDeps, client: Any, message: Mess
 
 async def handle_my_ip(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_menu_section(uid, MenuSection.MAIN)
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
     if not deps.toolkit_network_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
         return
@@ -86,7 +86,7 @@ async def handle_my_ip(deps: ToolkitCommandDeps, client: Any, message: Message) 
 
 async def handle_tcp_ping(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_menu_section(uid, MenuSection.MAIN)
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
     if not deps.toolkit_network_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
         return
@@ -120,7 +120,7 @@ async def handle_tcp_ping(deps: ToolkitCommandDeps, client: Any, message: Messag
 
 async def handle_md5(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_menu_section(uid, MenuSection.MAIN)
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
     if not deps.toolkit_utility_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_utility_disabled"), parse_mode=None)
         return
@@ -139,7 +139,7 @@ async def handle_md5(deps: ToolkitCommandDeps, client: Any, message: Message) ->
 
 async def handle_sha256(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_menu_section(uid, MenuSection.MAIN)
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
     if not deps.toolkit_utility_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_utility_disabled"), parse_mode=None)
         return
@@ -158,7 +158,7 @@ async def handle_sha256(deps: ToolkitCommandDeps, client: Any, message: Message)
 
 async def handle_b64_encode(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_menu_section(uid, MenuSection.MAIN)
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
     if not deps.toolkit_utility_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_utility_disabled"), parse_mode=None)
         return
@@ -177,7 +177,7 @@ async def handle_b64_encode(deps: ToolkitCommandDeps, client: Any, message: Mess
 
 async def handle_b64_decode(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_menu_section(uid, MenuSection.MAIN)
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
     if not deps.toolkit_utility_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_utility_disabled"), parse_mode=None)
         return

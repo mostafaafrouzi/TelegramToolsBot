@@ -21,7 +21,7 @@ class TextEntryDeps:
     get_state: Callable[[int], dict]
     set_menu_section: Callable[[int, MenuSection], None]
     build_plan_menu: Callable[[int], Any]
-    resolve_reply_button_route: ResolveRouteFn
+    resolve_reply_button_route: Callable[..., Optional[str]]
     dispatch_reply_keyboard_route: AsyncRouteFn
     reply_route_deps: Any
     clear_state: Callable[[int], None]
@@ -45,29 +45,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     user_id = message.from_user.id
     state = deps.get_state(user_id)
 
-    if text.strip() == deps.tr(user_id, "btn_main_plan_section"):
-        deps.set_menu_section(user_id, MenuSection.PLAN)
-        await message.reply_text(
-            deps.tr(user_id, "plan_menu_opened"),
-            reply_markup=deps.build_plan_menu(user_id),
-        )
-        return
-
-    if text.strip() == deps.tr(user_id, "btn_main_transfer"):
-        mapped_transfer = "/show_transfer_menu"
-        if await deps.dispatch_reply_keyboard_route(
-            client, message, user_id, mapped_transfer, deps.reply_route_deps
-        ):
-            return
-
-    if text.strip() == deps.tr(user_id, "btn_main_toolkit"):
-        mapped_toolkit = "/show_toolkit_menu"
-        if await deps.dispatch_reply_keyboard_route(
-            client, message, user_id, mapped_toolkit, deps.reply_route_deps
-        ):
-            return
-
-    mapped = deps.resolve_reply_button_route(text)
+    mapped = deps.resolve_reply_button_route(text, user_id, deps.tr)
     if await deps.dispatch_reply_keyboard_route(client, message, user_id, mapped, deps.reply_route_deps):
         return
 
