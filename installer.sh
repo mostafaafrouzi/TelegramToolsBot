@@ -390,6 +390,12 @@ import pyzipper
 import paramiko
 print('core-imports-ok')
 " || return 1
+  run_cmd "python telebot import smoke test" "$dir/venv/bin/python" -c "
+import os
+os.chdir('$dir')
+import telebot
+print('telebot-import-ok')
+" || return 1
   if "$dir/venv/bin/python" -c "import google.oauth2; import googleapiclient" 2>/dev/null; then
     ok "Google Drive Python libraries available"
   else

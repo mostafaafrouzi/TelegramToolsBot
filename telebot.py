@@ -2964,26 +2964,6 @@ SAFEMODE_COMMAND_DEPS = SafeModeCommandDeps(
     set_waiting_for_zip_password=_set_zip_password_waiting,
 )
 
-CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
-    tr=tr,
-    get_state=get_state,
-    set_lang=set_lang,
-    set_menu_section_main=lambda user_id: set_menu_section(user_id, MenuSection.MAIN),
-    build_main_menu=build_main_menu,
-    queue_manage_handler=queue_manage_handler,
-    clear_queue_handler=clear_queue_handler,
-    get_user_session=get_user_session,
-    queue_count_by_session=queue.queue_count_by_session,
-    failed_count=failed_count,
-    recent_failed_detail_text=recent_failed_detail_text,
-    recent_jobs_summary=recent_jobs_summary,
-    gate_quota=gate_quota,
-    queue_push_task=queue.push_task,
-    clear_state=clear_state,
-    log_event=log_event,
-    handle_link_dest_callback=_link_dest_callback_route,
-)
-
 LINK_DIRECT_HANDLER_DEPS = LinkDirectHandlerDeps(
     tr=tr,
     base_dir=BASE_DIR,
@@ -3006,6 +2986,27 @@ LINK_DIRECT_HANDLER_DEPS = LinkDirectHandlerDeps(
 
 async def _link_dest_callback_route(client: Client, callback_query, dest: str) -> bool:
     return await handle_link_dest_callback(LINK_DIRECT_HANDLER_DEPS, client, callback_query, dest)
+
+
+CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
+    tr=tr,
+    get_state=get_state,
+    set_lang=set_lang,
+    set_menu_section_main=lambda user_id: set_menu_section(user_id, MenuSection.MAIN),
+    build_main_menu=build_main_menu,
+    queue_manage_handler=queue_manage_handler,
+    clear_queue_handler=clear_queue_handler,
+    get_user_session=get_user_session,
+    queue_count_by_session=queue.queue_count_by_session,
+    failed_count=failed_count,
+    recent_failed_detail_text=recent_failed_detail_text,
+    recent_jobs_summary=recent_jobs_summary,
+    gate_quota=gate_quota,
+    queue_push_task=queue.push_task,
+    clear_state=clear_state,
+    log_event=log_event,
+    handle_link_dest_callback=_link_dest_callback_route,
+)
 
 
 DIRECT_MODE_TEXT_DEPS = DirectModeTextDeps(
