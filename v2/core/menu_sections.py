@@ -14,4 +14,5 @@ class MenuSection(str, Enum):
     DRIVE = "drive"
     SSH = "ssh"
     SETTINGS = "settings"
+    LINK_DIRECT = "link_direct"
     ADMIN = "admin"

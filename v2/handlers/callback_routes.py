@@ -30,6 +30,7 @@ class CallbackRouteDeps:
     queue_push_task: Callable[[dict], dict]
     clear_state: Callable[[int], None]
     log_event: Callable[..., None]
+    handle_link_dest_callback: Callable[..., Awaitable[bool]]
 
 
 async def dispatch_callback_route(client: Any, callback_query: Any, deps: CallbackRouteDeps) -> bool:
@@ -125,6 +126,10 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
             pass
         await callback_query.answer("Queued")
         return True
+
+    if data.startswith("linkdest:"):
+        dest = data.split(":", 1)[1]
+        return await deps.handle_link_dest_callback(client, callback_query, dest)
 
     if data == "cancel_send" and state.get("step") == "await_send_confirm":
         deps.clear_state(user_id)

@@ -27,5 +27,5 @@ async def handle_direct_url_sendlink_hint(
     url = deps.extract_first_url(text)
     if not url or not deps.is_direct_url(url):
         return False
-    await message.reply_text(deps.tr(user_id, "direct_url_use_sendlink"), parse_mode=None)
+    await message.reply_text(deps.tr(user_id, "direct_url_use_link_menu"), parse_mode=None)
     return True

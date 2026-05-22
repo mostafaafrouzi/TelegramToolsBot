@@ -42,10 +42,17 @@ from v2.handlers.toolkit_commands import (
 from v2.handlers.media_handler import MediaHandlerDeps, handle_media_message
 from v2.handlers.session_settings_commands import (
     SessionSettingsCommandDeps,
-    handle_direct_mode,
     handle_netstatus,
     handle_rubika_connect,
     handle_rubika_status,
+)
+from v2.handlers.direct_send_commands import DirectSendCommandDeps, handle_direct_mode
+from v2.handlers.link_direct_commands import LinkDirectCommandDeps, handle_show_link_direct_menu
+from v2.handlers.link_direct_handler import (
+    LinkDirectHandlerDeps,
+    handle_link_dest_callback,
+    handle_link_direct_for_direct_mode,
+    handle_link_direct_text,
 )
 from v2.handlers.basic_commands import (
     BasicCommandDeps,

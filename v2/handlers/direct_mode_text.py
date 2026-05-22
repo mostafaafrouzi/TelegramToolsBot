@@ -1,4 +1,4 @@
-"""Direct mode: arbitrary plain text -> queued text_message task."""
+"""Direct send: plain text or URL → queued task (rubika / bale / drive)."""
 
 from __future__ import annotations
 
@@ -14,11 +14,13 @@ TranslateFn = Callable[[int, str], str]
 @dataclass(frozen=True)
 class DirectModeTextDeps:
     tr: TranslateFn
-    is_direct_mode: Callable[[int], bool]
+    get_direct_mode_target: Callable[[int], Optional[str]]
     get_user_session: Callable[[int], Optional[str]]
+    extract_first_url: Callable[[str], Optional[str]]
     gate_quota: Callable[..., Awaitable[bool]]
     push_task: Callable[[Dict[str, Any]], Dict[str, Any]]
     queue_count_by_session: Callable[[str], int]
+    handle_link_direct_for_direct_mode: Callable[..., Awaitable[bool]]
     log_event: Callable[..., None]
 
 
@@ -29,8 +31,17 @@ async def handle_direct_mode_plain_text(
     deps: DirectModeTextDeps,
 ) -> bool:
     """Returns True when direct mode consumed this message."""
-    if not deps.is_direct_mode(user_id):
+    target = deps.get_direct_mode_target(user_id)
+    if not target:
         return False
+
+    url = deps.extract_first_url(text)
+    if url:
+        return await deps.handle_link_direct_for_direct_mode(message, user_id, url, target)
+
+    if target != "rubika":
+        await message.reply_text(deps.tr(user_id, "direct_url_only_for_bale_drive"))
+        return True
 
     session_name = deps.get_user_session(user_id)
     if not session_name:
@@ -56,6 +67,7 @@ async def handle_direct_mode_plain_text(
         job_id=pushed.get("job_id"),
         task_type="text_message",
         direct_mode=True,
+        direct_target=target,
     )
     try:
         await status.edit_text(

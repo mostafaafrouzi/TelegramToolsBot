@@ -7,3 +7,4 @@ pyzipper==0.3.6
 google-api-python-client>=2.100.0
 google-auth>=2.23.0
 paramiko>=3.3.0
+yt-dlp>=2024.1.0

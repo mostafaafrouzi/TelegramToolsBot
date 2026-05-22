@@ -15,6 +15,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_main_toolkit": "/show_toolkit_menu",
     "btn_main_plan_section": "/show_plan_menu",
     "btn_main_settings": "/show_settings_menu",
+    "btn_main_link_direct": "/show_link_direct_menu",
     "btn_main_help": "/help",
     "btn_main_admin": "/show_admin_menu",
     "btn_back_main": "/menu",
@@ -57,9 +58,13 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_tool_sha256": "/sha256",
     "btn_tool_b64e": "/b64e",
     "btn_tool_b64d": "/b64d",
-    # Settings / plan
-    "btn_direct_on": "/directmode on",
-    "btn_direct_off": "/directmode off",
+    # Direct send / plan
+    "btn_direct_rubika_on": "/directmode rubika on",
+    "btn_direct_bale_on": "/directmode bale on",
+    "btn_direct_drive_on": "/directmode drive on",
+    "btn_direct_rubika_off": "/directmode rubika off",
+    "btn_direct_bale_off": "/directmode bale off",
+    "btn_direct_drive_off": "/directmode drive off",
     "btn_netstatus": "/netstatus",
     "btn_plan_plan": "/plan",
     "btn_plan_usage": "/usage",
@@ -134,6 +139,7 @@ def _reply(rows: List[List[str]]) -> ReplyKeyboardMarkup:
 def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboardMarkup:
     rows: List[List[str]] = [
         [tr(user_id, "btn_main_transfer")],
+        [tr(user_id, "btn_main_link_direct")],
         [tr(user_id, "btn_main_toolkit")],
         [tr(user_id, "btn_main_plan_section")],
         [tr(user_id, "btn_main_settings"), tr(user_id, "btn_main_help")],
@@ -245,14 +251,38 @@ def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     )
 
 
-def build_settings_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    return _reply(
-        [
-            [tr(user_id, "btn_direct_on"), tr(user_id, "btn_direct_off")],
-            [tr(user_id, "btn_netstatus")],
-            [tr(user_id, "btn_back_main")],
-        ]
-    )
+def build_link_direct_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply([[tr(user_id, "btn_back_main")]])
+
+
+def build_settings_menu(
+    user_id: int,
+    tr: Translator,
+    direct_target: Optional[str] = None,
+) -> ReplyKeyboardMarkup:
+    """Direct-send menu: ON buttons for inactive targets; OFF only for active target."""
+    target = (direct_target or "").strip().lower()
+    rows: List[List[str]] = []
+    on_row: List[str] = []
+    if target != "rubika":
+        on_row.append(tr(user_id, "btn_direct_rubika_on"))
+    if target != "bale":
+        on_row.append(tr(user_id, "btn_direct_bale_on"))
+    if target != "drive":
+        on_row.append(tr(user_id, "btn_direct_drive_on"))
+    if on_row:
+        rows.append(on_row[:2])
+        if len(on_row) > 2:
+            rows.append(on_row[2:])
+    if target == "rubika":
+        rows.append([tr(user_id, "btn_direct_rubika_off")])
+    elif target == "bale":
+        rows.append([tr(user_id, "btn_direct_bale_off")])
+    elif target == "drive":
+        rows.append([tr(user_id, "btn_direct_drive_off")])
+    rows.append([tr(user_id, "btn_netstatus")])
+    rows.append([tr(user_id, "btn_back_main")])
+    return _reply(rows)
 
 
 def build_admin_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:

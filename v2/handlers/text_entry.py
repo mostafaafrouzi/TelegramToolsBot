@@ -38,6 +38,8 @@ class TextEntryDeps:
     direct_mode_text_deps: Any
     handle_direct_url_sendlink_hint: AsyncWizardFn
     direct_url_hint_deps: Any
+    handle_link_direct_text: AsyncWizardFn
+    link_direct_deps: Any
 
 
 async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) -> None:
@@ -82,6 +84,9 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         return
 
     if await deps.handle_zip_password_text(message, user_id, text, deps.zip_password_deps):
+        return
+
+    if await deps.handle_link_direct_text(deps.link_direct_deps, client, message, user_id, text):
         return
 
     if await deps.handle_direct_mode_plain_text(message, user_id, text, deps.direct_mode_text_deps):

@@ -709,6 +709,11 @@ def process_task(task: dict):
             raise RuntimeError(detail)
         bill_upload_usage(task, local_path.stat().st_size)
         push_status(task, f"فایل با موفقیت به بله ارسال شد.\n{detail}", "done")
+        try:
+            if local_path.exists():
+                local_path.unlink()
+        except Exception:
+            pass
         wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
         return
 
@@ -731,6 +736,11 @@ def process_task(task: dict):
             raise RuntimeError(link)
         bill_upload_usage(task, local_path.stat().st_size)
         push_status(task, f"آپلود Drive انجام شد.\n{link}", "done")
+        try:
+            if local_path.exists():
+                local_path.unlink()
+        except Exception:
+            pass
         wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
         return
 

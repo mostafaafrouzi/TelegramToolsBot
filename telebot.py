@@ -37,6 +37,7 @@ from user_entitlements import (
     set_user_tier,
 )
 from v2.core import menu_engine
+from v2.core.direct_mode import load_direct_mode_target, save_direct_mode_target
 from v2.core.menu_sections import MenuSection
 from v2.handlers.reply_routes import ReplyRouteDeps, dispatch_reply_keyboard_route
 from v2.handlers.rubika_wizard import RubikaWizardDeps, dispatch_rubika_connect_wizard
@@ -75,11 +76,19 @@ from v2.handlers.text_entry import TextEntryDeps, handle_text_entry
 from v2.handlers.media_handler import MediaHandlerDeps, handle_media_message
 from v2.handlers.session_settings_commands import (
     SessionSettingsCommandDeps,
-    handle_direct_mode,
     handle_netstatus,
     handle_rubika_connect,
     handle_rubika_status,
 )
+from v2.handlers.direct_send_commands import DirectSendCommandDeps, handle_direct_mode
+from v2.handlers.link_direct_commands import LinkDirectCommandDeps, handle_show_link_direct_menu
+from v2.handlers.link_direct_handler import (
+    LinkDirectHandlerDeps,
+    handle_link_dest_callback,
+    handle_link_direct_for_direct_mode,
+    handle_link_direct_text,
+)
+from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 from v2.handlers.toolkit_commands import (
     ToolkitCommandDeps,
     handle_b64_decode,
@@ -303,7 +312,8 @@ I18N = {
         "drive_menu_title": "☁️ گوگل درایو\n`/drive_connect` سپس ارسال فایل.",
         "ssh_menu_title": "🖥 سرور SSH\nلیست سرورهای خودت. آپلود: `/ssh_put id مسیر`",
         "files_menu_title": "📦 فایل، ZIP و صف\nروبیکا باید متصل باشد.",
-        "settings_menu_title": "⚙️ تنظیمات",
+        "settings_menu_title": "📤 ارسال مستقیم\nفقط یک مقصد فعال — قبل از فعال‌سازی اتصال همان مقصد را برقرار کن.",
+        "direct_send_menu_title": "📤 ارسال مستقیم",
         "admin_menu_title": "🛡 پنل ادمین",
         "admin_denied": "دسترسی ادمین ندارید.",
         "no_worker_events": "فایل لاگ worker هنوز ساخته نشده.",
@@ -311,7 +321,8 @@ I18N = {
         "recent_jobs_title": "آخرین کارها (worker):",
         "btn_main_transfer": "📁 انتقال فایل",
         "btn_main_toolkit": "🧰 ابزارها",
-        "btn_main_settings": "⚙️ تنظیمات",
+        "btn_main_settings": "📤 ارسال مستقیم",
+        "btn_main_link_direct": "🔗 لینک / ویدیو",
         "btn_main_help": "❓ راهنما",
         "btn_main_plan_section": "📋 حساب و پلن",
         "btn_main_admin": "🛡 پنل ادمین",
@@ -342,8 +353,12 @@ I18N = {
         "btn_plan_plan": "📊 پلن",
         "btn_plan_usage": "📈 مصرف",
         "btn_plan_buy": "💳 خرید",
-        "btn_direct_on": "🚀 مستقیم ON",
-        "btn_direct_off": "⏸ مستقیم OFF",
+        "btn_direct_rubika_on": "🚀 مستقیم روبیکا",
+        "btn_direct_bale_on": "📨 مستقیم بله",
+        "btn_direct_drive_on": "☁️ مستقیم درایو",
+        "btn_direct_rubika_off": "⏸ غیرفعال مستقیم روبیکا",
+        "btn_direct_bale_off": "⏸ غیرفعال مستقیم بله",
+        "btn_direct_drive_off": "⏸ غیرفعال مستقیم درایو",
         "btn_netstatus": "📶 وضعیت شبکه",
         "btn_ssh_list": "📋 لیست سرور",
         "btn_ssh_add_help": "➕ افزودن سرور",
@@ -357,9 +372,45 @@ I18N = {
         "btn_inline_faildetail": "جزئیات خطا",
         "queue_kb_refresh": "بروزرسانی شد",
         "queue_kb_cleared": "صف پاک شد",
-        "directmode_usage": "استفاده: `/directmode on` یا `/directmode off`",
-        "direct_on": "حالت مستقیم فعال شد.",
-        "direct_off": "حالت مستقیم غیرفعال شد.",
+        "directmode_usage": (
+            "ارسال مستقیم (یک مقصد):\n"
+            "`/directmode rubika on` · `/directmode bale on` · `/directmode drive on`\n"
+            "خاموش: `/directmode rubika off` (یا bale/drive)\n"
+            "قدیمی: `/directmode on` = روبیکا"
+        ),
+        "direct_on_rubika": "ارسال مستقیم به روبیکا فعال شد.",
+        "direct_on_bale": "ارسال مستقیم به بله فعال شد.",
+        "direct_on_drive": "ارسال مستقیم به Google Drive فعال شد.",
+        "direct_off": "ارسال مستقیم غیرفعال شد.",
+        "direct_off_wrong_target": "مقصد فعال `{active}` است — ابتدا همان را خاموش کن.",
+        "direct_url_only_for_bale_drive": "در مستقیم بله/درایو فقط لینک/ویدیو پشتیبانی می‌شود.",
+        "link_menu_opened": (
+            "🔗 دانلود لینک / ویدیو\n"
+            "یک لینک HTTP(S) یا یوتیوب بفرست.\n"
+            "ابتدا اطلاعات فایل نمایش داده می‌شود؛ بعد مقصد را انتخاب کن.\n"
+            "تا مقصد و اتصال تأیید نشود، دانلود روی سرور شروع نمی‌شود."
+        ),
+        "link_send_url": "لطفاً یک لینک معتبر (http/https یا یوتیوب) بفرست.",
+        "link_probing": "در حال بررسی لینک (بدون دانلود)…",
+        "link_probe_summary": "📎 `{title}`\nنوع: {link_type}\nحجم تقریبی: {size}",
+        "link_size_unknown": "نامشخص",
+        "link_type_direct": "لینک مستقیم",
+        "link_type_youtube": "یوتیوب",
+        "link_type_magnet": "تورنت",
+        "link_pick_dest": "مقصد را انتخاب کن:",
+        "link_dest_rubika": "روبیکا",
+        "link_dest_bale": "بله",
+        "link_dest_drive": "Google Drive",
+        "link_dest_cancel": "لغو",
+        "link_need_rubika": "روبیکا متصل نیست. `/rubika_connect`",
+        "link_probe_unsupported": "این لینک قابل دانلود نیست. ({detail})",
+        "link_ytdlp_missing": "یوتیوب نیاز به `yt-dlp` روی سرور دارد.",
+        "link_magnet_unsupported": "لینک magnet هنوز پشتیبانی نمی‌شود.",
+        "link_session_expired": "انتخاب منقضی شد — لینک را دوباره بفرست.",
+        "link_cancelled": "لغو شد.",
+        "link_downloading": "در حال دانلود روی سرور…",
+        "link_download_failed": "دانلود ناموفق: {error}",
+        "link_download_done_queue": "دانلود شد؛ در صف ارسال…",
         "newbatch_ok": (
             "جلسه فایل ZIP فعال شد.\n"
             "فایل‌ها را ارسال کن. بعد از اتمام، «پایان فایل ZIP» یا `/done` را بزن."
@@ -436,7 +487,7 @@ I18N = {
             "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
             "🧰 ابزارها (منوی مستقل):\n"
             "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
-            "⚙️ تنظیمات: `/directmode on|off` · `/safemode on|off`\n\n"
+            "📤 ارسال مستقیم: `/directmode rubika|bale|drive on|off` · 🔗 لینک: منوی «لینک / ویدیو»\n\n"
             "عیب‌یابی:\n"
             "- وضعیت شبکه: `/netstatus`\n"
             "- پنل ادمین: `/admin`\n"
@@ -649,6 +700,7 @@ I18N = {
         "usage_disabled_hint": "سهمیه‌گذاری با `DISABLE_USAGE_LIMITS` خاموش است (فقط محدودیت env در صورت تنظیم).",
         "batch_raw_hint": "جمع حجم خام فعلی: ~`{raw_mb}` MB ({n} فایل). بعد از ZIP ممکن است کمی فرق کند.",
         "direct_url_use_sendlink": "برای لینک از دکمه یا دستور `/sendlink` استفاده کن.",
+        "direct_url_use_link_menu": "برای دانلود لینک/ویدیو از منوی اصلی «🔗 لینک / ویدیو» استفاده کن.",
         "purchase_info_body": (
             "💳 خرید / ارتقای پلن\n\n"
             "درگاه پرداخت خودکار هنوز وصل نیست. فعلاً:\n"
@@ -694,7 +746,8 @@ I18N = {
         "drive_menu_title": "☁️ Google Drive\n`/drive_connect` then send files.",
         "ssh_menu_title": "🖥 SSH servers\nYour servers. Upload: `/ssh_put id path`",
         "files_menu_title": "📦 Files, ZIP & queue\nRubika must be linked.",
-        "settings_menu_title": "⚙️ Settings",
+        "settings_menu_title": "📤 Direct send\nOnly one destination at a time — connect it before enabling.",
+        "direct_send_menu_title": "📤 Direct send",
         "admin_menu_title": "🛡 Admin",
         "admin_denied": "You are not an admin.",
         "no_worker_events": "Worker log file not found yet.",
@@ -702,7 +755,8 @@ I18N = {
         "recent_jobs_title": "Recent jobs (worker):",
         "btn_main_transfer": "📁 File transfer",
         "btn_main_toolkit": "🧰 Tools",
-        "btn_main_settings": "⚙️ Settings",
+        "btn_main_settings": "📤 Direct send",
+        "btn_main_link_direct": "🔗 Link / video",
         "btn_main_help": "❓ Help",
         "btn_main_plan_section": "📋 Account & plan",
         "btn_main_admin": "🛡 Admin",
@@ -733,8 +787,12 @@ I18N = {
         "btn_plan_plan": "📊 Plan",
         "btn_plan_usage": "📈 Usage",
         "btn_plan_buy": "💳 Purchase",
-        "btn_direct_on": "🚀 Direct ON",
-        "btn_direct_off": "⏸ Direct OFF",
+        "btn_direct_rubika_on": "🚀 Direct Rubika",
+        "btn_direct_bale_on": "📨 Direct Bale",
+        "btn_direct_drive_on": "☁️ Direct Drive",
+        "btn_direct_rubika_off": "⏸ Off direct Rubika",
+        "btn_direct_bale_off": "⏸ Off direct Bale",
+        "btn_direct_drive_off": "⏸ Off direct Drive",
         "btn_netstatus": "📶 Network",
         "btn_ssh_list": "📋 Server list",
         "btn_ssh_add_help": "➕ Add server",
@@ -748,9 +806,45 @@ I18N = {
         "btn_inline_faildetail": "Error details",
         "queue_kb_refresh": "Refreshed",
         "queue_kb_cleared": "Queue cleared",
-        "directmode_usage": "Use: /directmode on or /directmode off",
-        "direct_on": "Direct mode enabled.",
-        "direct_off": "Direct mode disabled.",
+        "directmode_usage": (
+            "Direct send (one target):\n"
+            "`/directmode rubika on` · `/directmode bale on` · `/directmode drive on`\n"
+            "Off: `/directmode rubika off` (or bale/drive)\n"
+            "Legacy: `/directmode on` = Rubika"
+        ),
+        "direct_on_rubika": "Direct send to Rubika enabled.",
+        "direct_on_bale": "Direct send to Bale enabled.",
+        "direct_on_drive": "Direct send to Google Drive enabled.",
+        "direct_off": "Direct send disabled.",
+        "direct_off_wrong_target": "Active target is `{active}` — turn that off first.",
+        "direct_url_only_for_bale_drive": "Bale/Drive direct mode supports links/videos only.",
+        "link_menu_opened": (
+            "🔗 Link / video download\n"
+            "Send an HTTP(S) or YouTube link.\n"
+            "Metadata first, then pick destination.\n"
+            "No server download until destination is connected."
+        ),
+        "link_send_url": "Send a valid http/https or YouTube link.",
+        "link_probing": "Checking link (no download yet)…",
+        "link_probe_summary": "📎 `{title}`\nType: {link_type}\nApprox. size: {size}",
+        "link_size_unknown": "unknown",
+        "link_type_direct": "direct link",
+        "link_type_youtube": "YouTube",
+        "link_type_magnet": "torrent",
+        "link_pick_dest": "Choose destination:",
+        "link_dest_rubika": "Rubika",
+        "link_dest_bale": "Bale",
+        "link_dest_drive": "Google Drive",
+        "link_dest_cancel": "Cancel",
+        "link_need_rubika": "Rubika not connected. `/rubika_connect`",
+        "link_probe_unsupported": "Cannot download this link. ({detail})",
+        "link_ytdlp_missing": "YouTube needs `yt-dlp` on the server.",
+        "link_magnet_unsupported": "Magnet links are not supported yet.",
+        "link_session_expired": "Selection expired — send the link again.",
+        "link_cancelled": "Cancelled.",
+        "link_downloading": "Downloading on server…",
+        "link_download_failed": "Download failed: {error}",
+        "link_download_done_queue": "Downloaded; queuing upload…",
         "newbatch_ok": (
             "ZIP batch started.\n"
             "Send files, then tap «End ZIP» or `/done`."
@@ -819,7 +913,7 @@ I18N = {
             "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
             "🧰 Tools (own menu):\n"
             "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
-            "⚙️ Settings: `/directmode on|off` · `/safemode on|off`\n\n"
+            "📤 Direct send: `/directmode rubika|bale|drive on|off` · 🔗 links: Link / video menu\n\n"
             "Troubleshooting:\n"
             "- Network: `/netstatus`\n"
             "- Admin: `/admin`\n"
@@ -1030,6 +1124,7 @@ I18N = {
         "usage_disabled_hint": "Quotas are off (`DISABLE_USAGE_LIMITS`). Only optional env caps apply.",
         "batch_raw_hint": "Current raw total ~`{raw_mb}` MB ({n} files). ZIP size may differ slightly.",
         "direct_url_use_sendlink": "For links use the button or `/sendlink`.",
+        "direct_url_use_link_menu": "For link/video download use main menu «🔗 Link / video».",
         "purchase_info_body": (
             "💳 Plans / purchase\n\n"
             "Automatic checkout is not wired yet. For now:\n"
@@ -1242,8 +1337,12 @@ def build_files_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_files_menu(user_id, tr)
 
 
+def build_link_direct_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_link_direct_menu(user_id, tr)
+
+
 def build_settings_menu(user_id: int) -> ReplyKeyboardMarkup:
-    return menu_engine.build_settings_menu(user_id, tr)
+    return menu_engine.build_settings_menu(user_id, tr, get_direct_mode_target(user_id))
 
 
 def build_admin_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -1408,33 +1507,33 @@ def check_rubika_session_sync(session_name: str) -> tuple[bool, str]:
             pass
 
 
+def get_direct_mode_target(user_id: int) -> Optional[str]:
+    return load_direct_mode_target(
+        user_id,
+        load_users=load_users,
+        get_user_key=get_user_key,
+        queue=queue,
+    )
+
+
+def set_direct_mode_target(user_id: int, target: Optional[str]) -> None:
+    save_direct_mode_target(
+        user_id,
+        target,  # type: ignore[arg-type]
+        load_users=load_users,
+        save_users=save_users,
+        get_user_key=get_user_key,
+        queue=queue,
+    )
+
+
 def is_direct_mode(user_id: int) -> bool:
-    users = load_users()
-    key = get_user_key(user_id)
-    item = users.get(key, {})
-    if "direct_mode" in item:
-        return bool(item["direct_mode"])
-    try:
-        db_dm = queue.get_direct_mode(user_id)
-    except Exception as e:
-        log_event("v2_user_prefs_direct_mode_read_failed", user_id=user_id, error=str(e))
-        return False
-    if db_dm is not None:
-        return bool(db_dm)
-    return False
+    return get_direct_mode_target(user_id) is not None
 
 
 def set_direct_mode(user_id: int, enabled: bool):
-    users = load_users()
-    key = get_user_key(user_id)
-    item = users.get(key, {})
-    item["direct_mode"] = bool(enabled)
-    users[key] = item
-    save_users(users)
-    try:
-        queue.upsert_direct_mode(user_id, bool(enabled))
-    except Exception as e:
-        log_event("v2_user_prefs_direct_mode_upsert_failed", user_id=user_id, error=str(e))
+    """Legacy bool API: True → rubika, False → off."""
+    set_direct_mode_target(user_id, "rubika" if enabled else None)
 
 
 def load_user_states() -> dict:
@@ -2050,7 +2149,6 @@ SESSION_SETTINGS_COMMAND_DEPS = SessionSettingsCommandDeps(
     set_menu_section=set_menu_section,
     set_state_preserving_menu=set_state_preserving_menu,
     log_event=log_event,
-    set_direct_mode=set_direct_mode,
     build_settings_menu=build_settings_menu,
     build_main_menu=build_main_menu,
     load_network_snapshot=partial(
@@ -2058,6 +2156,24 @@ SESSION_SETTINGS_COMMAND_DEPS = SessionSettingsCommandDeps(
         NETWORK_FILE,
         {"mode": "unknown", "reason": "", "updated_at": 0},
     ),
+)
+
+DIRECT_SEND_COMMAND_DEPS = DirectSendCommandDeps(
+    tr=tr,
+    set_menu_section=set_menu_section,
+    get_direct_mode_target=get_direct_mode_target,
+    set_direct_mode_target=set_direct_mode_target,
+    get_user_session=get_user_session,
+    get_bale_ready=lambda uid: load_bale_credentials(queue, uid).ready,
+    get_drive_ready=lambda uid: load_drive_credentials(queue, BASE_DIR, uid).ready,
+    build_settings_menu=build_settings_menu,
+    build_main_menu=build_main_menu,
+)
+
+LINK_DIRECT_COMMAND_DEPS = LinkDirectCommandDeps(
+    tr=tr,
+    set_menu_section=set_menu_section,
+    build_link_direct_menu=build_link_direct_menu,
 )
 
 PLAN_COMMAND_DEPS = PlanCommandDeps(
@@ -2283,7 +2399,11 @@ async def rubika_connect_handler(client: Client, message: Message):
 
 
 async def direct_mode_handler(client: Client, message: Message):
-    await handle_direct_mode(SESSION_SETTINGS_COMMAND_DEPS, client, message)
+    await handle_direct_mode(DIRECT_SEND_COMMAND_DEPS, client, message)
+
+
+async def show_link_direct_menu_handler(client: Client, message: Message):
+    await handle_show_link_direct_menu(LINK_DIRECT_COMMAND_DEPS, client, message)
 
 
 async def netstatus_handler(client: Client, message: Message):
@@ -2422,7 +2542,7 @@ async def queue_or_confirm(
 ):
     user_id = message.from_user.id
     task["telegram_user_id"] = user_id
-    if is_direct_mode(user_id):
+    if get_direct_mode_target(user_id):
         if not await gate_quota(message, user_id, task):
             return
         anchor = status_message
@@ -2774,6 +2894,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     show_drive_menu_handler=show_drive_menu_handler,
     show_ssh_menu_handler=show_ssh_menu_handler,
     show_files_menu_handler=show_files_menu_handler,
+    show_link_direct_menu_handler=show_link_direct_menu_handler,
     dns_lookup_handler=dns_lookup_handler,
     my_ip_handler=my_ip_handler,
     tcp_ping_handler=tcp_ping_handler,
@@ -2860,15 +2981,44 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     queue_push_task=queue.push_task,
     clear_state=clear_state,
     log_event=log_event,
+    handle_link_dest_callback=_link_dest_callback_route,
 )
+
+LINK_DIRECT_HANDLER_DEPS = LinkDirectHandlerDeps(
+    tr=tr,
+    base_dir=BASE_DIR,
+    download_dir=DOWNLOAD_DIR,
+    queue=queue,
+    extract_first_url=extract_first_url,
+    get_menu_section=queue.get_menu_section,
+    get_user_session=get_user_session,
+    load_settings=load_settings,
+    effective_max_file_bytes=effective_max_file_bytes,
+    effective_max_mb_display=effective_max_mb_display,
+    fmt_mb_bytes=fmt_mb_bytes,
+    pretty_size=pretty_size,
+    gate_quota=gate_quota,
+    queue_or_confirm=queue_or_confirm,
+    push_task_direct=push_task_direct,
+    log_event=log_event,
+)
+
+
+async def _link_dest_callback_route(client: Client, callback_query, dest: str) -> bool:
+    return await handle_link_dest_callback(LINK_DIRECT_HANDLER_DEPS, client, callback_query, dest)
+
 
 DIRECT_MODE_TEXT_DEPS = DirectModeTextDeps(
     tr=tr,
-    is_direct_mode=is_direct_mode,
+    get_direct_mode_target=get_direct_mode_target,
     get_user_session=get_user_session,
+    extract_first_url=extract_first_url,
     gate_quota=gate_quota,
     push_task=queue.push_task,
     queue_count_by_session=queue.queue_count_by_session,
+    handle_link_direct_for_direct_mode=lambda msg, uid, url, dest: handle_link_direct_for_direct_mode(
+        LINK_DIRECT_HANDLER_DEPS, msg, uid, url, dest
+    ),
     log_event=log_event,
 )
 
@@ -2900,6 +3050,8 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     direct_mode_text_deps=DIRECT_MODE_TEXT_DEPS,
     handle_direct_url_sendlink_hint=handle_direct_url_sendlink_hint,
     direct_url_hint_deps=DIRECT_URL_HINT_DEPS,
+    handle_link_direct_text=handle_link_direct_text,
+    link_direct_deps=LINK_DIRECT_HANDLER_DEPS,
 )
 
 MEDIA_HANDLER_DEPS = MediaHandlerDeps(

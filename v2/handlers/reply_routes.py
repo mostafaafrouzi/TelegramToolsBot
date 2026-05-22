@@ -52,6 +52,7 @@ class ReplyRouteDeps:
     show_drive_menu_handler: MessageHandler
     show_ssh_menu_handler: MessageHandler
     show_files_menu_handler: MessageHandler
+    show_link_direct_menu_handler: MessageHandler
     dns_lookup_handler: MessageHandler
     my_ip_handler: MessageHandler
     tcp_ping_handler: MessageHandler
@@ -128,6 +129,9 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/show_files_menu":
         await deps.show_files_menu_handler(client, message)
+        return True
+    if mapped == "/show_link_direct_menu":
+        await deps.show_link_direct_menu_handler(client, message)
         return True
     if mapped == "/show_settings_menu":
         deps.set_menu_section(user_id, MenuSection.SETTINGS)
@@ -237,12 +241,19 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/admin":
         await deps.admin_handler(client, message)
         return True
-    if mapped == "/directmode on":
-        await _run_slash(deps.direct_mode_handler, client, message, "/directmode on")
-        return True
-    if mapped == "/directmode off":
-        await _run_slash(deps.direct_mode_handler, client, message, "/directmode off")
-        return True
+    for dm_cmd in (
+        "/directmode on",
+        "/directmode off",
+        "/directmode rubika on",
+        "/directmode rubika off",
+        "/directmode bale on",
+        "/directmode bale off",
+        "/directmode drive on",
+        "/directmode drive off",
+    ):
+        if mapped == dm_cmd:
+            await _run_slash(deps.direct_mode_handler, client, message, dm_cmd)
+            return True
     if mapped == "/quick_send_prompt":
         deps.set_state_preserving_menu(user_id, {"step": "await_quick_message"})
         await message.reply_text(tr(user_id, "prompt_quick_message"))

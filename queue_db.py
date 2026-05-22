@@ -51,6 +51,8 @@ class QueueDB:
         cols = {r[1] for r in rows}
         if "direct_mode" not in cols:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN direct_mode INTEGER")
+        if "direct_mode_target" not in cols:
+            conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN direct_mode_target TEXT")
 
     def _migrate_v2_user_prefs_rubika_session(self, conn):
         try:
@@ -232,6 +234,48 @@ class QueueDB:
         if not row or row["direct_mode"] is None:
             return None
         return bool(int(row["direct_mode"]))
+
+    def get_direct_mode_target(self, telegram_user_id: int) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT direct_mode_target FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                (int(telegram_user_id),),
+            ).fetchone()
+        if not row or row["direct_mode_target"] is None:
+            return None
+        return str(row["direct_mode_target"]).strip() or None
+
+    def upsert_direct_mode_target(
+        self, telegram_user_id: int, target: Optional[str]
+    ) -> None:
+        val = (str(target).strip().lower() if target else None) or None
+        if val and val not in ("rubika", "bale", "drive"):
+            val = None
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        """
+                        UPDATE v2_user_prefs
+                        SET direct_mode_target = ?, direct_mode = ?, updated_at = ?
+                        WHERE telegram_user_id = ?
+                        """,
+                        (val, 1 if val else 0, now, int(telegram_user_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO v2_user_prefs (telegram_user_id, menu_section, direct_mode, direct_mode_target, updated_at)
+                        VALUES (?, 'main', ?, ?, ?)
+                        """,
+                        (int(telegram_user_id), 1 if val else 0, val, now),
+                    )
+                conn.commit()
 
     def upsert_direct_mode(self, telegram_user_id: int, enabled: bool) -> None:
         """Mirror direct_mode for v2 migration (dual-write with users.json)."""
