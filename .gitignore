@@ -16,5 +16,7 @@ venv/
 .venv/
 
 # Runtime / optional local data (often preserved on server only)
-# queue/
-# downloads/
+queue/*
+!queue/.gitkeep
+downloads/
+secrets/
