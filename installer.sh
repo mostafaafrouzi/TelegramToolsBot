@@ -575,10 +575,15 @@ post_deploy_health_check(){
   fi
   run_cmd "python syntax smoke check" "$dir/venv/bin/python" -m py_compile \
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
-    "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" \
+    "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" "$dir/v2/core/direct_mode.py" \
     "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py" \
-    "$dir/v2/handlers/media_handler.py" \
-    "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
+    "$dir/v2/handlers/media_handler.py" "$dir/v2/handlers/callback_routes.py" \
+    "$dir/v2/handlers/link_direct_handler.py" "$dir/v2/handlers/link_direct_commands.py" \
+    "$dir/v2/handlers/direct_send_commands.py" "$dir/v2/handlers/direct_mode_text.py" \
+    "$dir/v2/handlers/provider_connect_wizards.py" "$dir/v2/handlers/text_entry.py" \
+    "$dir/v2/handlers/reply_routes.py" \
+    "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py" \
+    "$dir/v2/transfer/link_direct.py" "$dir/v2/transfer/user_credentials.py"
   verify_python_imports "$dir" || return 1
   ok "Health check passed for systemd_base=$base split=$split dir=$dir"
   log_event "OK" "health_check_passed" "systemd_base=$base split=$split dir=$dir"

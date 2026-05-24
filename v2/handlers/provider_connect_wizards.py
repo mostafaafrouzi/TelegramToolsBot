@@ -96,6 +96,7 @@ async def handle_bale_connect(deps: ProviderConnectWizardDeps, client: Any, mess
     token, chat = deps.get_bale_credentials(uid)
     if token and chat:
         await message.reply_text(deps.tr(uid, "bale_already_connected"), parse_mode=None)
+        return
     deps.set_state_preserving_menu(uid, {"step": "await_bale_token"})
     deps.log_event("bale_connect_started", user_id=uid)
     await message.reply_text(deps.tr(uid, "bale_ask_token"), parse_mode=None)
