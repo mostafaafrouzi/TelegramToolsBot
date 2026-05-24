@@ -119,3 +119,49 @@ def download_file(
         return True, dest.name
     except Exception as e:
         return False, str(e)[:900]
+
+
+def list_files(
+    *,
+    service_account_path: Optional[str | Path] = None,
+    folder_id: Optional[str] = None,
+    limit: int = 20,
+) -> tuple[bool, str]:
+    """List files visible in the configured Drive folder."""
+    sa_path = _resolve_service_account_path(service_account_path)
+    fid = (folder_id or _folder_id()).strip()
+    if not sa_path or not sa_path.is_file() or not fid:
+        return False, "Drive service account JSON or folder_id missing for this user"
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        return False, "install google-api-python-client and google-auth on server"
+
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            str(sa_path),
+            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        )
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        q = f"'{fid}' in parents and trashed = false"
+        res = (
+            service.files()
+            .list(
+                q=q,
+                pageSize=max(1, min(int(limit), 100)),
+                fields="files(id, name, mimeType, size, modifiedTime, webViewLink)",
+                orderBy="modifiedTime desc",
+            )
+            .execute()
+        )
+        files = res.get("files") or []
+        if not files:
+            return True, "No files found."
+        lines = []
+        for item in files:
+            size = item.get("size") or "-"
+            lines.append(f"{item.get('name')} — `{item.get('id')}` — {size} bytes")
+        return True, "\n".join(lines)
+    except Exception as e:
+        return False, str(e)[:900]

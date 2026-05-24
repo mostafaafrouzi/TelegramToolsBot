@@ -111,6 +111,8 @@ class QueueDB:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN drive_folder_id TEXT")
         if "drive_sa_path" not in cols:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN drive_sa_path TEXT")
+        if "cloudflare_api_token" not in cols:
+            conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN cloudflare_api_token TEXT")
 
     def _init_db(self):
         with self._connect() as conn:
@@ -768,6 +770,61 @@ class QueueDB:
                 )
                 conn.commit()
 
+    def get_cloudflare_api_token(self, telegram_user_id: int) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT cloudflare_api_token FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                (int(telegram_user_id),),
+            ).fetchone()
+        if not row or row["cloudflare_api_token"] is None:
+            return None
+        token = str(row["cloudflare_api_token"]).strip()
+        return token or None
+
+    def upsert_cloudflare_api_token(self, telegram_user_id: int, token: str) -> None:
+        tok = (token or "").strip()
+        if not tok:
+            return
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        """
+                        UPDATE v2_user_prefs
+                        SET cloudflare_api_token = ?, updated_at = ?
+                        WHERE telegram_user_id = ?
+                        """,
+                        (tok, now, int(telegram_user_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO v2_user_prefs (telegram_user_id, menu_section, cloudflare_api_token, updated_at)
+                        VALUES (?, 'cloudflare', ?, ?)
+                        """,
+                        (int(telegram_user_id), tok, now),
+                    )
+                conn.commit()
+
+    def clear_cloudflare_api_token(self, telegram_user_id: int) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    UPDATE v2_user_prefs
+                    SET cloudflare_api_token = NULL, updated_at = ?
+                    WHERE telegram_user_id = ?
+                    """,
+                    (now, int(telegram_user_id)),
+                )
+                conn.commit()
+
     def upsert_bale_chat_id(self, telegram_user_id: int, chat_id: str) -> None:
         cid = (chat_id or "").strip()
         if not cid:
@@ -824,6 +881,16 @@ class QueueDB:
                 (int(telegram_user_id), int(server_id)),
             ).fetchone()
         return dict(row) if row else None
+
+    def delete_ssh_server(self, telegram_user_id: int, server_id: int) -> bool:
+        with self._lock:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    "DELETE FROM v2_ssh_servers WHERE telegram_user_id = ? AND id = ?",
+                    (int(telegram_user_id), int(server_id)),
+                )
+                conn.commit()
+                return cur.rowcount > 0
 
     def add_ssh_server(
         self,

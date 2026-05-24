@@ -388,8 +388,10 @@ import rubpy
 import requests
 import pyzipper
 import paramiko
+import yt_dlp
 print('core-imports-ok')
 " || return 1
+  command -v ffmpeg >/dev/null 2>&1 || { err "ffmpeg missing from PATH"; return 1; }
   run_cmd "python telebot import smoke test" "$dir/venv/bin/python" -c "
 import os
 os.chdir('$dir')
@@ -598,7 +600,7 @@ post_deploy_health_check(){
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
     "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" \
     "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py" \
-    "$dir/v2/handlers/media_handler.py" \
+    "$dir/v2/handlers/media_handler.py" "$dir/v2/handlers/cloudflare_commands.py" \
     "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
   verify_python_imports "$dir" || return 1
   sleep 3

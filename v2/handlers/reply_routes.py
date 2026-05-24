@@ -39,6 +39,9 @@ class ReplyRouteDeps:
     queue_manage_handler: MessageHandler
     netstatus_handler: MessageHandler
     admin_handler: MessageHandler
+    version_handler: MessageHandler
+    cleanup_downloads_handler: MessageHandler
+    admin_reconcile_billing_handler: MessageHandler
     direct_mode_handler: MessageHandler
     plan_handler: MessageHandler
     usage_handler: MessageHandler
@@ -53,13 +56,28 @@ class ReplyRouteDeps:
     show_ssh_menu_handler: MessageHandler
     show_files_menu_handler: MessageHandler
     show_link_direct_menu_handler: MessageHandler
+    show_cloudflare_menu_handler: MessageHandler
     dns_lookup_handler: MessageHandler
     my_ip_handler: MessageHandler
     tcp_ping_handler: MessageHandler
+    ipinfo_handler: MessageHandler
+    whois_handler: MessageHandler
+    my_id_handler: MessageHandler
+    google_search_handler: MessageHandler
+    google_image_search_handler: MessageHandler
     md5_handler: MessageHandler
     sha256_handler: MessageHandler
     b64_encode_handler: MessageHandler
     b64_decode_handler: MessageHandler
+    bale_set_chat_handler: MessageHandler
+    drive_ls_handler: MessageHandler
+    ssh_ls_handler: MessageHandler
+    ssh_del_handler: MessageHandler
+    cf_connect_handler: MessageHandler
+    cf_status_handler: MessageHandler
+    cf_zones_handler: MessageHandler
+    cf_dns_handler: MessageHandler
+    cf_disconnect_handler: MessageHandler
     build_plan_menu: MenuBuilder
     build_transfer_menu: MenuBuilder
     build_toolkit_menu: MenuBuilder
@@ -67,6 +85,9 @@ class ReplyRouteDeps:
     build_files_menu: MenuBuilder
     build_settings_menu: MenuBuilder
     build_admin_menu: MenuBuilder
+    build_admin_users_menu: MenuBuilder
+    build_admin_billing_menu: MenuBuilder
+    build_admin_maintenance_menu: MenuBuilder
 
 
 async def _run_slash(handler: MessageHandler, client: ClientRef, message: Message, command: str) -> None:
@@ -133,12 +154,31 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/show_link_direct_menu":
         await deps.show_link_direct_menu_handler(client, message)
         return True
+    if mapped == "/show_cloudflare_menu":
+        await deps.show_cloudflare_menu_handler(client, message)
+        return True
     if mapped == "/show_settings_menu":
         deps.set_menu_section(user_id, MenuSection.SETTINGS)
         await message.reply_text(
             tr(user_id, "settings_menu_title"),
             reply_markup=deps.build_settings_menu(user_id),
         )
+        return True
+    if mapped in ("/show_admin_users_menu", "/show_admin_billing_menu", "/show_admin_maintenance_menu"):
+        if user_id not in deps.admin_ids:
+            await message.reply_text(tr(user_id, "admin_denied"))
+            return True
+        deps.set_menu_section(user_id, MenuSection.ADMIN)
+        if mapped == "/show_admin_users_menu":
+            title = tr(user_id, "admin_users_menu_title")
+            menu = deps.build_admin_users_menu(user_id)
+        elif mapped == "/show_admin_billing_menu":
+            title = tr(user_id, "admin_billing_menu_title")
+            menu = deps.build_admin_billing_menu(user_id)
+        else:
+            title = tr(user_id, "admin_maintenance_menu_title")
+            menu = deps.build_admin_maintenance_menu(user_id)
+        await message.reply_text(title, reply_markup=menu, parse_mode=None)
         return True
     if mapped == "/show_admin_menu":
         if user_id in deps.admin_ids:
@@ -176,6 +216,9 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/bale_disconnect":
         await deps.bale_disconnect_handler(client, message)
         return True
+    if mapped == "/bale_set_chat":
+        await _run_slash(deps.bale_set_chat_handler, client, message, "/bale_set_chat")
+        return True
     if mapped == "/drive_status":
         await deps.drive_status_handler(client, message)
         return True
@@ -187,6 +230,9 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/drive_download_help":
         await message.reply_text(tr(user_id, "drive_download_usage"), parse_mode=None)
+        return True
+    if mapped == "/drive_ls":
+        await _run_slash(deps.drive_ls_handler, client, message, "/drive_ls")
         return True
     if mapped == "/ssh_list":
         await deps.ssh_list_handler(client, message)
@@ -200,6 +246,12 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/ssh_get_help":
         await message.reply_text(tr(user_id, "ssh_get_usage"), parse_mode=None)
         return True
+    if mapped == "/ssh_ls_help":
+        await message.reply_text(tr(user_id, "ssh_ls_usage"), parse_mode=None)
+        return True
+    if mapped == "/ssh_del_help":
+        await message.reply_text(tr(user_id, "ssh_del_usage"), parse_mode=None)
+        return True
 
     if mapped == "/dns":
         await _run_slash(deps.dns_lookup_handler, client, message, "/dns")
@@ -209,6 +261,21 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/ping":
         await _run_slash(deps.tcp_ping_handler, client, message, "/ping")
+        return True
+    if mapped == "/ipinfo":
+        await _run_slash(deps.ipinfo_handler, client, message, "/ipinfo")
+        return True
+    if mapped == "/whois":
+        await _run_slash(deps.whois_handler, client, message, "/whois")
+        return True
+    if mapped == "/myid":
+        await _run_slash(deps.my_id_handler, client, message, "/myid")
+        return True
+    if mapped == "/gsearch":
+        await _run_slash(deps.google_search_handler, client, message, "/gsearch")
+        return True
+    if mapped == "/gisearch":
+        await _run_slash(deps.google_image_search_handler, client, message, "/gisearch")
         return True
     if mapped == "/md5":
         await _run_slash(deps.md5_handler, client, message, "/md5")
@@ -240,6 +307,45 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/admin":
         await deps.admin_handler(client, message)
+        return True
+    if mapped == "/version":
+        await deps.version_handler(client, message)
+        return True
+    if mapped == "/cleanup_downloads":
+        await deps.cleanup_downloads_handler(client, message)
+        return True
+    if mapped == "/admin_reconcile_billing":
+        await deps.admin_reconcile_billing_handler(client, message)
+        return True
+    if mapped == "/admin_tier_help":
+        await message.reply_text(tr(user_id, "admin_tier_usage"), parse_mode=None)
+        return True
+    if mapped == "/admin_bonus_help":
+        await message.reply_text(tr(user_id, "admin_bonus_usage"), parse_mode=None)
+        return True
+    if mapped == "/admin_clear_prefs_help":
+        await message.reply_text(tr(user_id, "admin_clear_prefs_hint"), parse_mode=None)
+        return True
+    if mapped == "/admin_payment_lookup_help":
+        await message.reply_text(tr(user_id, "admin_payment_lookup_hint"), parse_mode=None)
+        return True
+    if mapped == "/admin_payment_status_help":
+        await message.reply_text(tr(user_id, "admin_payment_status_hint"), parse_mode=None)
+        return True
+    if mapped == "/cf_connect":
+        await deps.cf_connect_handler(client, message)
+        return True
+    if mapped == "/cf_status":
+        await deps.cf_status_handler(client, message)
+        return True
+    if mapped == "/cf_zones":
+        await deps.cf_zones_handler(client, message)
+        return True
+    if mapped == "/cf_dns_help":
+        await message.reply_text(tr(user_id, "cf_dns_usage"), parse_mode=None)
+        return True
+    if mapped == "/cf_disconnect":
+        await deps.cf_disconnect_handler(client, message)
         return True
     for dm_cmd in (
         "/directmode on",

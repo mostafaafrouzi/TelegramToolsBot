@@ -11,7 +11,7 @@ from typing import Any, Callable, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
-from v2.transfer.bale_client import validate_bot_token
+from v2.transfer.bale_client import validate_bot_token, validate_chat
 from v2.transfer.user_credentials import default_drive_sa_path
 
 TranslateFn = Callable[..., str]
@@ -65,9 +65,14 @@ async def dispatch_provider_connect_wizard(
         if not chat_id:
             await message.reply_text(tr(user_id, "bale_chat_id_empty"), parse_mode=None)
             return True
+        token, _old_chat = deps.get_bale_credentials(user_id)
+        ok, detail = await asyncio.to_thread(validate_chat, token or "", chat_id)
+        if not ok:
+            await message.reply_text(tr(user_id, "bale_chat_invalid", detail=detail), parse_mode=None)
+            return True
         deps.upsert_bale_chat_id(user_id, chat_id)
         deps.clear_state(user_id)
-        await message.reply_text(tr(user_id, "bale_connected_ok", chat_id=chat_id), parse_mode=None)
+        await message.reply_text(tr(user_id, "bale_connected_ok", chat_id=chat_id) + f"\n{detail}", parse_mode=None)
         deps.log_event("bale_connect_ok", user_id=user_id)
         return True
 

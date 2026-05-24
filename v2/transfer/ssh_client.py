@@ -84,3 +84,46 @@ def sftp_get(
     finally:
         if transport:
             transport.close()
+
+
+def sftp_list(
+    host: str,
+    port: int,
+    username: str,
+    remote_path: str,
+    *,
+    password: Optional[str] = None,
+    key_filename: Optional[str] = None,
+    timeout: int = 60,
+    limit: int = 30,
+) -> tuple[bool, str]:
+    try:
+        import paramiko
+    except ImportError:
+        return False, "install paramiko on server"
+
+    transport = None
+    try:
+        transport = paramiko.Transport((host, int(port)))
+        if key_filename:
+            pkey = paramiko.RSAKey.from_private_key_file(key_filename)
+            transport.connect(username=username, pkey=pkey, timeout=timeout)
+        else:
+            transport.connect(username=username, password=password, timeout=timeout)
+        sftp = paramiko.SFTPClient.from_transport(transport)
+        if sftp is None:
+            return False, "SFTP session failed"
+        rows = sftp.listdir_attr(remote_path or ".")
+        rows = sorted(rows, key=lambda r: r.filename.lower())[: max(1, min(limit, 100))]
+        lines = []
+        for item in rows:
+            kind = "d" if str(item.longname).startswith("d") else "-"
+            size = int(getattr(item, "st_size", 0) or 0)
+            lines.append(f"{kind} {size:>10} {item.filename}")
+        sftp.close()
+        return True, "\n".join(lines) if lines else "empty"
+    except Exception as e:
+        return False, str(e)[:900]
+    finally:
+        if transport:
+            transport.close()

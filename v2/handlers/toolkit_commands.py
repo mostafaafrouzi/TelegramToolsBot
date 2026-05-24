@@ -9,6 +9,8 @@ from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
 from v2.toolkit.dns_light import resolve_hostname
+from v2.toolkit.google_search_light import google_search
+from v2.toolkit.ipinfo_light import get_ip_info
 from v2.toolkit.myip_light import get_public_ip
 from v2.toolkit.ping_light import tcp_ping
 from v2.toolkit.text_utils_light import (
@@ -19,6 +21,7 @@ from v2.toolkit.text_utils_light import (
     payload_after_command,
     sha256_hex,
 )
+from v2.toolkit.whois_light import rdap_lookup
 
 TranslateFn = Callable[..., str]
 
@@ -116,6 +119,85 @@ async def handle_tcp_ping(deps: ToolkitCommandDeps, client: Any, message: Messag
         deps.tr(uid, "toolkit_ping_result", host=host, port=port, ms=body),
         parse_mode=None,
     )
+
+
+async def handle_ipinfo(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
+    uid = message.from_user.id
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
+    if not deps.toolkit_network_light_enabled:
+        await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
+        return
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        await message.reply_text(deps.tr(uid, "toolkit_ipinfo_usage"), parse_mode=None)
+        return
+    if not await _guard_toolkit_quota_try(deps, message, uid):
+        return
+    ok, body = get_ip_info(parts[1].strip())
+    if not ok:
+        await message.reply_text(deps.tr(uid, "toolkit_ipinfo_error", error=body), parse_mode=None)
+        return
+    deps.toolkit_quota_commit(uid)
+    await message.reply_text(deps.tr(uid, "toolkit_ipinfo_result", data=body), parse_mode=None)
+
+
+async def handle_whois(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
+    uid = message.from_user.id
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
+    if not deps.toolkit_network_light_enabled:
+        await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
+        return
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(deps.tr(uid, "toolkit_whois_usage"), parse_mode=None)
+        return
+    if not await _guard_toolkit_quota_try(deps, message, uid):
+        return
+    ok, body = rdap_lookup(parts[1].strip())
+    if not ok:
+        await message.reply_text(deps.tr(uid, "toolkit_whois_error", error=body), parse_mode=None)
+        return
+    deps.toolkit_quota_commit(uid)
+    await message.reply_text(deps.tr(uid, "toolkit_whois_result", data=body), parse_mode=None)
+
+
+async def handle_my_id(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
+    uid = message.from_user.id
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
+    user = message.from_user
+    username = f"@{user.username}" if getattr(user, "username", None) else "-"
+    await message.reply_text(
+        deps.tr(
+            uid,
+            "toolkit_myid_result",
+            user_id=uid,
+            username=username,
+            chat_id=message.chat.id,
+        ),
+        parse_mode=None,
+    )
+
+
+async def handle_google_search(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
+    uid = message.from_user.id
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
+    if not deps.toolkit_network_light_enabled:
+        await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
+        return
+    text = message.text or ""
+    image = text.split(maxsplit=1)[0].lower().lstrip("/") == "gisearch"
+    parts = text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(deps.tr(uid, "toolkit_gsearch_usage"), parse_mode=None)
+        return
+    if not await _guard_toolkit_quota_try(deps, message, uid):
+        return
+    ok, body = google_search(parts[1].strip(), image=image)
+    if not ok:
+        await message.reply_text(deps.tr(uid, "toolkit_gsearch_error", error=body), parse_mode=None)
+        return
+    deps.toolkit_quota_commit(uid)
+    await message.reply_text(deps.tr(uid, "toolkit_gsearch_result", data=body), parse_mode=None)
 
 
 async def handle_md5(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
