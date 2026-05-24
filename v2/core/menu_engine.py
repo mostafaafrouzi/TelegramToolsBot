@@ -34,6 +34,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_bale_connect": "/bale_connect",
     "btn_bale_status": "/bale_status",
     "btn_bale_disconnect": "/bale_disconnect",
+    "btn_bale_set_chat": "/bale_set_chat",
     # Drive
     "btn_drive_connect": "/drive_connect",
     "btn_drive_status": "/drive_status",
@@ -185,7 +186,7 @@ def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
             [tr(user_id, "btn_bale_connect"), tr(user_id, "btn_bale_status")],
-            [tr(user_id, "btn_bale_disconnect")],
+            [tr(user_id, "btn_bale_set_chat"), tr(user_id, "btn_bale_disconnect")],
             [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
         ]
     )
@@ -252,7 +253,9 @@ def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 
 def build_link_direct_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    return _reply([[tr(user_id, "btn_back_main")]])
+    return _reply([
+        [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+    ])
 
 
 def build_settings_menu(

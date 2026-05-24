@@ -29,6 +29,7 @@ class ReplyRouteDeps:
     bale_status_handler: MessageHandler
     bale_connect_handler: MessageHandler
     bale_disconnect_handler: MessageHandler
+    bale_set_chat_handler: MessageHandler
     drive_status_handler: MessageHandler
     drive_connect_handler: MessageHandler
     drive_disconnect_handler: MessageHandler
@@ -175,6 +176,9 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/bale_disconnect":
         await deps.bale_disconnect_handler(client, message)
+        return True
+    if mapped == "/bale_set_chat":
+        await deps.bale_set_chat_handler(client, message)
         return True
     if mapped == "/drive_status":
         await deps.drive_status_handler(client, message)
