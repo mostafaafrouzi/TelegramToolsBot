@@ -252,7 +252,9 @@ def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 
 def build_link_direct_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
-    return _reply([[tr(user_id, "btn_back_main")]])
+    return _reply([
+        [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+    ])
 
 
 def build_settings_menu(
