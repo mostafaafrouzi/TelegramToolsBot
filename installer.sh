@@ -572,6 +572,9 @@ post_deploy_health_check(){
   else
     run_cmd "service is-active check" systemctl is-active --quiet "$base"
     run_cmd "service is-enabled check" systemctl is-enabled --quiet "$base"
+    run_cmd "wait for combined child processes" sleep 2
+    run_cmd "combined bot process check" bash -lc "pgrep -f \"${dir}/telebot.py\" >/dev/null"
+    run_cmd "combined worker process check" bash -lc "pgrep -f \"${dir}/rub.py\" >/dev/null"
   fi
   run_cmd "python syntax smoke check" "$dir/venv/bin/python" -m py_compile \
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
