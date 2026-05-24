@@ -51,13 +51,52 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     # Toolkit hub
     "btn_toolkit_network": "/show_toolkit_network_menu",
     "btn_toolkit_crypto": "/show_toolkit_crypto_menu",
-    "btn_tool_dns": "/dns",
-    "btn_tool_myip": "/myip",
-    "btn_tool_ping": "/ping",
-    "btn_tool_md5": "/md5",
-    "btn_tool_sha256": "/sha256",
-    "btn_tool_b64e": "/b64e",
-    "btn_tool_b64d": "/b64d",
+    "btn_toolkit_text": "/show_toolkit_text_menu",
+    "btn_toolkit_gen": "/show_toolkit_gen_menu",
+    "btn_toolkit_conv": "/show_toolkit_conv_menu",
+    # Network tools
+    "btn_tool_dns": "/tool dns",
+    "btn_tool_myip": "/tool myip",
+    "btn_tool_ping": "/tool ping",
+    "btn_tool_port": "/tool port",
+    "btn_tool_ssl": "/tool ssl",
+    "btn_tool_rdns": "/tool rdns",
+    "btn_tool_ipinfo": "/tool ipinfo",
+    "btn_tool_headers": "/tool headers",
+    "btn_tool_whois": "/tool whois",
+    # Crypto / encoding tools
+    "btn_tool_md5": "/tool md5",
+    "btn_tool_sha1": "/tool sha1",
+    "btn_tool_sha256": "/tool sha256",
+    "btn_tool_sha512": "/tool sha512",
+    "btn_tool_b64e": "/tool b64e",
+    "btn_tool_b64d": "/tool b64d",
+    "btn_tool_urle": "/tool urle",
+    "btn_tool_urld": "/tool urld",
+    "btn_tool_jwt": "/tool jwt",
+    # Text tools
+    "btn_tool_count": "/tool count",
+    "btn_tool_upper": "/tool upper",
+    "btn_tool_lower": "/tool lower",
+    "btn_tool_title": "/tool title",
+    "btn_tool_reverse": "/tool reverse",
+    "btn_tool_slug": "/tool slug",
+    "btn_tool_trim": "/tool trim",
+    # Generator tools
+    "btn_tool_uuid": "/tool uuid",
+    "btn_tool_password": "/tool password",
+    "btn_tool_token": "/tool token",
+    "btn_tool_random_num": "/tool random_num",
+    "btn_tool_lorem": "/tool lorem",
+    # Converter tools
+    "btn_tool_now": "/tool now",
+    "btn_tool_ts2date": "/tool ts2date",
+    "btn_tool_date2ts": "/tool date2ts",
+    "btn_tool_base": "/tool base",
+    "btn_tool_color": "/tool color",
+    "btn_tool_size": "/tool size",
+    "btn_tool_json": "/tool json",
+    "btn_tool_calc": "/tool calc",
     # Direct send / plan
     "btn_direct_rubika_on": "/directmode rubika on",
     "btn_direct_bale_on": "/directmode bale on",
@@ -138,11 +177,10 @@ def _reply(rows: List[List[str]]) -> ReplyKeyboardMarkup:
 
 def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboardMarkup:
     rows: List[List[str]] = [
-        [tr(user_id, "btn_main_transfer")],
-        [tr(user_id, "btn_main_link_direct")],
+        [tr(user_id, "btn_main_transfer"), tr(user_id, "btn_main_link_direct")],
         [tr(user_id, "btn_main_toolkit")],
-        [tr(user_id, "btn_main_plan_section")],
-        [tr(user_id, "btn_main_settings"), tr(user_id, "btn_main_help")],
+        [tr(user_id, "btn_main_settings"), tr(user_id, "btn_main_plan_section")],
+        [tr(user_id, "btn_main_help")],
     ]
     if is_admin:
         rows.append([tr(user_id, "btn_main_admin")])
@@ -163,9 +201,8 @@ def build_plan_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 def build_transfer_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
-            [tr(user_id, "btn_transfer_rubika")],
-            [tr(user_id, "btn_transfer_bale"), tr(user_id, "btn_transfer_drive")],
-            [tr(user_id, "btn_transfer_ssh")],
+            [tr(user_id, "btn_transfer_rubika"), tr(user_id, "btn_transfer_bale")],
+            [tr(user_id, "btn_transfer_drive"), tr(user_id, "btn_transfer_ssh")],
             [tr(user_id, "btn_transfer_files")],
             [tr(user_id, "btn_back_main")],
         ]
@@ -213,8 +250,9 @@ def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 def build_toolkit_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
-            [tr(user_id, "btn_toolkit_network")],
-            [tr(user_id, "btn_toolkit_crypto")],
+            [tr(user_id, "btn_toolkit_network"), tr(user_id, "btn_toolkit_crypto")],
+            [tr(user_id, "btn_toolkit_text"), tr(user_id, "btn_toolkit_gen")],
+            [tr(user_id, "btn_toolkit_conv")],
             [tr(user_id, "btn_back_main")],
         ]
     )
@@ -223,8 +261,11 @@ def build_toolkit_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 def build_toolkit_network_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
-            [tr(user_id, "btn_tool_dns"), tr(user_id, "btn_tool_myip")],
-            [tr(user_id, "btn_tool_ping")],
+            [tr(user_id, "btn_tool_myip"), tr(user_id, "btn_tool_dns")],
+            [tr(user_id, "btn_tool_ping"), tr(user_id, "btn_tool_port")],
+            [tr(user_id, "btn_tool_ssl"), tr(user_id, "btn_tool_rdns")],
+            [tr(user_id, "btn_tool_ipinfo"), tr(user_id, "btn_tool_headers")],
+            [tr(user_id, "btn_tool_whois")],
             [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
         ]
     )
@@ -233,8 +274,47 @@ def build_toolkit_network_menu(user_id: int, tr: Translator) -> ReplyKeyboardMar
 def build_toolkit_crypto_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
-            [tr(user_id, "btn_tool_md5"), tr(user_id, "btn_tool_sha256")],
+            [tr(user_id, "btn_tool_md5"), tr(user_id, "btn_tool_sha1")],
+            [tr(user_id, "btn_tool_sha256"), tr(user_id, "btn_tool_sha512")],
             [tr(user_id, "btn_tool_b64e"), tr(user_id, "btn_tool_b64d")],
+            [tr(user_id, "btn_tool_urle"), tr(user_id, "btn_tool_urld")],
+            [tr(user_id, "btn_tool_jwt")],
+            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_toolkit_text_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_tool_count"), tr(user_id, "btn_tool_trim")],
+            [tr(user_id, "btn_tool_upper"), tr(user_id, "btn_tool_lower")],
+            [tr(user_id, "btn_tool_title"), tr(user_id, "btn_tool_reverse")],
+            [tr(user_id, "btn_tool_slug")],
+            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_toolkit_gen_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_tool_uuid"), tr(user_id, "btn_tool_token")],
+            [tr(user_id, "btn_tool_password"), tr(user_id, "btn_tool_random_num")],
+            [tr(user_id, "btn_tool_lorem")],
+            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_toolkit_conv_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_tool_now")],
+            [tr(user_id, "btn_tool_ts2date"), tr(user_id, "btn_tool_date2ts")],
+            [tr(user_id, "btn_tool_base"), tr(user_id, "btn_tool_color")],
+            [tr(user_id, "btn_tool_size"), tr(user_id, "btn_tool_json")],
+            [tr(user_id, "btn_tool_calc")],
             [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
         ]
     )

@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
+from v2.handlers.tool_wizard import ToolWizardDeps, handle_tool_input
 
 TranslateFn = Callable[..., str]
 ResolveRouteFn = Callable[[str], Optional[str]]
@@ -40,12 +41,19 @@ class TextEntryDeps:
     direct_url_hint_deps: Any
     handle_link_direct_text: AsyncWizardFn
     link_direct_deps: Any
+    tool_wizard_deps: ToolWizardDeps
 
 
 async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) -> None:
     text = message.text or ""
     user_id = message.from_user.id
     state = deps.get_state(user_id)
+
+    # Tool wizard input must run BEFORE reply-keyboard routing so a typed value
+    # (e.g. "example.com" or a piece of text) isn't accidentally interpreted as a button.
+    if state.get("step") == "await_tool_input":
+        if await handle_tool_input(deps.tool_wizard_deps, message, user_id, state, text):
+            return
 
     mapped = deps.resolve_reply_button_route(text, user_id, deps.tr)
     if await deps.dispatch_reply_keyboard_route(client, message, user_id, mapped, deps.reply_route_deps):

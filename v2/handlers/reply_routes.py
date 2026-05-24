@@ -8,6 +8,7 @@ from typing import Any, Awaitable, Callable, FrozenSet, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
+from v2.handlers.tool_wizard import ToolWizardDeps, start_tool_wizard
 
 ClientRef = Any
 MessageHandler = Callable[[ClientRef, Message], Awaitable[None]]
@@ -47,6 +48,9 @@ class ReplyRouteDeps:
     show_toolkit_menu_handler: MessageHandler
     show_toolkit_network_menu_handler: MessageHandler
     show_toolkit_crypto_menu_handler: MessageHandler
+    show_toolkit_text_menu_handler: MessageHandler
+    show_toolkit_gen_menu_handler: MessageHandler
+    show_toolkit_conv_menu_handler: MessageHandler
     show_rubika_menu_handler: MessageHandler
     show_bale_menu_handler: MessageHandler
     show_drive_menu_handler: MessageHandler
@@ -67,6 +71,7 @@ class ReplyRouteDeps:
     build_files_menu: MenuBuilder
     build_settings_menu: MenuBuilder
     build_admin_menu: MenuBuilder
+    tool_wizard_deps: ToolWizardDeps
 
 
 async def _run_slash(handler: MessageHandler, client: ClientRef, message: Message, command: str) -> None:
@@ -85,6 +90,13 @@ async def dispatch_reply_keyboard_route(
     if not mapped:
         return False
     tr = deps.tr
+
+    # Tool wizard buttons: "/tool <id>"
+    if mapped.startswith("/tool "):
+        tool_id = mapped.split(" ", 1)[1].strip()
+        if tool_id:
+            await start_tool_wizard(deps.tool_wizard_deps, message, tool_id)
+            return True
 
     if mapped == "/menu":
         await deps.menu_handler(client, message)
@@ -114,6 +126,15 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/show_toolkit_crypto_menu":
         await deps.show_toolkit_crypto_menu_handler(client, message)
+        return True
+    if mapped == "/show_toolkit_text_menu":
+        await deps.show_toolkit_text_menu_handler(client, message)
+        return True
+    if mapped == "/show_toolkit_gen_menu":
+        await deps.show_toolkit_gen_menu_handler(client, message)
+        return True
+    if mapped == "/show_toolkit_conv_menu":
+        await deps.show_toolkit_conv_menu_handler(client, message)
         return True
     if mapped == "/show_rubika_menu":
         await deps.show_rubika_menu_handler(client, message)
@@ -201,6 +222,7 @@ async def dispatch_reply_keyboard_route(
         await message.reply_text(tr(user_id, "ssh_get_usage"), parse_mode=None)
         return True
 
+    # Legacy text routes from old keyboards (slash commands without args still work).
     if mapped == "/dns":
         await _run_slash(deps.dns_lookup_handler, client, message, "/dns")
         return True

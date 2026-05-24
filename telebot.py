@@ -101,10 +101,14 @@ from v2.handlers.toolkit_commands import (
 )
 from v2.handlers.toolkit_menu_commands import (
     ToolkitMenuDeps,
+    handle_show_toolkit_conv_menu,
     handle_show_toolkit_crypto_menu,
+    handle_show_toolkit_gen_menu,
     handle_show_toolkit_menu,
     handle_show_toolkit_network_menu,
+    handle_show_toolkit_text_menu,
 )
+from v2.handlers.tool_wizard import ToolWizardDeps
 from v2.handlers.transfer_hub_commands import (
     TransferHubDeps,
     handle_bale_set_chat,
@@ -283,18 +287,20 @@ I18N = {
     "fa": {
         "welcome": (
             "سلام 💙\n\n"
-            "🏠 **منوی اصلی** — دو بخش جدا:\n"
-            "📁 انتقال فایل (روبیکا، بله، درایو، SSH)\n"
-            "🧰 ابزارها (شبکه، هش، Base64)\n\n"
-            "برای روبیکا یک‌بار `/rubika_connect` بزن.\n"
-            "`/menu` منوی اصلی · `/lang` زبان"
+            "این یک ابر-ربات با چندین ابزار است:\n"
+            "📁 انتقال فایل: روبیکا، بله، گوگل درایو، SSH\n"
+            "🔗 دانلود مستقیم لینک/ویدئو (HTTP/YouTube)\n"
+            "🧰 ابزارها: شبکه، رمز و کدگذاری، متن، تولید، تبدیل/محاسبه\n"
+            "📤 ارسال مستقیم به مقصد دلخواه\n\n"
+            "/menu برای منوی اصلی · /lang برای زبان"
         ),
         "menu_intro": (
             "🏠 منوی اصلی\n\n"
-            "📁 **انتقال** — ارسال و انتقال فایل\n"
-            "🧰 **ابزارها** — مستقل از انتقال\n"
-            "📋 **حساب** — پلن و صف\n"
-            "⚙️ **تنظیمات** — حالت مستقیم و شبکه\n\n"
+            "📁 **انتقال** — روبیکا، بله، درایو، SSH، ZIP\n"
+            "🔗 **لینک / ویدیو** — دانلود لینک HTTP و یوتیوب\n"
+            "🧰 **ابزارها** — ۳۰+ ابزار در ۵ دسته\n"
+            "📤 **ارسال مستقیم** — هر فایل/لینک به مقصد فعال\n"
+            "📋 **حساب و پلن** · ❓ راهنما\n\n"
             "در هر زیرمنو «🏠 منوی اصلی» یا «◀️» برای برگشت."
         ),
         "plan_menu_opened": (
@@ -304,9 +310,20 @@ I18N = {
         "pick_lang": "زبان را انتخاب کن:",
         "lang_saved": "زبان ذخیره شد.",
         "transfer_menu_title": "📁 انتقال فایل\nمقصد را انتخاب کن — هر سرویس منوی خودش را دارد.",
-        "toolkit_menu_title": "🧰 ابزارها\nمستقل از انتقال — دسته را انتخاب کن.",
-        "toolkit_network_menu_title": "🌐 ابزار شبکه\nبعد از انتخاب، دستور + مقدار را بفرست (مثلاً `/dns google.com`).",
-        "toolkit_crypto_menu_title": "🔐 هش و Base64\nمثلاً `/md5 متن` یا `/b64e سلام`",
+        "toolkit_menu_title": (
+            "🧰 ابزارها (دسته‌ها)\n"
+            "- 🌐 شبکه: DNS، IP، Ping، Port، SSL، WHOIS…\n"
+            "- 🔐 رمز و کدگذاری: MD5/SHA/Base64/URL/JWT\n"
+            "- ✏️ متن: شمارش، Upper/Lower، Reverse، Slug…\n"
+            "- 🎲 تولید: UUID، رمز قوی، توکن، Lorem…\n"
+            "- 🔄 تبدیل: زمان، اعداد، رنگ، حجم، JSON، ماشین‌حساب\n"
+            "روی یک ابزار بزن، بعد مقدار را همان‌جا بفرست."
+        ),
+        "toolkit_network_menu_title": "🌐 ابزارهای شبکه\nروی هر دکمه بزن، سپس مقدار را در پیام بعدی بفرست.",
+        "toolkit_crypto_menu_title": "🔐 هش و کدگذاری\nروی یک ابزار بزن، سپس متن را بفرست.",
+        "toolkit_text_menu_title": "✏️ ابزارهای متن\nشمارش، تبدیل حروف، معکوس، Slug و پاکسازی فاصله.",
+        "toolkit_gen_menu_title": "🎲 تولیدکننده‌ها\nUUID، رمز قوی، توکن hex، عدد تصادفی و Lorem.",
+        "toolkit_conv_menu_title": "🔄 تبدیل‌ها و محاسبه\nزمان، عدد در مبناها، رنگ، حجم، JSON، ماشین‌حساب.",
         "rubika_menu_title": "💬 روبیکا\nاتصال و وضعیت حساب خودت.",
         "bale_menu_title": "📨 بله\nربات و مقصد خودت — `/bale_connect`",
         "drive_menu_title": "☁️ گوگل درایو\n`/drive_connect` سپس ارسال فایل.",
@@ -341,15 +358,84 @@ I18N = {
         "btn_send_content": "✉️ متن / لینک",
         "btn_queue": "📋 صف",
         "btn_clear_all": "🗑 پاکسازی",
-        "btn_toolkit_network": "🌐 شبکه و IP",
-        "btn_toolkit_crypto": "🔐 هش و Base64",
+        "btn_toolkit_network": "🌐 شبکه",
+        "btn_toolkit_crypto": "🔐 رمز و کدگذاری",
+        "btn_toolkit_text": "✏️ متن",
+        "btn_toolkit_gen": "🎲 تولید",
+        "btn_toolkit_conv": "🔄 تبدیل و محاسبه",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 IP من",
-        "btn_tool_ping": "📡 Ping",
+        "btn_tool_ping": "📡 Ping (TCP)",
+        "btn_tool_port": "🔌 Port check",
+        "btn_tool_ssl": "🔐 SSL info",
+        "btn_tool_rdns": "↩️ Reverse DNS",
+        "btn_tool_ipinfo": "🌍 IP info",
+        "btn_tool_headers": "📋 HTTP headers",
+        "btn_tool_whois": "🪪 WHOIS",
         "btn_tool_md5": "#️⃣ MD5",
+        "btn_tool_sha1": "🔒 SHA1",
         "btn_tool_sha256": "🔒 SHA256",
-        "btn_tool_b64e": "📤 B64 encode",
-        "btn_tool_b64d": "📥 B64 decode",
+        "btn_tool_sha512": "🔒 SHA512",
+        "btn_tool_b64e": "📤 Base64 encode",
+        "btn_tool_b64d": "📥 Base64 decode",
+        "btn_tool_urle": "🔗 URL encode",
+        "btn_tool_urld": "🔓 URL decode",
+        "btn_tool_jwt": "🎫 JWT decode",
+        "btn_tool_count": "📊 شمارش",
+        "btn_tool_upper": "🔠 UPPER",
+        "btn_tool_lower": "🔡 lower",
+        "btn_tool_title": "🅰 Title Case",
+        "btn_tool_reverse": "↔️ معکوس",
+        "btn_tool_slug": "🐍 Slugify",
+        "btn_tool_trim": "🧹 پاکسازی فاصله",
+        "btn_tool_uuid": "🆔 UUID",
+        "btn_tool_password": "🔑 رمز قوی",
+        "btn_tool_token": "🎟 توکن hex",
+        "btn_tool_random_num": "🎲 عدد تصادفی",
+        "btn_tool_lorem": "📝 Lorem",
+        "btn_tool_now": "⏰ اکنون",
+        "btn_tool_ts2date": "🗓 Unix→تاریخ",
+        "btn_tool_date2ts": "🗓 تاریخ→Unix",
+        "btn_tool_base": "🔢 مبنای عدد",
+        "btn_tool_color": "🎨 رنگ",
+        "btn_tool_size": "📐 حجم",
+        "btn_tool_json": "📋 JSON",
+        "btn_tool_calc": "🧮 ماشین‌حساب",
+        "tool_result_header": "✅ نتیجه ابزار `{tool}`:",
+        "tool_result_error": "❌ ابزار `{tool}` خطا داد:\n{error}",
+        "tool_prompt_dns": "نام دامنه را بفرست (مثلاً example.com):",
+        "tool_prompt_ping": "host [port] را بفرست (مثلاً example.com 443):",
+        "tool_prompt_port": "host port را بفرست (مثلاً example.com 22):",
+        "tool_prompt_ssl": "host [port] را بفرست (مثلاً google.com 443):",
+        "tool_prompt_rdns": "IP یا hostname را بفرست:",
+        "tool_prompt_ipinfo": "IP یا hostname را بفرست:",
+        "tool_prompt_headers": "آدرس کامل http(s):// را بفرست:",
+        "tool_prompt_whois": "نام دامنه را بفرست:",
+        "tool_prompt_myip": "در حال گرفتن IP خروجی سرور…",
+        "tool_prompt_md5": "متن را بفرست تا MD5 محاسبه شود:",
+        "tool_prompt_sha1": "متن را بفرست تا SHA1 محاسبه شود:",
+        "tool_prompt_sha256": "متن را بفرست تا SHA256 محاسبه شود:",
+        "tool_prompt_sha512": "متن را بفرست تا SHA512 محاسبه شود:",
+        "tool_prompt_b64e": "متن را بفرست تا به Base64 تبدیل شود:",
+        "tool_prompt_b64d": "رشتهٔ Base64 را بفرست تا decode شود:",
+        "tool_prompt_urle": "متن یا URL را بفرست تا URL-encode شود:",
+        "tool_prompt_urld": "رشتهٔ URL-encoded را بفرست تا decode شود:",
+        "tool_prompt_jwt": "توکن JWT را بفرست (header.payload.sig):",
+        "tool_prompt_count": "متن را بفرست تا شمارش شود:",
+        "tool_prompt_text": "متن را بفرست:",
+        "tool_prompt_uuid": "در حال تولید UUID…",
+        "tool_prompt_password": "طول رمز (پیش‌فرض 20). فقط enter یا یک عدد بفرست:",
+        "tool_prompt_token": "تعداد بایت توکن (پیش‌فرض 16). enter یا عدد بفرست:",
+        "tool_prompt_random_num": "بازه را بفرست (مثلاً 1 1000). enter = 0..100:",
+        "tool_prompt_lorem": "تعداد پاراگراف (پیش‌فرض 2). enter یا عدد بفرست:",
+        "tool_prompt_now": "در حال خواندن زمان…",
+        "tool_prompt_ts2date": "Unix timestamp را بفرست (ثانیه یا میلی‌ثانیه):",
+        "tool_prompt_date2ts": "تاریخ را بفرست (YYYY-MM-DD یا YYYY-MM-DD HH:MM:SS):",
+        "tool_prompt_base": "عدد را بفرست (0xff، 0b1010، 0o17، یا 255):",
+        "tool_prompt_color": "رنگ را بفرست (#ff8800 یا 255,136,0):",
+        "tool_prompt_size": "حجم را بفرست (مثل 500 MB یا 1.5 GiB):",
+        "tool_prompt_json": "متن JSON را بفرست تا فرمت و اعتبارسنجی شود:",
+        "tool_prompt_calc": "عبارت ریاضی را بفرست (مثل (2+3)*5):",
         "btn_plan_plan": "📊 پلن",
         "btn_plan_usage": "📈 مصرف",
         "btn_plan_buy": "💳 خرید",
@@ -481,19 +567,23 @@ I18N = {
         "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "راهنمای سریع:\n\n"
-            "🏠 منو: `/menu` — 📁 انتقال جدا از 🧰 ابزارها\n\n"
-            "📁 انتقال:\n"
+            "🏠 منو: `/menu` — همه چیز از منوی اصلی شروع می‌شود\n\n"
+            "📁 انتقال فایل:\n"
             "- روبیکا `/rubika_connect` · بله `/bale_connect` · درایو `/drive_connect`\n"
             "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
-            "🧰 ابزارها (منوی مستقل):\n"
-            "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
-            "📤 ارسال مستقیم: `/directmode rubika|bale|drive on|off` · 🔗 لینک: منوی «لینک / ویدیو»\n\n"
+            "🔗 لینک/ویدیو: از منو «لینک / ویدیو» لینک HTTP یا یوتیوب بفرست؛\n"
+            "  بعد از نمایش حجم، مقصد را انتخاب کن.\n\n"
+            "🧰 ابزارها (۵ دسته):\n"
+            "- 🌐 شبکه: DNS، IP من، Ping، Port، SSL، Reverse DNS، IP info، HTTP headers، WHOIS\n"
+            "- 🔐 رمز/کدگذاری: MD5، SHA1/256/512، Base64 enc/dec، URL enc/dec، JWT decode\n"
+            "- ✏️ متن: شمارش، Upper/Lower/Title، Reverse، Slug، Trim\n"
+            "- 🎲 تولید: UUID، رمز قوی، توکن hex، عدد تصادفی، Lorem\n"
+            "- 🔄 تبدیل: زمان، Unix↔تاریخ، مبنای عدد، رنگ، حجم، JSON format، ماشین‌حساب\n"
+            "روی هر ابزار بزن، بعد مقدار را همان‌جا بفرست (نیاز به تایپ دستور نیست).\n\n"
+            "📤 ارسال مستقیم: `/directmode rubika|bale|drive on|off`\n\n"
             "عیب‌یابی:\n"
-            "- وضعیت شبکه: `/netstatus`\n"
-            "- پنل ادمین: `/admin`\n"
-            "- حذف یک job: `/del <job_id>`\n\n"
-            "برای راهنمای تحلیل لاگ: `/loghelp`\n"
-            "• مصرف و سهمیه: `/usage` — پلن و خرید: `/plan` — راهنمای خرید: `/purchase`"
+            "- وضعیت شبکه: `/netstatus`  · پنل ادمین: `/admin`  · حذف job: `/del <job_id>`\n"
+            "- راهنمای تحلیل لاگ: `/loghelp` · مصرف: `/usage` · پلن: `/plan`"
         ),
         "loghelp_body": (
             "راهنمای تحلیل لاگ job:\n\n"
@@ -717,18 +807,20 @@ I18N = {
     "en": {
         "welcome": (
             "Hi 💙\n\n"
-            "🏠 **Main menu** — two separate areas:\n"
-            "📁 File transfer (Rubika, Bale, Drive, SSH)\n"
-            "🧰 Tools (network, hash, Base64)\n\n"
-            "Link Rubika once: `/rubika_connect`\n"
-            "`/menu` main menu · `/lang` language"
+            "This is a super-bot with many tools:\n"
+            "📁 File transfer: Rubika, Bale, Google Drive, SSH\n"
+            "🔗 Direct link/video download (HTTP/YouTube)\n"
+            "🧰 Tools: network, hash & encoding, text, generators, converters\n"
+            "📤 Direct send to your chosen destination\n\n"
+            "/menu for the main menu · /lang for language"
         ),
         "menu_intro": (
             "🏠 Main menu\n\n"
-            "📁 **Transfer** — send & move files\n"
-            "🧰 **Tools** — independent utilities\n"
-            "📋 **Account** — plan & queue\n"
-            "⚙️ **Settings** — direct mode & network\n\n"
+            "📁 **Transfer** — Rubika, Bale, Drive, SSH, ZIP\n"
+            "🔗 **Link / video** — HTTP & YouTube downloads\n"
+            "🧰 **Tools** — 30+ tools in 5 categories\n"
+            "📤 **Direct send** — every file/link goes to the active target\n"
+            "📋 **Account & plan** · ❓ Help\n\n"
             "Use «🏠 Main menu» or «◀️» to go back."
         ),
         "plan_menu_opened": (
@@ -738,9 +830,19 @@ I18N = {
         "pick_lang": "Choose language:",
         "lang_saved": "Language saved.",
         "transfer_menu_title": "📁 File transfer\nPick a destination — each has its own submenu.",
-        "toolkit_menu_title": "🧰 Tools\nSeparate from transfer — pick a category.",
-        "toolkit_network_menu_title": "🌐 Network tools\nThen send command + value (e.g. `/dns google.com`).",
-        "toolkit_crypto_menu_title": "🔐 Hash & Base64\ne.g. `/md5 text` or `/b64e hello`",
+        "toolkit_menu_title": (
+            "🧰 Tools — pick a category\n"
+            "- 🌐 Network: DNS, IP, Ping, Port, SSL, WHOIS…\n"
+            "- 🔐 Hash & encoding: MD5/SHA/Base64/URL/JWT\n"
+            "- ✏️ Text: count, case, reverse, slug…\n"
+            "- 🎲 Generators: UUID, password, token, Lorem…\n"
+            "- 🔄 Converters: time, number bases, color, size, JSON, calc"
+        ),
+        "toolkit_network_menu_title": "🌐 Network tools\nTap a tool, then send the value.",
+        "toolkit_crypto_menu_title": "🔐 Hash & encoding\nTap a tool, then send the text.",
+        "toolkit_text_menu_title": "✏️ Text tools\nCount, case, reverse, slug, whitespace cleanup.",
+        "toolkit_gen_menu_title": "🎲 Generators\nUUID, strong password, hex token, random number, Lorem.",
+        "toolkit_conv_menu_title": "🔄 Converters & calc\nTime, numeric bases, color, size, JSON, calculator.",
         "rubika_menu_title": "💬 Rubika\nConnect and check your account.",
         "bale_menu_title": "📨 Bale\nYour bot & destination — `/bale_connect`",
         "drive_menu_title": "☁️ Google Drive\n`/drive_connect` then send files.",
@@ -775,15 +877,84 @@ I18N = {
         "btn_send_content": "✉️ Text / link",
         "btn_queue": "📋 Queue",
         "btn_clear_all": "🗑 Clear all",
-        "btn_toolkit_network": "🌐 Network & IP",
-        "btn_toolkit_crypto": "🔐 Hash & Base64",
+        "btn_toolkit_network": "🌐 Network",
+        "btn_toolkit_crypto": "🔐 Hash & encoding",
+        "btn_toolkit_text": "✏️ Text",
+        "btn_toolkit_gen": "🎲 Generators",
+        "btn_toolkit_conv": "🔄 Convert & calc",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 My IP",
-        "btn_tool_ping": "📡 Ping",
+        "btn_tool_ping": "📡 Ping (TCP)",
+        "btn_tool_port": "🔌 Port check",
+        "btn_tool_ssl": "🔐 SSL info",
+        "btn_tool_rdns": "↩️ Reverse DNS",
+        "btn_tool_ipinfo": "🌍 IP info",
+        "btn_tool_headers": "📋 HTTP headers",
+        "btn_tool_whois": "🪪 WHOIS",
         "btn_tool_md5": "#️⃣ MD5",
+        "btn_tool_sha1": "🔒 SHA1",
         "btn_tool_sha256": "🔒 SHA256",
-        "btn_tool_b64e": "📤 B64 encode",
-        "btn_tool_b64d": "📥 B64 decode",
+        "btn_tool_sha512": "🔒 SHA512",
+        "btn_tool_b64e": "📤 Base64 encode",
+        "btn_tool_b64d": "📥 Base64 decode",
+        "btn_tool_urle": "🔗 URL encode",
+        "btn_tool_urld": "🔓 URL decode",
+        "btn_tool_jwt": "🎫 JWT decode",
+        "btn_tool_count": "📊 Count",
+        "btn_tool_upper": "🔠 UPPER",
+        "btn_tool_lower": "🔡 lower",
+        "btn_tool_title": "🅰 Title Case",
+        "btn_tool_reverse": "↔️ Reverse",
+        "btn_tool_slug": "🐍 Slugify",
+        "btn_tool_trim": "🧹 Trim whitespace",
+        "btn_tool_uuid": "🆔 UUID",
+        "btn_tool_password": "🔑 Strong password",
+        "btn_tool_token": "🎟 Hex token",
+        "btn_tool_random_num": "🎲 Random number",
+        "btn_tool_lorem": "📝 Lorem",
+        "btn_tool_now": "⏰ Now",
+        "btn_tool_ts2date": "🗓 Unix → date",
+        "btn_tool_date2ts": "🗓 Date → Unix",
+        "btn_tool_base": "🔢 Number base",
+        "btn_tool_color": "🎨 Color",
+        "btn_tool_size": "📐 Size",
+        "btn_tool_json": "📋 JSON",
+        "btn_tool_calc": "🧮 Calculator",
+        "tool_result_header": "✅ Tool `{tool}` result:",
+        "tool_result_error": "❌ Tool `{tool}` failed:\n{error}",
+        "tool_prompt_dns": "Send a domain name (e.g. example.com):",
+        "tool_prompt_ping": "Send host [port] (e.g. example.com 443):",
+        "tool_prompt_port": "Send host port (e.g. example.com 22):",
+        "tool_prompt_ssl": "Send host [port] (e.g. google.com 443):",
+        "tool_prompt_rdns": "Send IP or hostname:",
+        "tool_prompt_ipinfo": "Send IP or hostname:",
+        "tool_prompt_headers": "Send full http(s):// URL:",
+        "tool_prompt_whois": "Send a domain name:",
+        "tool_prompt_myip": "Fetching server's outbound IP…",
+        "tool_prompt_md5": "Send text to compute MD5:",
+        "tool_prompt_sha1": "Send text to compute SHA1:",
+        "tool_prompt_sha256": "Send text to compute SHA256:",
+        "tool_prompt_sha512": "Send text to compute SHA512:",
+        "tool_prompt_b64e": "Send text to Base64-encode:",
+        "tool_prompt_b64d": "Send a Base64 string to decode:",
+        "tool_prompt_urle": "Send text/URL to URL-encode:",
+        "tool_prompt_urld": "Send a URL-encoded string to decode:",
+        "tool_prompt_jwt": "Send a JWT (header.payload.sig):",
+        "tool_prompt_count": "Send text to count:",
+        "tool_prompt_text": "Send text:",
+        "tool_prompt_uuid": "Generating UUID…",
+        "tool_prompt_password": "Password length (default 20). Send enter or a number:",
+        "tool_prompt_token": "Token byte count (default 16). Send enter or a number:",
+        "tool_prompt_random_num": "Send range (e.g. 1 1000). Empty = 0..100:",
+        "tool_prompt_lorem": "Paragraph count (default 2). Send enter or a number:",
+        "tool_prompt_now": "Reading current time…",
+        "tool_prompt_ts2date": "Send Unix timestamp (s or ms):",
+        "tool_prompt_date2ts": "Send date (YYYY-MM-DD or YYYY-MM-DD HH:MM:SS):",
+        "tool_prompt_base": "Send a number (0xff, 0b1010, 0o17, or 255):",
+        "tool_prompt_color": "Send a color (#ff8800 or 255,136,0):",
+        "tool_prompt_size": "Send size (e.g. 500 MB or 1.5 GiB):",
+        "tool_prompt_json": "Send JSON text to format & validate:",
+        "tool_prompt_calc": "Send a math expression (e.g. (2+3)*5):",
         "btn_plan_plan": "📊 Plan",
         "btn_plan_usage": "📈 Usage",
         "btn_plan_buy": "💳 Purchase",
@@ -907,19 +1078,23 @@ I18N = {
         "ssh_get_usage": "Usage: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "Quick help:\n\n"
-            "🏠 `/menu` — 📁 Transfer and 🧰 Tools are separate\n\n"
+            "🏠 `/menu` — everything starts from the main menu.\n\n"
             "📁 Transfer:\n"
             "- Rubika `/rubika_connect` · Bale `/bale_connect` · Drive `/drive_connect`\n"
             "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
-            "🧰 Tools (own menu):\n"
-            "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
-            "📤 Direct send: `/directmode rubika|bale|drive on|off` · 🔗 links: Link / video menu\n\n"
+            "🔗 Link/video: open «Link / video» menu, send an HTTP or YouTube URL;\n"
+            "  after probing, pick the destination.\n\n"
+            "🧰 Tools (5 categories):\n"
+            "- 🌐 Network: DNS, MyIP, Ping, Port, SSL info, Reverse DNS, IP info, HTTP headers, WHOIS\n"
+            "- 🔐 Hash/encoding: MD5, SHA1/256/512, Base64 enc/dec, URL enc/dec, JWT decode\n"
+            "- ✏️ Text: count, Upper/Lower/Title, Reverse, Slug, Trim\n"
+            "- 🎲 Generators: UUID, strong password, hex token, random number, Lorem\n"
+            "- 🔄 Convert: time, Unix↔date, number base, color, size, JSON format, calculator\n"
+            "Tap a tool button, then send the value — no slash commands required.\n\n"
+            "📤 Direct send: `/directmode rubika|bale|drive on|off`\n\n"
             "Troubleshooting:\n"
-            "- Network: `/netstatus`\n"
-            "- Admin: `/admin`\n"
-            "- Remove one job: `/del <job_id>`\n\n"
-            "Log analysis: `/loghelp`\n"
-            "Usage & limits: `/usage` — plan bundle: `/plan` — purchase info: `/purchase`"
+            "- Network: `/netstatus`  · Admin: `/admin`  · Remove job: `/del <job_id>`\n"
+            "- Log analysis: `/loghelp` · Usage: `/usage` · Plan: `/plan`"
         ),
         "loghelp_body": (
             "Job log analysis:\n\n"
@@ -1315,6 +1490,18 @@ def build_toolkit_network_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_toolkit_crypto_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_toolkit_crypto_menu(user_id, tr)
+
+
+def build_toolkit_text_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_text_menu(user_id, tr)
+
+
+def build_toolkit_gen_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_gen_menu(user_id, tr)
+
+
+def build_toolkit_conv_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_conv_menu(user_id, tr)
 
 
 def build_bale_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -2224,6 +2411,9 @@ TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
     build_toolkit_menu=build_toolkit_menu,
     build_toolkit_network_menu=build_toolkit_network_menu,
     build_toolkit_crypto_menu=build_toolkit_crypto_menu,
+    build_toolkit_text_menu=build_toolkit_text_menu,
+    build_toolkit_gen_menu=build_toolkit_gen_menu,
+    build_toolkit_conv_menu=build_toolkit_conv_menu,
 )
 
 TRANSFER_HUB_DEPS = TransferHubDeps(
@@ -2275,6 +2465,18 @@ async def show_toolkit_network_menu_handler(client: Client, message: Message):
 
 async def show_toolkit_crypto_menu_handler(client: Client, message: Message):
     await handle_show_toolkit_crypto_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_toolkit_text_menu_handler(client: Client, message: Message):
+    await handle_show_toolkit_text_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_toolkit_gen_menu_handler(client: Client, message: Message):
+    await handle_show_toolkit_gen_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_toolkit_conv_menu_handler(client: Client, message: Message):
+    await handle_show_toolkit_conv_menu(TOOLKIT_MENU_DEPS, client, message)
 
 
 async def show_rubika_menu_handler(client: Client, message: Message):
@@ -2858,6 +3060,17 @@ def _set_zip_password_waiting(v: bool) -> None:
     waiting_for_zip_password = v
 
 
+TOOL_WIZARD_DEPS = ToolWizardDeps(
+    tr=tr,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    toolkit_network_light_enabled=TOOLKIT_NETWORK_LIGHT,
+    toolkit_utility_light_enabled=TOOLKIT_UTILITY_LIGHT,
+    toolkit_quota_try=_toolkit_quota_try,
+    toolkit_quota_commit=_toolkit_quota_commit,
+)
+
+
 REPLY_ROUTE_DEPS = ReplyRouteDeps(
     admin_ids=frozenset(ADMIN_IDS),
     tr=tr,
@@ -2889,6 +3102,9 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     show_toolkit_menu_handler=show_toolkit_menu_handler,
     show_toolkit_network_menu_handler=show_toolkit_network_menu_handler,
     show_toolkit_crypto_menu_handler=show_toolkit_crypto_menu_handler,
+    show_toolkit_text_menu_handler=show_toolkit_text_menu_handler,
+    show_toolkit_gen_menu_handler=show_toolkit_gen_menu_handler,
+    show_toolkit_conv_menu_handler=show_toolkit_conv_menu_handler,
     show_rubika_menu_handler=show_rubika_menu_handler,
     show_bale_menu_handler=show_bale_menu_handler,
     show_drive_menu_handler=show_drive_menu_handler,
@@ -2909,6 +3125,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     build_files_menu=build_files_menu,
     build_settings_menu=build_settings_menu,
     build_admin_menu=build_admin_menu,
+    tool_wizard_deps=TOOL_WIZARD_DEPS,
 )
 
 async def _save_drive_sa_file(user_id: int, local_path: Path) -> tuple[bool, str]:
@@ -3053,6 +3270,7 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     direct_url_hint_deps=DIRECT_URL_HINT_DEPS,
     handle_link_direct_text=handle_link_direct_text,
     link_direct_deps=LINK_DIRECT_HANDLER_DEPS,
+    tool_wizard_deps=TOOL_WIZARD_DEPS,
 )
 
 MEDIA_HANDLER_DEPS = MediaHandlerDeps(
