@@ -16,6 +16,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_main_plan_section": "/show_plan_menu",
     "btn_main_settings": "/show_settings_menu",
     "btn_main_link_direct": "/show_link_direct_menu",
+    "btn_main_cloudflare": "/show_cloudflare_menu",
     "btn_main_help": "/help",
     "btn_main_admin": "/show_admin_menu",
     "btn_back_main": "/menu",
@@ -33,15 +34,21 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     # Bale
     "btn_bale_connect": "/bale_connect",
     "btn_bale_status": "/bale_status",
+    "btn_bale_set_chat": "/bale_set_chat",
     "btn_bale_disconnect": "/bale_disconnect",
     # Drive
     "btn_drive_connect": "/drive_connect",
     "btn_drive_status": "/drive_status",
     "btn_drive_disconnect": "/drive_disconnect",
     "btn_drive_download_help": "/drive_download_help",
+    "btn_drive_ls": "/drive_ls",
     # SSH
     "btn_ssh_list": "/ssh_list",
     "btn_ssh_add_help": "/ssh_add_help",
+    "btn_ssh_put_help": "/ssh_put_help",
+    "btn_ssh_get_help": "/ssh_get_help",
+    "btn_ssh_ls_help": "/ssh_ls_help",
+    "btn_ssh_del_help": "/ssh_del_help",
     # Files / queue
     "btn_zip_start": "/newbatch",
     "btn_zip_end": "/done",
@@ -54,6 +61,10 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_tool_dns": "/dns",
     "btn_tool_myip": "/myip",
     "btn_tool_ping": "/ping",
+    "btn_tool_ipinfo": "/ipinfo",
+    "btn_tool_whois": "/whois",
+    "btn_tool_myid": "/myid",
+    "btn_tool_google": "/gsearch",
     "btn_tool_md5": "/md5",
     "btn_tool_sha256": "/sha256",
     "btn_tool_b64e": "/b64e",
@@ -70,6 +81,23 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_plan_usage": "/usage",
     "btn_plan_buy": "/purchase",
     "btn_admin_panel": "/admin",
+    "btn_cf_connect": "/cf_connect",
+    "btn_cf_status": "/cf_status",
+    "btn_cf_zones": "/cf_zones",
+    "btn_cf_dns_help": "/cf_dns_help",
+    "btn_cf_disconnect": "/cf_disconnect",
+    "btn_back_admin": "/show_admin_menu",
+    "btn_admin_users": "/show_admin_users_menu",
+    "btn_admin_billing": "/show_admin_billing_menu",
+    "btn_admin_maintenance": "/show_admin_maintenance_menu",
+    "btn_admin_tier_help": "/admin_tier_wizard",
+    "btn_admin_bonus_help": "/admin_bonus_wizard",
+    "btn_admin_clear_prefs_help": "/admin_clear_prefs_help",
+    "btn_admin_payment_lookup_help": "/admin_payment_lookup_help",
+    "btn_admin_payment_status_help": "/admin_payment_status_help",
+    "btn_admin_reconcile": "/admin_reconcile_billing",
+    "btn_admin_cleanup": "/cleanup_downloads",
+    "btn_admin_version": "/version",
 }
 
 # Literal button text (slashes, aliases) — language-independent.
@@ -86,6 +114,11 @@ _STATIC_BUTTON_ROUTES: Dict[str, str] = {
     "/dns": "/dns",
     "/myip": "/myip",
     "/ping": "/ping",
+    "/ipinfo": "/ipinfo",
+    "/whois": "/whois",
+    "/myid": "/myid",
+    "/gsearch": "/gsearch",
+    "/gisearch": "/gisearch",
     "/md5": "/md5",
     "/sha256": "/sha256",
     "/b64e": "/b64e",
@@ -94,7 +127,10 @@ _STATIC_BUTTON_ROUTES: Dict[str, str] = {
     "/ssh_add": "/ssh_add_help",
     "/ssh_put": "/ssh_put_help",
     "/ssh_get": "/ssh_get_help",
+    "/ssh_ls": "/ssh_ls_help",
+    "/ssh_del": "/ssh_del_help",
     "/drive_download": "/drive_download_help",
+    "/drive_ls": "/drive_ls",
     "/drive_status": "/drive_status",
     "/drive_connect": "/drive_connect",
     "/drive_disconnect": "/drive_disconnect",
@@ -104,6 +140,11 @@ _STATIC_BUTTON_ROUTES: Dict[str, str] = {
     "/bale_set_chat": "/bale_set_chat",
     "/rubika_connect": "/rubika_connect",
     "/rubika_status": "/rubika_status",
+    "/cf_connect": "/cf_connect",
+    "/cf_status": "/cf_status",
+    "/cf_zones": "/cf_zones",
+    "/cf_dns": "/cf_dns_help",
+    "/cf_disconnect": "/cf_disconnect",
 }
 
 
@@ -141,6 +182,7 @@ def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboa
         [tr(user_id, "btn_main_transfer")],
         [tr(user_id, "btn_main_link_direct")],
         [tr(user_id, "btn_main_toolkit")],
+        [tr(user_id, "btn_main_cloudflare")],
         [tr(user_id, "btn_main_plan_section")],
         [tr(user_id, "btn_main_settings"), tr(user_id, "btn_main_help")],
     ]
@@ -185,7 +227,7 @@ def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
             [tr(user_id, "btn_bale_connect"), tr(user_id, "btn_bale_status")],
-            [tr(user_id, "btn_bale_disconnect")],
+            [tr(user_id, "btn_bale_set_chat"), tr(user_id, "btn_bale_disconnect")],
             [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
         ]
     )
@@ -195,7 +237,8 @@ def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
             [tr(user_id, "btn_drive_connect"), tr(user_id, "btn_drive_status")],
-            [tr(user_id, "btn_drive_download_help"), tr(user_id, "btn_drive_disconnect")],
+            [tr(user_id, "btn_drive_ls"), tr(user_id, "btn_drive_download_help")],
+            [tr(user_id, "btn_drive_disconnect")],
             [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
         ]
     )
@@ -205,6 +248,8 @@ def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
             [tr(user_id, "btn_ssh_list"), tr(user_id, "btn_ssh_add_help")],
+            [tr(user_id, "btn_ssh_put_help"), tr(user_id, "btn_ssh_get_help")],
+            [tr(user_id, "btn_ssh_ls_help"), tr(user_id, "btn_ssh_del_help")],
             [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
         ]
     )
@@ -224,7 +269,9 @@ def build_toolkit_network_menu(user_id: int, tr: Translator) -> ReplyKeyboardMar
     return _reply(
         [
             [tr(user_id, "btn_tool_dns"), tr(user_id, "btn_tool_myip")],
-            [tr(user_id, "btn_tool_ping")],
+            [tr(user_id, "btn_tool_ping"), tr(user_id, "btn_tool_ipinfo")],
+            [tr(user_id, "btn_tool_whois"), tr(user_id, "btn_tool_myid")],
+            [tr(user_id, "btn_tool_google")],
             [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
         ]
     )
@@ -253,6 +300,17 @@ def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_link_direct_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply([[tr(user_id, "btn_back_main")]])
+
+
+def build_cloudflare_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_cf_connect"), tr(user_id, "btn_cf_status")],
+            [tr(user_id, "btn_cf_zones"), tr(user_id, "btn_cf_dns_help")],
+            [tr(user_id, "btn_cf_disconnect")],
+            [tr(user_id, "btn_back_main")],
+        ]
+    )
 
 
 def build_settings_menu(
@@ -288,8 +346,40 @@ def build_settings_menu(
 def build_admin_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
-            [tr(user_id, "btn_admin_panel"), "/version"],
-            [tr(user_id, "btn_main_plan_section")],
+            [tr(user_id, "btn_admin_panel"), tr(user_id, "btn_admin_version")],
+            [tr(user_id, "btn_admin_users"), tr(user_id, "btn_admin_billing")],
+            [tr(user_id, "btn_admin_maintenance")],
             [tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_admin_users_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_admin_tier_help"), tr(user_id, "btn_admin_bonus_help")],
+            [tr(user_id, "btn_admin_clear_prefs_help")],
+            [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_admin_billing_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_admin_payment_lookup_help")],
+            [tr(user_id, "btn_admin_payment_status_help")],
+            [tr(user_id, "btn_admin_reconcile")],
+            [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_admin_maintenance_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_admin_cleanup"), tr(user_id, "btn_admin_version")],
+            [tr(user_id, "btn_netstatus")],
+            [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
         ]
     )

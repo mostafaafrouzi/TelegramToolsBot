@@ -23,6 +23,7 @@ class CallbackRouteDeps:
     clear_queue_handler: AsyncHandler
     get_user_session: Callable[[int], Optional[str]]
     queue_count_by_session: Callable[[str], int]
+    count_tasks_for_user: Callable[[int], int]
     failed_count: Callable[[], int]
     recent_failed_detail_text: Callable[[Optional[str], int], str]
     recent_jobs_summary: Callable[[int], str]
@@ -70,8 +71,7 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
             await callback_query.answer(deps.tr(user_id, "queue_kb_cleared"))
             return True
         if action == "pending":
-            session = deps.get_user_session(user_id)
-            count = deps.queue_count_by_session(session or "")
+            count = deps.count_tasks_for_user(user_id)
             await callback_query.answer(f"Pending: {count}", show_alert=True)
             return True
         if action == "failed":

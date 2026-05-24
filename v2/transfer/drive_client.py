@@ -19,6 +19,20 @@ def _service_account_path() -> Optional[Path]:
     return candidate if candidate.is_file() else None
 
 
+def _resolve_service_account_path(path: Optional[str | Path]) -> Optional[Path]:
+    if path is None:
+        return _service_account_path()
+    p = Path(path)
+    if p.is_file():
+        return p
+    if not p.is_absolute():
+        base = Path(__file__).resolve().parents[2]
+        candidate = base / p
+        if candidate.is_file():
+            return candidate
+    return p
+
+
 def _folder_id() -> str:
     return (os.getenv("GOOGLE_DRIVE_FOLDER_ID") or "").strip()
 
@@ -36,7 +50,7 @@ def upload_file(
     folder_id: Optional[str] = None,
 ) -> tuple[bool, str, dict[str, Any]]:
     """Upload to Drive folder. Returns ``(ok, message, metadata)``."""
-    sa_path = Path(service_account_path) if service_account_path else _service_account_path()
+    sa_path = _resolve_service_account_path(service_account_path)
     fid = (folder_id or _folder_id()).strip()
     if not sa_path or not sa_path.is_file() or not fid:
         return False, "Drive service account JSON or folder_id missing for this user", {}
@@ -77,7 +91,7 @@ def download_file(
     service_account_path: Optional[str | Path] = None,
 ) -> tuple[bool, str]:
     """Download Drive file by id to ``dest_path``."""
-    sa_path = Path(service_account_path) if service_account_path else _service_account_path()
+    sa_path = _resolve_service_account_path(service_account_path)
     if not sa_path or not sa_path.is_file():
         return False, "Drive service account JSON missing for this user"
     try:
@@ -103,5 +117,51 @@ def download_file(
             while not done:
                 _, done = downloader.next_chunk()
         return True, dest.name
+    except Exception as e:
+        return False, str(e)[:900]
+
+
+def list_files(
+    *,
+    service_account_path: Optional[str | Path] = None,
+    folder_id: Optional[str] = None,
+    limit: int = 20,
+) -> tuple[bool, str]:
+    """List files visible in the configured Drive folder."""
+    sa_path = _resolve_service_account_path(service_account_path)
+    fid = (folder_id or _folder_id()).strip()
+    if not sa_path or not sa_path.is_file() or not fid:
+        return False, "Drive service account JSON or folder_id missing for this user"
+    try:
+        from google.oauth2 import service_account
+        from googleapiclient.discovery import build
+    except ImportError:
+        return False, "install google-api-python-client and google-auth on server"
+
+    try:
+        creds = service_account.Credentials.from_service_account_file(
+            str(sa_path),
+            scopes=["https://www.googleapis.com/auth/drive.readonly"],
+        )
+        service = build("drive", "v3", credentials=creds, cache_discovery=False)
+        q = f"'{fid}' in parents and trashed = false"
+        res = (
+            service.files()
+            .list(
+                q=q,
+                pageSize=max(1, min(int(limit), 100)),
+                fields="files(id, name, mimeType, size, modifiedTime, webViewLink)",
+                orderBy="modifiedTime desc",
+            )
+            .execute()
+        )
+        files = res.get("files") or []
+        if not files:
+            return True, "No files found."
+        lines = []
+        for item in files:
+            size = item.get("size") or "-"
+            lines.append(f"{item.get('name')} — `{item.get('id')}` — {size} bytes")
+        return True, "\n".join(lines)
     except Exception as e:
         return False, str(e)[:900]

@@ -30,6 +30,11 @@ class TextEntryDeps:
     rubika_wizard_deps: Any
     dispatch_provider_connect_wizard: AsyncWizardFn
     provider_connect_wizard_deps: Any
+    dispatch_cloudflare_wizard: AsyncWizardFn
+    cloudflare_command_deps: Any
+    dispatch_admin_wizard: AsyncWizardFn
+    admin_command_deps: Any
+    set_state_preserving_menu: Callable[..., None]
     dispatch_zip_batch_wizard: AsyncWizardFn
     zip_batch_wizard_deps: Any
     handle_zip_password_text: AsyncWizardFn
@@ -40,6 +45,7 @@ class TextEntryDeps:
     direct_url_hint_deps: Any
     handle_link_direct_text: AsyncWizardFn
     link_direct_deps: Any
+    build_main_menu: Callable[[int], Any]
 
 
 async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) -> None:
@@ -74,6 +80,15 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     ):
         return
 
+    if await deps.dispatch_cloudflare_wizard(
+        message,
+        user_id,
+        state,
+        text,
+        deps.cloudflare_command_deps,
+    ):
+        return
+
     if await deps.dispatch_zip_batch_wizard(
         message,
         user_id,
@@ -86,6 +101,14 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     if await deps.handle_zip_password_text(message, user_id, text, deps.zip_password_deps):
         return
 
+    if await deps.dispatch_admin_wizard(deps.admin_command_deps, message, user_id, state, text):
+        next_state = getattr(message, "_admin_next_state", None)
+        if isinstance(next_state, dict):
+            deps.set_state_preserving_menu(user_id, next_state)
+        elif getattr(message, "_admin_clear_state", False):
+            deps.clear_state(user_id)
+        return
+
     if await deps.handle_link_direct_text(deps.link_direct_deps, client, message, user_id, text):
         return
 
@@ -94,3 +117,9 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
 
     if await deps.handle_direct_url_sendlink_hint(message, user_id, text, deps.direct_url_hint_deps):
         return
+
+    await message.reply_text(
+        deps.tr(user_id, "text_unhandled_hint"),
+        reply_markup=deps.build_main_menu(user_id),
+        parse_mode=None,
+    )

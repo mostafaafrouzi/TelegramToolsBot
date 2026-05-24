@@ -39,6 +39,93 @@ class AdminCommandDeps:
     log_event: LogEventFn
 
 
+async def dispatch_admin_wizard(
+    deps: AdminCommandDeps,
+    message: Message,
+    user_id: int,
+    state: dict,
+    text: str,
+) -> bool:
+    if user_id not in deps.admin_ids:
+        return False
+    step = state.get("step")
+    if not step or not str(step).startswith("admin_"):
+        return False
+
+    if step == "admin_tier_user":
+        try:
+            target = int(text.strip())
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "admin_wizard_need_user_id"), parse_mode=None)
+            return True
+        state = {"step": "admin_tier_tier", "admin_target_user_id": target}
+        deps.set_menu_section(user_id, MenuSection.ADMIN)
+        # Reuse the persistent state helper exposed by telebot through monkey patch below.
+        message._admin_next_state = state  # type: ignore[attr-defined]
+        await message.reply_text(deps.tr(user_id, "admin_wizard_tier_ask"), parse_mode=None)
+        return True
+
+    if step == "admin_tier_tier":
+        tier = text.strip().lower()
+        if tier not in ("guest", "free", "pro"):
+            await message.reply_text(deps.tr(user_id, "admin_wizard_tier_ask"), parse_mode=None)
+            return True
+        target = int(state.get("admin_target_user_id") or 0)
+        if tier == "pro":
+            message._admin_next_state = {  # type: ignore[attr-defined]
+                "step": "admin_tier_days",
+                "admin_target_user_id": target,
+                "admin_target_tier": tier,
+            }
+            await message.reply_text(deps.tr(user_id, "admin_wizard_days_ask"), parse_mode=None)
+            return True
+        deps.set_user_tier(target, tier, 0)
+        message._admin_clear_state = True  # type: ignore[attr-defined]
+        deps.log_event("admin_tier_wizard_ok", admin_id=user_id, target=target, tier=tier)
+        await message.reply_text(deps.tr(user_id, "admin_wizard_tier_done", target=target, tier=tier), parse_mode=None)
+        return True
+
+    if step == "admin_tier_days":
+        target = int(state.get("admin_target_user_id") or 0)
+        tier = str(state.get("admin_target_tier") or "pro")
+        try:
+            days = max(1, int(text.strip()))
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "admin_wizard_days_ask"), parse_mode=None)
+            return True
+        exp = int(time.time()) + days * 86400
+        deps.set_user_tier(target, tier, exp)
+        message._admin_clear_state = True  # type: ignore[attr-defined]
+        deps.log_event("admin_tier_wizard_ok", admin_id=user_id, target=target, tier=tier, days=days)
+        await message.reply_text(deps.tr(user_id, "admin_wizard_tier_done", target=target, tier=tier), parse_mode=None)
+        return True
+
+    if step == "admin_bonus_user":
+        try:
+            target = int(text.strip())
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "admin_wizard_need_user_id"), parse_mode=None)
+            return True
+        message._admin_next_state = {"step": "admin_bonus_mb", "admin_target_user_id": target}  # type: ignore[attr-defined]
+        await message.reply_text(deps.tr(user_id, "admin_wizard_bonus_ask"), parse_mode=None)
+        return True
+
+    if step == "admin_bonus_mb":
+        target = int(state.get("admin_target_user_id") or 0)
+        try:
+            mb = int(text.strip())
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "admin_wizard_bonus_ask"), parse_mode=None)
+            return True
+        deps.add_bonus_month_mb(target, mb)
+        message._admin_clear_state = True  # type: ignore[attr-defined]
+        deps.log_event("admin_bonus_wizard_ok", admin_id=user_id, target=target, mb=mb)
+        await message.reply_text(deps.tr(user_id, "admin_wizard_bonus_done", target=target, mb=mb), parse_mode=None)
+        return True
+
+    return False
+
+
 async def handle_admin_panel(deps: AdminCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     if uid not in deps.admin_ids:

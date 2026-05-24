@@ -28,7 +28,12 @@ class GoogleDriveTransferAdapter:
         return task.get("source", {})
 
     def download(self, source_ref: Any, tmp_path: str) -> dict:
-        return {"ok": False, "error": "drive_download_not_implemented"}
+        from v2.transfer.drive_client import download_file
+
+        file_id = source_ref.get("file_id") if isinstance(source_ref, dict) else str(source_ref)
+        sa = source_ref.get("service_account_path") if isinstance(source_ref, dict) else None
+        ok, detail = download_file(file_id, tmp_path, service_account_path=sa)
+        return {"ok": ok, "path": detail} if ok else {"ok": False, "error": detail}
 
     def upload(self, local_path: str, destination_ref: Any) -> dict:
         from v2.transfer.drive_client import upload_file

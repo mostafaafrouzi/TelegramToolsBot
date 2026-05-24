@@ -41,6 +41,11 @@ _TEXT_EXCLUDED_COMMANDS = [
     "dns",
     "myip",
     "ping",
+    "ipinfo",
+    "whois",
+    "myid",
+    "gsearch",
+    "gisearch",
     "md5",
     "sha256",
     "b64e",
@@ -55,8 +60,16 @@ _TEXT_EXCLUDED_COMMANDS = [
     "ssh_list",
     "ssh_add",
     "ssh_put",
+    "ssh_ls",
+    "ssh_del",
     "drive_download",
+    "drive_ls",
     "ssh_get",
+    "cf_connect",
+    "cf_status",
+    "cf_zones",
+    "cf_dns",
+    "cf_disconnect",
     "admin_tier",
     "admin_bonus",
     "admin_clear_prefs",
@@ -105,6 +118,11 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.dns_lookup_handler, priv & cmd("dns"))
     mh(tb.my_ip_handler, priv & cmd("myip"))
     mh(tb.tcp_ping_handler, priv & cmd("ping"))
+    mh(tb.ipinfo_handler, priv & cmd("ipinfo"))
+    mh(tb.whois_handler, priv & cmd("whois"))
+    mh(tb.my_id_handler, priv & cmd("myid"))
+    mh(tb.google_search_handler, priv & cmd("gsearch"))
+    mh(tb.google_image_search_handler, priv & cmd("gisearch"))
     mh(tb.md5_handler, priv & cmd("md5"))
     mh(tb.sha256_handler, priv & cmd("sha256"))
     mh(tb.b64_encode_handler, priv & cmd("b64e"))
@@ -119,8 +137,16 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.ssh_list_handler, priv & cmd("ssh_list"))
     mh(tb.ssh_add_handler, priv & cmd("ssh_add"))
     mh(tb.ssh_put_handler, priv & cmd("ssh_put"))
+    mh(tb.ssh_ls_handler, priv & cmd("ssh_ls"))
+    mh(tb.ssh_del_handler, priv & cmd("ssh_del"))
     mh(tb.drive_download_handler, priv & cmd("drive_download"))
+    mh(tb.drive_ls_handler, priv & cmd("drive_ls"))
     mh(tb.ssh_get_handler, priv & cmd("ssh_get"))
+    mh(tb.cf_connect_handler, priv & cmd("cf_connect"))
+    mh(tb.cf_status_handler, priv & cmd("cf_status"))
+    mh(tb.cf_zones_handler, priv & cmd("cf_zones"))
+    mh(tb.cf_dns_handler, priv & cmd("cf_dns"))
+    mh(tb.cf_disconnect_handler, priv & cmd("cf_disconnect"))
     mh(tb.admin_tier_handler, priv & cmd("admin_tier"))
     mh(tb.admin_bonus_handler, priv & cmd("admin_bonus"))
     mh(tb.admin_clear_prefs_handler, priv & cmd("admin_clear_prefs"))

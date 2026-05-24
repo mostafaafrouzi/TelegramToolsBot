@@ -58,6 +58,7 @@ from v2.handlers.basic_commands import BasicCommandDeps, handle_help, handle_lan
 from v2.billing import maybe_grant_plan_after_paid, run_reconcile
 from v2.handlers.admin_commands import (
     AdminCommandDeps,
+    dispatch_admin_wizard,
     handle_admin_bonus,
     handle_admin_panel,
     handle_admin_payment_lookup,
@@ -94,10 +95,24 @@ from v2.handlers.toolkit_commands import (
     handle_b64_decode,
     handle_b64_encode,
     handle_dns_lookup,
+    handle_google_search,
+    handle_ipinfo,
     handle_md5,
+    handle_my_id,
     handle_my_ip,
     handle_sha256,
     handle_tcp_ping,
+    handle_whois,
+)
+from v2.handlers.cloudflare_commands import (
+    CloudflareCommandDeps,
+    dispatch_cloudflare_wizard,
+    handle_cf_connect,
+    handle_cf_disconnect,
+    handle_cf_dns,
+    handle_cf_status,
+    handle_cf_zones,
+    handle_show_cloudflare_menu,
 )
 from v2.handlers.toolkit_menu_commands import (
     ToolkitMenuDeps,
@@ -109,6 +124,7 @@ from v2.handlers.transfer_hub_commands import (
     TransferHubDeps,
     handle_bale_set_chat,
     handle_bale_status,
+    handle_drive_ls,
     handle_drive_status,
     handle_show_bale_menu,
     handle_show_drive_menu,
@@ -117,6 +133,8 @@ from v2.handlers.transfer_hub_commands import (
     handle_show_ssh_menu,
     handle_show_transfer_menu,
     handle_ssh_add,
+    handle_ssh_del,
+    handle_ssh_ls,
     handle_ssh_list,
 )
 from v2.bot.client_factory import build_bot_client
@@ -315,6 +333,9 @@ I18N = {
         "settings_menu_title": "📤 ارسال مستقیم\nفقط یک مقصد فعال — قبل از فعال‌سازی اتصال همان مقصد را برقرار کن.",
         "direct_send_menu_title": "📤 ارسال مستقیم",
         "admin_menu_title": "🛡 پنل ادمین",
+        "admin_users_menu_title": "👥 مدیریت کاربران\nبرای کارهای نیازمند شناسه، ابتدا از ابزار «آیدی من» یا پیام کاربر ID را بگیر.",
+        "admin_billing_menu_title": "💳 مدیریت مالی و پرداخت",
+        "admin_maintenance_menu_title": "🧹 نگهداری و وضعیت سیستم",
         "admin_denied": "دسترسی ادمین ندارید.",
         "no_worker_events": "فایل لاگ worker هنوز ساخته نشده.",
         "no_recent_jobs": "برای این چت رویداد task_done/task_failed اخیری ثبت نشده.",
@@ -323,6 +344,7 @@ I18N = {
         "btn_main_toolkit": "🧰 ابزارها",
         "btn_main_settings": "📤 ارسال مستقیم",
         "btn_main_link_direct": "🔗 لینک / ویدیو",
+        "btn_main_cloudflare": "☁️ Cloudflare",
         "btn_main_help": "❓ راهنما",
         "btn_main_plan_section": "📋 حساب و پلن",
         "btn_main_admin": "🛡 پنل ادمین",
@@ -346,6 +368,10 @@ I18N = {
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 IP من",
         "btn_tool_ping": "📡 Ping",
+        "btn_tool_ipinfo": "🧭 IP Info",
+        "btn_tool_whois": "🧾 Whois",
+        "btn_tool_myid": "🆔 آیدی من",
+        "btn_tool_google": "🔎 Google",
         "btn_tool_md5": "#️⃣ MD5",
         "btn_tool_sha256": "🔒 SHA256",
         "btn_tool_b64e": "📤 B64 encode",
@@ -362,8 +388,30 @@ I18N = {
         "btn_netstatus": "📶 وضعیت شبکه",
         "btn_ssh_list": "📋 لیست سرور",
         "btn_ssh_add_help": "➕ افزودن سرور",
+        "btn_ssh_put_help": "⬆️ آپلود SFTP",
+        "btn_ssh_get_help": "⬇️ دانلود SFTP",
+        "btn_ssh_ls_help": "📂 لیست مسیر",
+        "btn_ssh_del_help": "🗑 حذف سرور",
+        "btn_drive_ls": "📂 لیست فایل‌ها",
         "btn_drive_download_help": "⬇️ دانلود درایو",
         "btn_admin_panel": "🛡 پنل",
+        "btn_admin_users": "👥 کاربران",
+        "btn_admin_billing": "💳 مالی",
+        "btn_admin_maintenance": "🧹 نگهداری",
+        "btn_back_admin": "◀️ ادمین",
+        "btn_admin_version": "🏷 نسخه",
+        "btn_admin_tier_help": "ارتقای پلن",
+        "btn_admin_bonus_help": "افزودن حجم",
+        "btn_admin_clear_prefs_help": "پاکسازی prefs",
+        "btn_admin_payment_lookup_help": "جستجوی پرداخت",
+        "btn_admin_payment_status_help": "تغییر وضعیت پرداخت",
+        "btn_admin_reconcile": "تطبیق پرداخت‌ها",
+        "btn_admin_cleanup": "پاکسازی دانلودها",
+        "btn_cf_connect": "🔐 اتصال",
+        "btn_cf_status": "✅ وضعیت",
+        "btn_cf_zones": "🌐 دامنه‌ها",
+        "btn_cf_dns_help": "📋 DNS رکوردها",
+        "btn_cf_disconnect": "❌ قطع",
         "btn_inline_refresh": "بروزرسانی",
         "btn_inline_pending": "نمایش Pending",
         "btn_inline_failed": "نمایش Failed",
@@ -402,6 +450,7 @@ I18N = {
         "link_dest_bale": "بله",
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "لغو",
+        "link_dest_invalid": "مقصد نامعتبر است.",
         "link_need_rubika": "روبیکا متصل نیست. `/rubika_connect`",
         "link_probe_unsupported": "این لینک قابل دانلود نیست. ({detail})",
         "link_ytdlp_missing": "یوتیوب نیاز به `yt-dlp` روی سرور دارد.",
@@ -411,6 +460,19 @@ I18N = {
         "link_downloading": "در حال دانلود روی سرور…",
         "link_download_failed": "دانلود ناموفق: {error}",
         "link_download_done_queue": "دانلود شد؛ در صف ارسال…",
+        "link_media_hint": "در بخش لینک/ویدیو باید لینک بفرستی. برای ارسال فایل از «📁 انتقال فایل» مقصد را انتخاب کن.",
+        "cf_menu_title": "☁️ Cloudflare\nاتصال per-user با API Token. فعلاً عملیات امن read-only: وضعیت، دامنه‌ها، DNS records.",
+        "cf_ask_token": "توکن Cloudflare API خودت را بفرست. پیشنهاد: API Token با دسترسی Zone/DNS Read.",
+        "cf_token_invalid": "توکن Cloudflare نامعتبر است: {detail}",
+        "cf_connected_ok": "Cloudflare متصل شد ✅ وضعیت توکن: {detail}",
+        "cf_disconnected": "اتصال Cloudflare قطع شد.",
+        "cf_not_connected": "Cloudflare متصل نیست. از دکمه اتصال یا `/cf_connect` استفاده کن.",
+        "cf_status_ok": "Cloudflare OK ✅ {detail}",
+        "cf_status_bad": "Cloudflare نامعتبر است: {detail}",
+        "cf_zones_result": "دامنه‌ها:\n{detail}",
+        "cf_dns_usage": "استفاده: `/cf_dns <zone_id> [record-name]`\nابتدا «دامنه‌ها» را بزن و zone_id را بردار.",
+        "cf_dns_result": "DNS records:\n{detail}",
+        "cf_error": "خطای Cloudflare: {error}",
         "newbatch_ok": (
             "جلسه فایل ZIP فعال شد.\n"
             "فایل‌ها را ارسال کن. بعد از اتمام، «پایان فایل ZIP» یا `/done` را بزن."
@@ -419,7 +481,7 @@ I18N = {
         "prompt_sendlink": "لینک را ارسال کن.",
         "queue_panel": (
             "مدیریت صف:\n\n"
-            "- در انتظار در صف SQLite: `{pending}`\n"
+            "- در انتظار در صف SQLite (همه مقصدهای تو): `{pending}`\n"
             "- هم‌اکنون در حال پردازش (worker): `{processing}`\n"
             "- کل خطاها (global): `{failed}`\n"
             "- حذف‌شده‌ها: `{deleted}`\n"
@@ -437,11 +499,13 @@ I18N = {
         "bale_token_invalid": "توکن بله نامعتبر است: {detail}",
         "bale_token_ok": "ربات بله تأیید شد (@{bot}).\nحالا `chat_id` مقصد را بفرست (گروه/کاربر در بله).",
         "bale_chat_id_empty": "chat_id خالی است. دوباره بفرست.",
+        "bale_chat_invalid": "chat_id بله تأیید نشد: {detail}",
         "bale_connected_ok": "بله متصل شد ✅ مقصد: `{chat_id}`",
         "bale_already_connected": "بله قبلاً متصل است. برای اتصال مجدد `/bale_disconnect` سپس `/bale_connect`.",
         "bale_disconnected": "اتصال بله قطع شد.",
         "btn_bale_connect": "🔗 اتصال",
         "btn_bale_status": "✅ وضعیت",
+        "btn_bale_set_chat": "🎯 تغییر مقصد",
         "btn_bale_disconnect": "❌ قطع",
         "bale_status_no_chat": "توکن OK ({detail}). chat_id نداری — در ویزارد `/bale_connect` ادامه بده.",
         "bale_status_ok": "بله: chat_id=`{chat_id}` — {detail}",
@@ -466,15 +530,22 @@ I18N = {
         "drive_sa_need_json": "نام فایل باید `.json` باشد.",
         "drive_sa_invalid": "JSON نامعتبر: {error}",
         "drive_status_line": "Drive configured: {ok}\n{detail}",
+        "drive_ls_result": "فایل‌های Drive:\n{detail}",
+        "drive_ls_error": "لیست Drive ناموفق: {error}",
         "ssh_list_empty": "هیچ سرور SSH ثبت نشده. `/ssh_add label host port user`",
         "ssh_list_title": "سرورهای SSH:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
         "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`",
         "ssh_add_ok": "سرور `{label}` ({host}:{port}) ذخیره شد.",
         "ssh_put_usage": "استفاده: `/ssh_put <server_id> <remote_path>` سپس فایل را بفرست",
+        "ssh_ls_usage": "استفاده: `/ssh_ls <server_id> [remote_path]`",
+        "ssh_del_usage": "استفاده: `/ssh_del <server_id>`",
         "ssh_put_await_file": "مسیر روی سرور ثبت شد. حالا فایل را در تلگرام بفرست.",
         "ssh_server_not_found": "سرور SSH پیدا نشد.",
         "ssh_auth_missing": "برای این سرور رمز یا کلید SSH ثبت نشده. دوباره با `/ssh_add` و رمز اضافه کن.",
+        "ssh_ls_result": "لیست `{path}`:\n{detail}",
+        "ssh_ls_error": "SSH ls ناموفق: {error}",
+        "ssh_del_ok": "سرور SSH `#{id}` حذف شد.",
         "bale_active_hint": "پس از `/bale_connect`، همین‌جا فایل بفرست تا با ربات بله خودت ارسال شود (~۲۰ مگ).",
         "drive_active_hint": "پس از `/drive_connect`، فایل بفرست تا در Drive خودت آپلود شود. دانلود: `/drive_download <id>`",
         "drive_download_usage": "استفاده: `/drive_download <google_drive_file_id>`",
@@ -642,10 +713,21 @@ I18N = {
         "cleanup_done": "پاکسازی `downloads/`: {n} فایل، حدود {mb} MB آزاد شد.",
         "direct_need_rubika": "برای حالت مستقیم اول `/rubika_connect` بزن.",
         "file_too_large": "فایل از سقف مجاز بزرگ‌تر است (حداکثر ~`{max_mb}` مگابایت با توجه به پلن و `MAX_FILE_MB`). حجم این فایل: ~`{size_mb}` مگابایت.",
+        "bale_file_too_large": "بله این فایل را نمی‌پذیرد (حداکثر `{max_mb}` MB). حجم فایل: ~`{size_mb}` MB.",
+        "text_unhandled_hint": "متوجه این پیام نشدم. از دکمه‌های منو استفاده کن یا `/help` را بزن.",
         "admin_max_file": "`MAX_FILE_MB` (سقف آپلود env): `{mb}` (`0` یا خالی = بدون سقف env)",
         "admin_plan_note": "سهمیه پلن‌ها در SQLite (`user_entitlements`) — `/usage` برای کاربران.",
         "admin_clear_prefs_hint": "پاک کردن ردیف mirror prefs در SQLite: `/admin_clear_prefs <telegram_user_id>`",
         "admin_clear_state_mirrors_hint": "پاک mirror ویزارد/بچ در SQLite (JSON را عوض نمی‌کند): `/admin_clear_state_mirrors <telegram_user_id>`",
+        "admin_tier_usage": "استفاده: `/admin_tier <telegram_user_id> <guest|free|pro> [days]`",
+        "admin_bonus_usage": "استفاده: `/admin_bonus <telegram_user_id> <extra_month_mb>`",
+        "admin_wizard_user_ask": "شناسه عددی تلگرام کاربر را بفرست:",
+        "admin_wizard_need_user_id": "لطفاً فقط شناسه عددی معتبر بفرست.",
+        "admin_wizard_tier_ask": "پلن را بفرست: `guest`، `free` یا `pro`",
+        "admin_wizard_days_ask": "برای pro تعداد روز اعتبار را بفرست:",
+        "admin_wizard_tier_done": "پلن کاربر `{target}` روی `{tier}` تنظیم شد.",
+        "admin_wizard_bonus_ask": "حجم اضافه ماهانه را به MB بفرست:",
+        "admin_wizard_bonus_done": "برای کاربر `{target}` مقدار `{mb}` MB حجم اضافه ثبت شد.",
         "admin_payment_lookup_hint": "لیست آخرین پرداخت‌های SQLite (`v2_payments`): `/admin_payment_lookup <telegram_user_id> [limit]`",
         "admin_payment_lookup_empty": "هیچ ردیف پرداختی برای این کاربر نیست.",
         "admin_payment_lookup_title": "پرداخت‌ها (جدیدترین اول):\n",
@@ -673,6 +755,16 @@ I18N = {
         "toolkit_ping_usage": "استفاده: `/ping <host> [port]` — پیش‌فرض پورت 443 (TCP). مثال: `/ping example.com 80`",
         "toolkit_ping_result": "TCP `{host}:{port}` ≈ `{ms}` ms",
         "toolkit_ping_error": "`{host}:{port}` — {error}",
+        "toolkit_ipinfo_usage": "استفاده: `/ipinfo <ip>`",
+        "toolkit_ipinfo_result": "{data}",
+        "toolkit_ipinfo_error": "IP info ناموفق: {error}",
+        "toolkit_whois_usage": "استفاده: `/whois <domain-or-ip>`",
+        "toolkit_whois_result": "{data}",
+        "toolkit_whois_error": "whois/RDAP ناموفق: {error}",
+        "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
+        "toolkit_gsearch_usage": "استفاده: `/gsearch <query>` یا `/gisearch <query>`\nنیازمند env: `GOOGLE_CSE_API_KEYS` و `GOOGLE_CSE_ID`",
+        "toolkit_gsearch_result": "{data}",
+        "toolkit_gsearch_error": "جستجوی گوگل ناموفق: {error}",
         "toolkit_md5_usage": "استفاده: `/md5 <متن>` — MD5 روی UTF-8",
         "toolkit_md5_result": "`{digest}`",
         "toolkit_sha256_usage": "استفاده: `/sha256 <متن>`",
@@ -749,6 +841,9 @@ I18N = {
         "settings_menu_title": "📤 Direct send\nOnly one destination at a time — connect it before enabling.",
         "direct_send_menu_title": "📤 Direct send",
         "admin_menu_title": "🛡 Admin",
+        "admin_users_menu_title": "👥 User management\nUse My ID or the user's message to get a Telegram ID first.",
+        "admin_billing_menu_title": "💳 Billing management",
+        "admin_maintenance_menu_title": "🧹 Maintenance and system status",
         "admin_denied": "You are not an admin.",
         "no_worker_events": "Worker log file not found yet.",
         "no_recent_jobs": "No recent task_done/task_failed for this chat.",
@@ -757,6 +852,7 @@ I18N = {
         "btn_main_toolkit": "🧰 Tools",
         "btn_main_settings": "📤 Direct send",
         "btn_main_link_direct": "🔗 Link / video",
+        "btn_main_cloudflare": "☁️ Cloudflare",
         "btn_main_help": "❓ Help",
         "btn_main_plan_section": "📋 Account & plan",
         "btn_main_admin": "🛡 Admin",
@@ -780,6 +876,10 @@ I18N = {
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 My IP",
         "btn_tool_ping": "📡 Ping",
+        "btn_tool_ipinfo": "🧭 IP Info",
+        "btn_tool_whois": "🧾 Whois",
+        "btn_tool_myid": "🆔 My ID",
+        "btn_tool_google": "🔎 Google",
         "btn_tool_md5": "#️⃣ MD5",
         "btn_tool_sha256": "🔒 SHA256",
         "btn_tool_b64e": "📤 B64 encode",
@@ -796,8 +896,30 @@ I18N = {
         "btn_netstatus": "📶 Network",
         "btn_ssh_list": "📋 Server list",
         "btn_ssh_add_help": "➕ Add server",
+        "btn_ssh_put_help": "⬆️ SFTP upload",
+        "btn_ssh_get_help": "⬇️ SFTP download",
+        "btn_ssh_ls_help": "📂 List path",
+        "btn_ssh_del_help": "🗑 Delete server",
+        "btn_drive_ls": "📂 List files",
         "btn_drive_download_help": "⬇️ Drive download",
         "btn_admin_panel": "🛡 Panel",
+        "btn_admin_users": "👥 Users",
+        "btn_admin_billing": "💳 Billing",
+        "btn_admin_maintenance": "🧹 Maintenance",
+        "btn_back_admin": "◀️ Admin",
+        "btn_admin_version": "🏷 Version",
+        "btn_admin_tier_help": "Set tier",
+        "btn_admin_bonus_help": "Add quota",
+        "btn_admin_clear_prefs_help": "Clear prefs",
+        "btn_admin_payment_lookup_help": "Payment lookup",
+        "btn_admin_payment_status_help": "Set payment status",
+        "btn_admin_reconcile": "Reconcile billing",
+        "btn_admin_cleanup": "Cleanup downloads",
+        "btn_cf_connect": "🔐 Connect",
+        "btn_cf_status": "✅ Status",
+        "btn_cf_zones": "🌐 Zones",
+        "btn_cf_dns_help": "📋 DNS records",
+        "btn_cf_disconnect": "❌ Disconnect",
         "btn_inline_refresh": "Refresh",
         "btn_inline_pending": "Pending",
         "btn_inline_failed": "Failed",
@@ -836,6 +958,7 @@ I18N = {
         "link_dest_bale": "Bale",
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "Cancel",
+        "link_dest_invalid": "Invalid destination.",
         "link_need_rubika": "Rubika not connected. `/rubika_connect`",
         "link_probe_unsupported": "Cannot download this link. ({detail})",
         "link_ytdlp_missing": "YouTube needs `yt-dlp` on the server.",
@@ -845,6 +968,19 @@ I18N = {
         "link_downloading": "Downloading on server…",
         "link_download_failed": "Download failed: {error}",
         "link_download_done_queue": "Downloaded; queuing upload…",
+        "link_media_hint": "This section expects a link/video URL. To send a file, open File transfer and choose a destination.",
+        "cf_menu_title": "☁️ Cloudflare\nPer-user API Token. Safe read-only actions for now: status, zones, DNS records.",
+        "cf_ask_token": "Send your Cloudflare API token. Recommended permissions: Zone/DNS Read.",
+        "cf_token_invalid": "Invalid Cloudflare token: {detail}",
+        "cf_connected_ok": "Cloudflare linked ✅ token status: {detail}",
+        "cf_disconnected": "Cloudflare disconnected.",
+        "cf_not_connected": "Cloudflare is not linked. Use Connect or `/cf_connect`.",
+        "cf_status_ok": "Cloudflare OK ✅ {detail}",
+        "cf_status_bad": "Cloudflare invalid: {detail}",
+        "cf_zones_result": "Zones:\n{detail}",
+        "cf_dns_usage": "Usage: `/cf_dns <zone_id> [record-name]`\nTap Zones first to get zone_id.",
+        "cf_dns_result": "DNS records:\n{detail}",
+        "cf_error": "Cloudflare error: {error}",
         "newbatch_ok": (
             "ZIP batch started.\n"
             "Send files, then tap «End ZIP» or `/done`."
@@ -853,7 +989,7 @@ I18N = {
         "prompt_sendlink": "Send the link.",
         "queue_panel": (
             "Queue:\n\n"
-            "- Pending in SQLite (your session): `{pending}`\n"
+            "- Pending in SQLite (all your destinations): `{pending}`\n"
             "- Currently processing (worker): `{processing}`\n"
             "- Failed (global): `{failed}`\n"
             "- Deleted: `{deleted}`\n"
@@ -868,11 +1004,13 @@ I18N = {
         "bale_token_invalid": "Invalid Bale token: {detail}",
         "bale_token_ok": "Bale bot verified (@{bot}). Send the destination `chat_id`.",
         "bale_chat_id_empty": "chat_id is empty.",
+        "bale_chat_invalid": "Bale chat_id check failed: {detail}",
         "bale_connected_ok": "Bale linked ✅ destination: `{chat_id}`",
         "bale_already_connected": "Bale already linked. `/bale_disconnect` then `/bale_connect` to replace.",
         "bale_disconnected": "Bale disconnected.",
         "btn_bale_connect": "🔗 Connect",
         "btn_bale_status": "✅ Status",
+        "btn_bale_set_chat": "🎯 Set destination",
         "btn_bale_disconnect": "❌ Disconnect",
         "bale_status_no_chat": "Token OK ({detail}). Missing chat_id — continue `/bale_connect`.",
         "bale_status_ok": "Bale: chat_id=`{chat_id}` — {detail}",
@@ -892,15 +1030,22 @@ I18N = {
         "drive_sa_need_json": "File name must end with `.json`.",
         "drive_sa_invalid": "Invalid JSON: {error}",
         "drive_status_line": "Drive configured: {ok}\n{detail}",
+        "drive_ls_result": "Drive files:\n{detail}",
+        "drive_ls_error": "Drive list failed: {error}",
         "ssh_list_empty": "No SSH servers. Use `/ssh_add label host port user`",
         "ssh_list_title": "SSH servers:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
         "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`",
         "ssh_add_ok": "Saved server `{label}` ({host}:{port}).",
         "ssh_put_usage": "Usage: `/ssh_put <server_id> <remote_path>` then send the file",
+        "ssh_ls_usage": "Usage: `/ssh_ls <server_id> [remote_path]`",
+        "ssh_del_usage": "Usage: `/ssh_del <server_id>`",
         "ssh_put_await_file": "Remote path saved. Send the file in Telegram now.",
         "ssh_server_not_found": "SSH server not found.",
         "ssh_auth_missing": "No password/key for this server. Re-add with `/ssh_add` and password.",
+        "ssh_ls_result": "Listing `{path}`:\n{detail}",
+        "ssh_ls_error": "SSH ls failed: {error}",
+        "ssh_del_ok": "SSH server `#{id}` deleted.",
         "bale_active_hint": "After `/bale_connect`, send a file here to upload via your Bale bot (~20 MB max).",
         "drive_active_hint": "After `/drive_connect`, send a file to upload to your Drive. Download: `/drive_download <id>`",
         "drive_download_usage": "Usage: `/drive_download <google_drive_file_id>`",
@@ -1068,10 +1213,21 @@ I18N = {
         "cleanup_done": "Cleaned `downloads/`: {n} files, ~{mb} MB freed.",
         "direct_need_rubika": "Link Rubika first: `/rubika_connect`",
         "file_too_large": "File exceeds the limit (max ~`{max_mb}` MB from plan + `MAX_FILE_MB`). This file is ~`{size_mb}` MB.",
+        "bale_file_too_large": "Bale cannot accept this file (max `{max_mb}` MB). This file is ~`{size_mb}` MB.",
+        "text_unhandled_hint": "I did not understand that message. Use the menu buttons or send `/help`.",
         "admin_max_file": "`MAX_FILE_MB` (env cap): `{mb}` (`0` or empty = no env cap)",
         "admin_plan_note": "Per-user plans live in SQLite (`user_entitlements`). Users: `/usage`.",
         "admin_clear_prefs_hint": "Clear cached `v2_user_prefs` row: `/admin_clear_prefs <telegram_user_id>`",
         "admin_clear_state_mirrors_hint": "Clear wizard/batch SQLite mirrors only (not JSON files): `/admin_clear_state_mirrors <telegram_user_id>`",
+        "admin_tier_usage": "Usage: `/admin_tier <telegram_user_id> <guest|free|pro> [days]`",
+        "admin_bonus_usage": "Usage: `/admin_bonus <telegram_user_id> <extra_month_mb>`",
+        "admin_wizard_user_ask": "Send the numeric Telegram user ID:",
+        "admin_wizard_need_user_id": "Send a valid numeric user ID.",
+        "admin_wizard_tier_ask": "Send tier: `guest`, `free`, or `pro`",
+        "admin_wizard_days_ask": "For pro, send validity days:",
+        "admin_wizard_tier_done": "User `{target}` tier set to `{tier}`.",
+        "admin_wizard_bonus_ask": "Send extra monthly quota in MB:",
+        "admin_wizard_bonus_done": "Added `{mb}` MB bonus for user `{target}`.",
         "admin_payment_lookup_hint": "Recent `v2_payments` rows: `/admin_payment_lookup <telegram_user_id> [limit]`",
         "admin_payment_lookup_empty": "No payment rows for this user.",
         "admin_payment_lookup_title": "Payments (newest first):\n",
@@ -1097,6 +1253,16 @@ I18N = {
         "toolkit_ping_usage": "Usage: `/ping <host> [port]` — default port 443 (TCP). E.g. `/ping example.com 80`",
         "toolkit_ping_result": "TCP `{host}:{port}` ~ `{ms}` ms",
         "toolkit_ping_error": "`{host}:{port}` — {error}",
+        "toolkit_ipinfo_usage": "Usage: `/ipinfo <ip>`",
+        "toolkit_ipinfo_result": "{data}",
+        "toolkit_ipinfo_error": "IP info failed: {error}",
+        "toolkit_whois_usage": "Usage: `/whois <domain-or-ip>`",
+        "toolkit_whois_result": "{data}",
+        "toolkit_whois_error": "whois/RDAP failed: {error}",
+        "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
+        "toolkit_gsearch_usage": "Usage: `/gsearch <query>` or `/gisearch <query>`\nRequires env: `GOOGLE_CSE_API_KEYS` and `GOOGLE_CSE_ID`",
+        "toolkit_gsearch_result": "{data}",
+        "toolkit_gsearch_error": "Google search failed: {error}",
         "toolkit_md5_usage": "Usage: `/md5 <text>` — MD5 (UTF-8)",
         "toolkit_md5_result": "`{digest}`",
         "toolkit_sha256_usage": "Usage: `/sha256 <text>`",
@@ -1341,12 +1507,28 @@ def build_link_direct_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_link_direct_menu(user_id, tr)
 
 
+def build_cloudflare_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_cloudflare_menu(user_id, tr)
+
+
 def build_settings_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_settings_menu(user_id, tr, get_direct_mode_target(user_id))
 
 
 def build_admin_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_admin_menu(user_id, tr)
+
+
+def build_admin_users_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_admin_users_menu(user_id, tr)
+
+
+def build_admin_billing_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_admin_billing_menu(user_id, tr)
+
+
+def build_admin_maintenance_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_admin_maintenance_menu(user_id, tr)
 
 
 def safe_filename(name: Optional[str]) -> str:
@@ -1629,6 +1811,19 @@ def set_menu_section(user_id: int, section: MenuSection) -> None:
         queue.upsert_menu_section(user_id, section.value)
     except Exception as e:
         log_event("v2_user_prefs_upsert_failed", user_id=user_id, error=str(e))
+
+
+def get_effective_menu_section(user_id: int) -> Optional[str]:
+    """Read menu section from the same merged state source used by text routing."""
+    state = get_state(user_id)
+    section = state.get(MENU_SECTION_KEY)
+    if section:
+        return str(section)
+    try:
+        return queue.get_menu_section(user_id)
+    except Exception as e:
+        log_event("v2_user_prefs_read_failed", user_id=user_id, error=str(e))
+        return None
 
 
 def set_state_preserving_menu(user_id: int, new_state: dict) -> None:
@@ -1949,7 +2144,12 @@ def extract_first_url(text: str) -> Optional[str]:
         return None
 
     match = re.search(r"https?://\S+", text)
-    return match.group(0) if match else None
+    if match:
+        return match.group(0).rstrip(".,)")
+    match = re.search(r"(?:www\.|youtu\.be/|youtube\.com/)[^\s]+", text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return f"https://{match.group(0).rstrip('.,)')}"
 
 
 def progress_bar(percent: float, length: int = 12) -> str:
@@ -2242,6 +2442,19 @@ TRANSFER_HUB_DEPS = TransferHubDeps(
     list_ssh_servers=queue.list_ssh_servers,
     get_ssh_server=queue.get_ssh_server,
     ssh_add_server=queue.add_ssh_server,
+    ssh_delete_server=queue.delete_ssh_server,
+)
+
+CLOUDFLARE_COMMAND_DEPS = CloudflareCommandDeps(
+    tr=tr,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    get_token=queue.get_cloudflare_api_token,
+    upsert_token=queue.upsert_cloudflare_api_token,
+    clear_token=queue.clear_cloudflare_api_token,
+    build_cloudflare_menu=build_cloudflare_menu,
+    log_event=log_event,
 )
 
 PROVIDER_CONNECT_DEPS = ProviderConnectWizardDeps(
@@ -2325,12 +2538,24 @@ async def drive_status_handler(client: Client, message: Message):
     await handle_drive_status(TRANSFER_HUB_DEPS, client, message)
 
 
+async def drive_ls_handler(client: Client, message: Message):
+    await handle_drive_ls(TRANSFER_HUB_DEPS, client, message)
+
+
 async def ssh_list_handler(client: Client, message: Message):
     await handle_ssh_list(TRANSFER_HUB_DEPS, client, message)
 
 
 async def ssh_add_handler(client: Client, message: Message):
     await handle_ssh_add(TRANSFER_HUB_DEPS, client, message)
+
+
+async def ssh_ls_handler(client: Client, message: Message):
+    await handle_ssh_ls(TRANSFER_HUB_DEPS, client, message)
+
+
+async def ssh_del_handler(client: Client, message: Message):
+    await handle_ssh_del(TRANSFER_HUB_DEPS, client, message)
 
 
 async def ssh_put_handler(client: Client, message: Message):
@@ -2406,6 +2631,30 @@ async def show_link_direct_menu_handler(client: Client, message: Message):
     await handle_show_link_direct_menu(LINK_DIRECT_COMMAND_DEPS, client, message)
 
 
+async def show_cloudflare_menu_handler(client: Client, message: Message):
+    await handle_show_cloudflare_menu(CLOUDFLARE_COMMAND_DEPS, client, message)
+
+
+async def cf_connect_handler(client: Client, message: Message):
+    await handle_cf_connect(CLOUDFLARE_COMMAND_DEPS, client, message)
+
+
+async def cf_disconnect_handler(client: Client, message: Message):
+    await handle_cf_disconnect(CLOUDFLARE_COMMAND_DEPS, client, message)
+
+
+async def cf_status_handler(client: Client, message: Message):
+    await handle_cf_status(CLOUDFLARE_COMMAND_DEPS, client, message)
+
+
+async def cf_zones_handler(client: Client, message: Message):
+    await handle_cf_zones(CLOUDFLARE_COMMAND_DEPS, client, message)
+
+
+async def cf_dns_handler(client: Client, message: Message):
+    await handle_cf_dns(CLOUDFLARE_COMMAND_DEPS, client, message)
+
+
 async def netstatus_handler(client: Client, message: Message):
     await handle_netstatus(SESSION_SETTINGS_COMMAND_DEPS, client, message)
 
@@ -2469,12 +2718,14 @@ QUEUE_COMMAND_DEPS = QueueCommandDeps(
     extract_first_url=extract_first_url,
     get_user_session=get_user_session,
     queue_count_by_session=queue.queue_count_by_session,
+    count_tasks_for_user=queue.count_tasks_for_user,
     processing_display_for_queue=processing_display_for_queue,
     failed_count=failed_count,
     queue_deleted_count=queue.deleted_count,
     queue_cancelled_count=queue.cancelled_count,
     queue_all_tasks=queue.all_tasks,
     queue_remove_tasks_by_session=queue.remove_tasks_by_session,
+    queue_remove_tasks_for_user=queue.remove_tasks_for_user,
     mark_deleted=mark_deleted,
 )
 
@@ -2539,12 +2790,12 @@ async def queue_or_confirm(
     task: dict,
     summary: str,
     status_message: Optional[Message] = None,
-):
+) -> bool:
     user_id = message.from_user.id
     task["telegram_user_id"] = user_id
     if get_direct_mode_target(user_id):
         if not await gate_quota(message, user_id, task):
-            return
+            return False
         anchor = status_message
         if anchor:
             task["chat_id"] = message.chat.id
@@ -2569,7 +2820,7 @@ async def queue_or_confirm(
                 )
             except MessageNotModified:
                 pass
-            return
+            return True
 
         status = await message.reply_text(tr(user_id, "queued_processing"))
         task["chat_id"] = message.chat.id
@@ -2590,7 +2841,7 @@ async def queue_or_confirm(
             )
         except MessageNotModified:
             pass
-        return
+        return True
 
     set_state_preserving_menu(
         user_id,
@@ -2621,19 +2872,20 @@ async def queue_or_confirm(
         user_id=user_id,
         task_type=task.get("type"),
     )
+    return True
 
 
 async def push_task_direct(
     message: Message,
     task: dict,
     status_message: Optional[Message] = None,
-) -> None:
+) -> bool:
     """Queue non-Rubika transfer tasks immediately (Bale, Drive, SSH)."""
     user_id = message.from_user.id
     task["telegram_user_id"] = user_id
     task["chat_id"] = message.chat.id
     if not await gate_quota(message, user_id, task):
-        return
+        return False
     anchor = status_message
     if not anchor:
         anchor = await message.reply_text(tr(user_id, "text_queueing"), parse_mode=None)
@@ -2657,6 +2909,7 @@ async def push_task_direct(
     st = get_state(user_id)
     if st.get("step") == "await_ssh_put_file":
         clear_state(user_id)
+    return True
 
 
 async def safe_delete_user_message(message: Message):
@@ -2699,6 +2952,26 @@ async def my_ip_handler(client: Client, message: Message):
 
 async def tcp_ping_handler(client: Client, message: Message):
     await handle_tcp_ping(TOOLKIT_COMMAND_DEPS, client, message)
+
+
+async def ipinfo_handler(client: Client, message: Message):
+    await handle_ipinfo(TOOLKIT_COMMAND_DEPS, client, message)
+
+
+async def whois_handler(client: Client, message: Message):
+    await handle_whois(TOOLKIT_COMMAND_DEPS, client, message)
+
+
+async def my_id_handler(client: Client, message: Message):
+    await handle_my_id(TOOLKIT_COMMAND_DEPS, client, message)
+
+
+async def google_search_handler(client: Client, message: Message):
+    await handle_google_search(TOOLKIT_COMMAND_DEPS, client, message)
+
+
+async def google_image_search_handler(client: Client, message: Message):
+    await handle_google_search(TOOLKIT_COMMAND_DEPS, client, message)
 
 
 async def md5_handler(client: Client, message: Message):
@@ -2866,15 +3139,22 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     menu_handler=menu_handler,
     help_handler=help_handler,
     log_help_handler=log_help_handler,
+    version_handler=version_handler,
+    cleanup_downloads_handler=cleanup_downloads_handler,
+    admin_reconcile_billing_handler=admin_reconcile_billing_handler,
     rubika_connect_handler=rubika_connect_handler,
     rubika_status_handler=rubika_status_handler,
     bale_status_handler=bale_status_handler,
     bale_connect_handler=bale_connect_handler,
     bale_disconnect_handler=bale_disconnect_handler,
+    bale_set_chat_handler=bale_set_chat_handler,
     drive_status_handler=drive_status_handler,
     drive_connect_handler=drive_connect_handler,
     drive_disconnect_handler=drive_disconnect_handler,
+    drive_ls_handler=drive_ls_handler,
     ssh_list_handler=ssh_list_handler,
+    ssh_ls_handler=ssh_ls_handler,
+    ssh_del_handler=ssh_del_handler,
     new_batch_handler=new_batch_handler,
     done_batch_handler=done_batch_handler,
     clear_queue_handler=clear_queue_handler,
@@ -2895,13 +3175,24 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     show_ssh_menu_handler=show_ssh_menu_handler,
     show_files_menu_handler=show_files_menu_handler,
     show_link_direct_menu_handler=show_link_direct_menu_handler,
+    show_cloudflare_menu_handler=show_cloudflare_menu_handler,
     dns_lookup_handler=dns_lookup_handler,
     my_ip_handler=my_ip_handler,
     tcp_ping_handler=tcp_ping_handler,
+    ipinfo_handler=ipinfo_handler,
+    whois_handler=whois_handler,
+    my_id_handler=my_id_handler,
+    google_search_handler=google_search_handler,
+    google_image_search_handler=google_image_search_handler,
     md5_handler=md5_handler,
     sha256_handler=sha256_handler,
     b64_encode_handler=b64_encode_handler,
     b64_decode_handler=b64_decode_handler,
+    cf_connect_handler=cf_connect_handler,
+    cf_status_handler=cf_status_handler,
+    cf_zones_handler=cf_zones_handler,
+    cf_dns_handler=cf_dns_handler,
+    cf_disconnect_handler=cf_disconnect_handler,
     build_plan_menu=build_plan_menu,
     build_transfer_menu=build_transfer_menu,
     build_toolkit_menu=build_toolkit_menu,
@@ -2909,6 +3200,9 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     build_files_menu=build_files_menu,
     build_settings_menu=build_settings_menu,
     build_admin_menu=build_admin_menu,
+    build_admin_users_menu=build_admin_users_menu,
+    build_admin_billing_menu=build_admin_billing_menu,
+    build_admin_maintenance_menu=build_admin_maintenance_menu,
 )
 
 async def _save_drive_sa_file(user_id: int, local_path: Path) -> tuple[bool, str]:
@@ -2970,7 +3264,7 @@ LINK_DIRECT_HANDLER_DEPS = LinkDirectHandlerDeps(
     download_dir=DOWNLOAD_DIR,
     queue=queue,
     extract_first_url=extract_first_url,
-    get_menu_section=queue.get_menu_section,
+    get_menu_section=get_effective_menu_section,
     get_user_session=get_user_session,
     load_settings=load_settings,
     effective_max_file_bytes=effective_max_file_bytes,
@@ -2998,6 +3292,7 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     clear_queue_handler=clear_queue_handler,
     get_user_session=get_user_session,
     queue_count_by_session=queue.queue_count_by_session,
+    count_tasks_for_user=queue.count_tasks_for_user,
     failed_count=failed_count,
     recent_failed_detail_text=recent_failed_detail_text,
     recent_jobs_summary=recent_jobs_summary,
@@ -3043,6 +3338,11 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     rubika_wizard_deps=RUBIKA_WIZARD_DEPS,
     dispatch_provider_connect_wizard=dispatch_provider_connect_wizard,
     provider_connect_wizard_deps=PROVIDER_CONNECT_DEPS,
+    dispatch_cloudflare_wizard=dispatch_cloudflare_wizard,
+    cloudflare_command_deps=CLOUDFLARE_COMMAND_DEPS,
+    dispatch_admin_wizard=dispatch_admin_wizard,
+    admin_command_deps=ADMIN_COMMAND_DEPS,
+    set_state_preserving_menu=set_state_preserving_menu,
     dispatch_zip_batch_wizard=dispatch_zip_batch_wizard,
     zip_batch_wizard_deps=ZIP_BATCH_WIZARD_DEPS,
     handle_zip_password_text=handle_zip_password_text,
@@ -3053,6 +3353,7 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     direct_url_hint_deps=DIRECT_URL_HINT_DEPS,
     handle_link_direct_text=handle_link_direct_text,
     link_direct_deps=LINK_DIRECT_HANDLER_DEPS,
+    build_main_menu=build_main_menu,
 )
 
 MEDIA_HANDLER_DEPS = MediaHandlerDeps(
@@ -3060,7 +3361,7 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     base_dir=BASE_DIR,
     queue=queue,
     get_user_session=get_user_session,
-    get_menu_section=queue.get_menu_section,
+    get_menu_section=get_effective_menu_section,
     get_bale_credentials=queue.get_bale_credentials,
     get_state=get_state,
     set_state_preserving_menu=set_state_preserving_menu,

@@ -97,11 +97,17 @@ def _probe_direct(url: str, *, timeout: tuple[float, float]) -> LinkMetadata:
         )
 
     cd = resp.headers.get("content-disposition", "")
+    ctype = (resp.headers.get("content-type") or "").split(";")[0].strip().lower()
+    if "attachment" not in cd.lower() and ctype.startswith("text/html"):
+        # Many video sites expose an HTML page, not a file HEAD. Let yt-dlp's
+        # generic extractor probe quality/size metadata before we download.
+        video_meta = _probe_youtube(url)
+        if video_meta.downloadable:
+            return video_meta
     match = re.findall(r'filename="(.+?)"', cd)
     name = match[0] if match else Path(urlparse(url).path).name
     name = _safe_name(name or f"file_{int(time.time())}")
     if "." not in name:
-        ctype = (resp.headers.get("content-type") or "").split(";")[0].strip()
         ext = {
             "video/mp4": ".mp4",
             "application/zip": ".zip",
@@ -167,11 +173,23 @@ def _probe_youtube(url: str) -> LinkMetadata:
             detail="no_info",
         )
 
-    title = _safe_name(str(info.get("title") or "youtube_video"), "youtube_video")
+    entries = info.get("entries")
+    if entries:
+        first = next((x for x in entries if x), None)
+        if first:
+            info = first
+
+    title = _safe_name(str(info.get("title") or "video_download"), "video_download")
     ext = info.get("ext") or "mp4"
     if not title.endswith(f".{ext}"):
         title = f"{title}.{ext}"
     size = info.get("filesize") or info.get("filesize_approx")
+    if not size:
+        requested = info.get("requested_formats") or []
+        try:
+            size = sum(int(f.get("filesize") or f.get("filesize_approx") or 0) for f in requested) or None
+        except Exception:
+            size = None
     try:
         size_i = int(size) if size else None
     except (TypeError, ValueError):
@@ -274,7 +292,8 @@ def _download_youtube(
         "no_warnings": True,
         "noplaylist": True,
         "outtmpl": outtmpl,
-        "format": "best[ext=mp4]/best",
+        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
+        "merge_output_format": "mp4",
         "progress_hooks": [_hook],
     }
     with yt_dlp.YoutubeDL(opts) as ydl:

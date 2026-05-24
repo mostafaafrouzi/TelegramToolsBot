@@ -15,4 +15,5 @@ class MenuSection(str, Enum):
     SSH = "ssh"
     SETTINGS = "settings"
     LINK_DIRECT = "link_direct"
+    CLOUDFLARE = "cloudflare"
     ADMIN = "admin"

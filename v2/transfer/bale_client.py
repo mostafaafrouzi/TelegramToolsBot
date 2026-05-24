@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 
 BALE_API_BASE = (os.getenv("BALE_API_BASE") or "https://tapi.bale.ai").rstrip("/")
-BALE_MAX_BYTES = int(os.getenv("BALE_MAX_FILE_MB") or "20") * 1024 * 1024
+BALE_MAX_BYTES = int(os.getenv("BALE_MAX_FILE_MB") or "50") * 1024 * 1024
 
 
 def _api_url(token: str, method: str) -> str:
@@ -31,6 +31,28 @@ def validate_bot_token(token: str) -> tuple[bool, str]:
             except (KeyError, TypeError, AttributeError):
                 uname = "ok"
             return True, str(uname)
+        desc = body.get("description") or r.text or f"HTTP {r.status_code}"
+        return False, str(desc)[:900]
+    except requests.RequestException as e:
+        return False, str(e)[:900]
+
+
+def validate_chat(token: str, chat_id: str) -> tuple[bool, str]:
+    tok = (token or "").strip()
+    cid = (chat_id or "").strip()
+    if not tok or not cid:
+        return False, "missing token or chat_id"
+    try:
+        r = requests.get(_api_url(tok, "getChat"), params={"chat_id": cid}, timeout=30)
+        body = r.json() if r.content else {}
+        if r.ok and body.get("ok"):
+            title = ""
+            try:
+                res = body.get("result") or {}
+                title = res.get("title") or res.get("username") or res.get("first_name") or "ok"
+            except AttributeError:
+                title = "ok"
+            return True, str(title)
         desc = body.get("description") or r.text or f"HTTP {r.status_code}"
         return False, str(desc)[:900]
     except requests.RequestException as e:
@@ -77,6 +99,66 @@ def send_document(
         return False, str(e)[:900]
 
 
+def send_video(
+    token: str,
+    chat_id: str,
+    file_path: str | Path,
+    *,
+    caption: str = "",
+    timeout: int = 300,
+) -> tuple[bool, str]:
+    return _send_media(token, chat_id, file_path, "video", "sendVideo", caption=caption, timeout=timeout)
+
+
+def send_audio(
+    token: str,
+    chat_id: str,
+    file_path: str | Path,
+    *,
+    caption: str = "",
+    timeout: int = 300,
+) -> tuple[bool, str]:
+    return _send_media(token, chat_id, file_path, "audio", "sendAudio", caption=caption, timeout=timeout)
+
+
+def _send_media(
+    token: str,
+    chat_id: str,
+    file_path: str | Path,
+    field: str,
+    method: str,
+    *,
+    caption: str = "",
+    timeout: int = 300,
+) -> tuple[bool, str]:
+    path = Path(file_path)
+    if not path.is_file():
+        return False, "file not found"
+    size = path.stat().st_size
+    if size > BALE_MAX_BYTES:
+        return False, f"file exceeds Bale limit ({BALE_MAX_BYTES // (1024 * 1024)} MB)"
+    data = {"chat_id": str(chat_id)}
+    if caption:
+        data["caption"] = caption[:1024]
+    if field == "video":
+        data["supports_streaming"] = "true"
+    try:
+        with path.open("rb") as fh:
+            r = requests.post(
+                _api_url(token, method),
+                data=data,
+                files={field: (path.name, fh)},
+                timeout=timeout,
+            )
+        body = r.json() if r.content else {}
+        if r.ok and body.get("ok"):
+            return True, "ok"
+        desc = body.get("description") or r.text or f"HTTP {r.status_code}"
+        return False, str(desc)[:900]
+    except requests.RequestException as e:
+        return False, str(e)[:900]
+
+
 def send_photo(
     token: str,
     chat_id: str,
@@ -88,6 +170,9 @@ def send_photo(
     path = Path(file_path)
     if not path.is_file():
         return False, "file not found"
+    size = path.stat().st_size
+    if size > BALE_MAX_BYTES:
+        return False, f"file exceeds Bale limit ({BALE_MAX_BYTES // (1024 * 1024)} MB)"
     data = {"chat_id": str(chat_id)}
     if caption:
         data["caption"] = caption[:1024]
@@ -121,6 +206,14 @@ def send_file_auto(
     ext = path.suffix.lower()
     if ext in {".jpg", ".jpeg", ".png", ".webp"}:
         ok, msg = send_photo(token, chat_id, path, caption=caption)
+        if ok:
+            return ok, msg
+    if ext in {".mp4", ".mov", ".m4v", ".webm", ".mkv"}:
+        ok, msg = send_video(token, chat_id, path, caption=caption)
+        if ok:
+            return ok, msg
+    if ext in {".mp3", ".m4a", ".ogg", ".wav", ".flac"}:
+        ok, msg = send_audio(token, chat_id, path, caption=caption)
         if ok:
             return ok, msg
     return send_document(token, chat_id, path, caption=caption)
