@@ -158,7 +158,7 @@ async def handle_ssh_list(deps: TransferHubDeps, client: Any, message: Message) 
                 label=r["label"],
                 host=r["host"],
                 port=r["port"],
-                user=r["ssh_user"],
+                ssh_user=r["ssh_user"],
             )
         )
     await message.reply_text("\n".join(lines), parse_mode=None)
