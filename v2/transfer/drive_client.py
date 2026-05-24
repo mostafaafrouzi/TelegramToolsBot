@@ -19,6 +19,17 @@ def _service_account_path() -> Optional[Path]:
     return candidate if candidate.is_file() else None
 
 
+def _resolve_service_account_path(path: Optional[str | Path]) -> Optional[Path]:
+    if not path:
+        return _service_account_path()
+    p = Path(path)
+    if p.is_file():
+        return p
+    base = Path(__file__).resolve().parents[2]
+    candidate = base / p
+    return candidate if candidate.is_file() else p
+
+
 def _folder_id() -> str:
     return (os.getenv("GOOGLE_DRIVE_FOLDER_ID") or "").strip()
 
@@ -36,7 +47,7 @@ def upload_file(
     folder_id: Optional[str] = None,
 ) -> tuple[bool, str, dict[str, Any]]:
     """Upload to Drive folder. Returns ``(ok, message, metadata)``."""
-    sa_path = Path(service_account_path) if service_account_path else _service_account_path()
+    sa_path = _resolve_service_account_path(service_account_path)
     fid = (folder_id or _folder_id()).strip()
     if not sa_path or not sa_path.is_file() or not fid:
         return False, "Drive service account JSON or folder_id missing for this user", {}
@@ -77,7 +88,7 @@ def download_file(
     service_account_path: Optional[str | Path] = None,
 ) -> tuple[bool, str]:
     """Download Drive file by id to ``dest_path``."""
-    sa_path = Path(service_account_path) if service_account_path else _service_account_path()
+    sa_path = _resolve_service_account_path(service_account_path)
     if not sa_path or not sa_path.is_file():
         return False, "Drive service account JSON missing for this user"
     try:

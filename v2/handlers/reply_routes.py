@@ -39,6 +39,7 @@ class ReplyRouteDeps:
     queue_manage_handler: MessageHandler
     netstatus_handler: MessageHandler
     admin_handler: MessageHandler
+    version_handler: MessageHandler
     direct_mode_handler: MessageHandler
     plan_handler: MessageHandler
     usage_handler: MessageHandler
@@ -159,6 +160,9 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/purchase":
         await _run_slash(deps.purchase_handler, client, message, "/purchase")
+        return True
+    if mapped == "/version":
+        await _run_slash(deps.version_handler, client, message, "/version")
         return True
 
     if mapped == "/rubika_connect":

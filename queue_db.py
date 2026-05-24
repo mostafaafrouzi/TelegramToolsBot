@@ -2,6 +2,7 @@ import json
 import sqlite3
 import threading
 import time
+import uuid
 from pathlib import Path
 from typing import Optional
 
@@ -66,7 +67,10 @@ class QueueDB:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN rubika_session TEXT")
 
     def _migrate_v2_ssh_servers_secret(self, conn):
-        rows = conn.execute("PRAGMA table_info(v2_ssh_servers)").fetchall()
+        try:
+            rows = conn.execute("PRAGMA table_info(v2_ssh_servers)").fetchall()
+        except sqlite3.OperationalError:
+            return
         if not rows:
             return
         cols = {r[1] for r in rows}
@@ -76,7 +80,10 @@ class QueueDB:
             conn.execute("ALTER TABLE v2_ssh_servers ADD COLUMN ssh_key_path TEXT")
 
     def _migrate_v2_user_prefs_bale_chat(self, conn):
-        rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
+        try:
+            rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
+        except sqlite3.OperationalError:
+            return
         if not rows:
             return
         cols = {r[1] for r in rows}
@@ -84,7 +91,10 @@ class QueueDB:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN bale_chat_id TEXT")
 
     def _migrate_v2_user_prefs_provider_creds(self, conn):
-        rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
+        try:
+            rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
+        except sqlite3.OperationalError:
+            return
         if not rows:
             return
         cols = {r[1] for r in rows}
@@ -314,7 +324,7 @@ class QueueDB:
     def push_task(self, task: dict) -> dict:
         with self._lock:
             task = dict(task)
-            task.setdefault("job_id", str(int(time.time() * 1000)))
+            task.setdefault("job_id", f"{int(time.time() * 1000)}-{uuid.uuid4().hex[:8]}")
             created_at = int(time.time())
             uid = task.get("telegram_user_id")
             if uid is not None:
@@ -376,6 +386,19 @@ class QueueDB:
                 rows = conn.execute(
                     "SELECT id, payload FROM tasks WHERE rubika_session = ?",
                     (rubika_session,),
+                ).fetchall()
+                ids = [r["id"] for r in rows]
+                if ids:
+                    conn.executemany("DELETE FROM tasks WHERE id = ?", [(i,) for i in ids])
+                    conn.commit()
+                return [json.loads(r["payload"]) for r in rows]
+
+    def remove_tasks_by_user(self, telegram_user_id: int) -> list[dict]:
+        with self._lock:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT id, payload FROM tasks WHERE telegram_user_id = ?",
+                    (int(telegram_user_id),),
                 ).fetchall()
                 ids = [r["id"] for r in rows]
                 if ids:

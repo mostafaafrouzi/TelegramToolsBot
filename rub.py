@@ -165,6 +165,34 @@ def requeue_task(task: dict) -> dict:
     clone["requeued_at"] = int(time.time())
     return queue_db.push_task(clone)
 
+
+def recover_processing_task() -> None:
+    """Return an interrupted in-flight task to the queue on worker startup."""
+    if not PROCESSING_FILE.exists():
+        return
+    try:
+        task = json.loads(PROCESSING_FILE.read_text(encoding="utf-8"))
+    except Exception as e:
+        worker_log("processing_recovery_failed", error=str(e))
+        clear_processing()
+        return
+    if not isinstance(task, dict) or not task.get("type"):
+        clear_processing()
+        return
+    try:
+        new_task = requeue_task(task)
+        worker_log(
+            "processing_requeued_on_startup",
+            job_id=task.get("job_id"),
+            new_job_id=new_task.get("job_id"),
+            task_type=task.get("type"),
+        )
+    except Exception as e:
+        worker_log("processing_requeue_failed", job_id=task.get("job_id"), error=str(e))
+        return
+    clear_processing()
+
+
 def is_cancelled(task: dict) -> bool:
     job_id = str(task.get("job_id", ""))
     if not job_id:
@@ -626,11 +654,6 @@ def process_task(task: dict):
             zip_size=bundle.stat().st_size if bundle.exists() else 0,
             duration_ms=int((time.time() - zip_started_at) * 1000),
         )
-        for src in files:
-            try:
-                src.unlink()
-            except Exception:
-                pass
         split_started_at = time.time()
         parts = split_file_parts(bundle, part_size_mb)
         wl(
@@ -669,6 +692,11 @@ def process_task(task: dict):
                     duration_ms=int((time.time() - part_started_at) * 1000),
                 )
             bill_upload_usage(task, total_uploaded)
+            for src in files:
+                try:
+                    src.unlink()
+                except Exception:
+                    pass
             push_status(task, "همه پارت‌ها با موفقیت در روبیکا ارسال شدند.", "done")
             wl(
                 "task_done",
@@ -752,20 +780,27 @@ def process_task(task: dict):
         from v2.transfer.ssh_client import sftp_put
 
         push_status(task, "در حال SFTP put ...", "uploading")
-        ok, detail = sftp_put(
-            srv.get("host", ""),
-            int(srv.get("port") or 22),
-            srv.get("ssh_user", ""),
-            local_path,
-            str(task.get("remote_path") or ""),
-            password=srv.get("ssh_secret"),
-            key_filename=srv.get("ssh_key_path"),
-        )
-        if not ok:
-            raise RuntimeError(detail)
-        bill_upload_usage(task, local_path.stat().st_size)
-        push_status(task, f"SFTP put OK → {detail}", "done")
-        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        try:
+            ok, detail = sftp_put(
+                srv.get("host", ""),
+                int(srv.get("port") or 22),
+                srv.get("ssh_user", ""),
+                local_path,
+                str(task.get("remote_path") or ""),
+                password=srv.get("ssh_secret"),
+                key_filename=srv.get("ssh_key_path"),
+            )
+            if not ok:
+                raise RuntimeError(detail)
+            bill_upload_usage(task, local_path.stat().st_size)
+            push_status(task, f"SFTP put OK → {detail}", "done")
+            wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        finally:
+            try:
+                if local_path.exists():
+                    local_path.unlink()
+            except Exception:
+                pass
         return
 
     elif task_type == "ssh_get":
@@ -935,6 +970,8 @@ def worker_loop():
     # Multi-user mode: do not force a global Rubika login on startup.
     # Each user connects Rubika from Telegram bot flow and tasks carry per-user session.
     print("Rubika worker started.")
+    worker_log("worker_started")
+    recover_processing_task()
 
     while True:
         task = pop_first_task()

@@ -23,12 +23,14 @@ class CallbackRouteDeps:
     clear_queue_handler: AsyncHandler
     get_user_session: Callable[[int], Optional[str]]
     queue_count_by_session: Callable[[str], int]
+    count_tasks_for_user: Callable[[int], int]
     failed_count: Callable[[], int]
     recent_failed_detail_text: Callable[[Optional[str], int], str]
     recent_jobs_summary: Callable[[int], str]
     gate_quota: AsyncGateQuotaFn
     queue_push_task: Callable[[dict], dict]
     clear_state: Callable[[int], None]
+    cleanup_task_artifacts: Callable[[dict], None]
     log_event: Callable[..., None]
     handle_link_dest_callback: Callable[..., Awaitable[bool]]
 
@@ -52,6 +54,8 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
                 deps.tr(user_id, "lang_saved"),
                 reply_markup=deps.build_main_menu(user_id),
             )
+        else:
+            await callback_query.answer("Invalid language", show_alert=True)
         return True
 
     if data.startswith("queue:"):
@@ -66,12 +70,14 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
             )
             return True
         if action == "clearall":
-            await deps.clear_queue_handler(client, callback_query.message, acting_user_id=user_id)
             await callback_query.answer(deps.tr(user_id, "queue_kb_cleared"))
+            await deps.clear_queue_handler(client, callback_query.message, acting_user_id=user_id)
             return True
         if action == "pending":
-            session = deps.get_user_session(user_id)
-            count = deps.queue_count_by_session(session or "")
+            count = deps.count_tasks_for_user(user_id)
+            if count == 0:
+                session = deps.get_user_session(user_id)
+                count = deps.queue_count_by_session(session or "")
             await callback_query.answer(f"Pending: {count}", show_alert=True)
             return True
         if action == "failed":
@@ -101,13 +107,17 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
             await callback_query.answer("Pending task not found", show_alert=True)
             return True
         if not await deps.gate_quota(callback_query.message, user_id, task):
+            deps.cleanup_task_artifacts(task)
+            deps.clear_state(user_id)
             await callback_query.answer("Quota", show_alert=True)
             return True
         anchor = callback_query.message
         task["chat_id"] = anchor.chat.id
         task["status_message_id"] = anchor.id
         task = deps.queue_push_task(task)
-        qpos = deps.queue_count_by_session(task.get("rubika_session") or "")
+        qpos = deps.count_tasks_for_user(user_id)
+        if qpos == 0:
+            qpos = deps.queue_count_by_session(task.get("rubika_session") or "")
         deps.clear_state(user_id)
         deps.log_event(
             "task_queued",
@@ -132,6 +142,7 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
         return await deps.handle_link_dest_callback(client, callback_query, dest)
 
     if data == "cancel_send" and state.get("step") == "await_send_confirm":
+        deps.cleanup_task_artifacts(state.get("pending_task") or {})
         deps.clear_state(user_id)
         deps.log_event("task_confirm_cancelled", user_id=user_id)
         try:

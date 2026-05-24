@@ -65,6 +65,18 @@ run_cmd(){
   tail -n 40 "$LOG_FILE" || true
   return 1
 }
+
+run_as_user(){
+  local d="$1" user="$2"; shift 2
+  if [[ "$user" == "root" ]]; then
+    run_cmd "$d" "$@"
+  elif command -v sudo >/dev/null 2>&1; then
+    run_cmd "$d" sudo -u "$user" -- "$@"
+  else
+    run_cmd "$d" runuser -u "$user" -- "$@"
+  fi
+}
+
 pause(){ read -r -p "Press Enter to continue..."; }
 ask(){
   local p="$1"; local def="${2:-}"; local v=""
@@ -193,13 +205,13 @@ install_deps(){
     run_cmd "apt update" apt-get update
     run_cmd "install dependencies" apt-get install -y \
       python3 python3-venv python3-pip git ffmpeg curl rsync ca-certificates \
-      build-essential libffi-dev
+      build-essential libffi-dev python3-dev
     return
   fi
   if command -v dnf >/dev/null 2>&1; then
     run_cmd "install dependencies" dnf install -y \
       python3 python3-pip python3-virtualenv git ffmpeg curl rsync ca-certificates \
-      gcc libffi-devel
+      gcc libffi-devel python3-devel
     return
   fi
   err "No supported package manager found (apt/dnf)."; return 1
@@ -381,8 +393,8 @@ chown_install_dir(){
 }
 
 verify_python_imports(){
-  local dir="$1"
-  run_cmd "python core import smoke test" "$dir/venv/bin/python" -c "
+  local dir="$1" user="${2:-root}"
+  run_as_user "python core import smoke test" "$user" "$dir/venv/bin/python" -c "
 import pyrogram
 import rubpy
 import requests
@@ -390,7 +402,7 @@ import pyzipper
 import paramiko
 print('core-imports-ok')
 " || return 1
-  run_cmd "python telebot import smoke test" "$dir/venv/bin/python" -c "
+  run_as_user "python telebot import smoke test" "$user" "$dir/venv/bin/python" -c "
 import os
 os.chdir('$dir')
 import telebot
@@ -402,6 +414,101 @@ print('telebot-import-ok')
     warn "Google Drive libraries not importable (optional until GOOGLE_DRIVE_* configured)"
   fi
   return 0
+}
+
+env_value(){
+  local env_file="$1" key="$2"
+  grep -E "^${key}=" "$env_file" 2>/dev/null | tail -n1 | sed "s/^${key}=//" || true
+}
+
+verify_env_values(){
+  local dir="$1" env_file="$dir/.env"
+  local api_id api_hash bot_token admin_ids part_mb
+  api_id="$(env_value "$env_file" API_ID)"
+  api_hash="$(env_value "$env_file" API_HASH)"
+  bot_token="$(env_value "$env_file" BOT_TOKEN)"
+  admin_ids="$(env_value "$env_file" ADMIN_IDS)"
+  part_mb="$(env_value "$env_file" DEFAULT_PART_SIZE_MB)"
+  [[ "$api_id" =~ ^[0-9]+$ && "$api_id" != "0" ]] || { err "Invalid API_ID in $env_file"; return 1; }
+  [[ -n "$api_hash" ]] || { err "API_HASH is empty in $env_file"; return 1; }
+  [[ "$bot_token" == *:* ]] || { err "BOT_TOKEN looks invalid in $env_file"; return 1; }
+  [[ "$admin_ids" =~ ^[0-9]+([,[:space:]]*[0-9]+)*$ ]] || { err "ADMIN_IDS must be numeric/comma-separated in $env_file"; return 1; }
+  if [[ -n "$part_mb" ]]; then
+    [[ "$part_mb" =~ ^[0-9]+$ && "$part_mb" != "0" ]] || { err "DEFAULT_PART_SIZE_MB must be a positive integer"; return 1; }
+  fi
+  ok "Env values validated"
+}
+
+verify_runtime_layout(){
+  local dir="$1" user="${2:-root}"
+  run_as_user "runtime directories writable" "$user" bash -c "
+set -e
+test -w '$dir/queue'
+test -w '$dir/downloads'
+test -w '$dir/secrets'
+touch '$dir/queue/.healthcheck' '$dir/downloads/.healthcheck' '$dir/secrets/.healthcheck'
+rm -f '$dir/queue/.healthcheck' '$dir/downloads/.healthcheck' '$dir/secrets/.healthcheck'
+"
+}
+
+verify_sqlite_health(){
+  local dir="$1" user="${2:-root}"
+  run_as_user "sqlite queue health check" "$user" "$dir/venv/bin/python" -c "
+import os, sqlite3, sys
+os.chdir('$dir')
+db='queue/queue.sqlite3'
+conn=sqlite3.connect(db, timeout=5)
+conn.execute('SELECT 1').fetchone()
+res=conn.execute('PRAGMA quick_check').fetchone()
+conn.close()
+assert res and str(res[0]).lower() == 'ok', res
+print('sqlite-ok')
+"
+}
+
+verify_telegram_getme(){
+  local dir="$1"
+  local token rc
+  token="$(env_value "$dir/.env" BOT_TOKEN)"
+  [[ -n "$token" ]] || { err "BOT_TOKEN missing for getMe check"; return 1; }
+  info "Telegram getMe health check"
+  log_event "INFO" "command_start" "desc=Telegram getMe health check cmd=curl https://api.telegram.org/bot[REDACTED]/getMe"
+  set +e
+  curl -fsS --max-time 15 "https://api.telegram.org/bot${token}/getMe" >>"$LOG_FILE" 2>&1
+  rc=$?
+  set -e
+  if [[ $rc -eq 0 ]]; then
+    ok "Telegram getMe health check"
+    log_event "OK" "command_end" "desc=Telegram getMe health check exit_code=0"
+    return 0
+  fi
+  err "Telegram getMe health check failed. See $LOG_FILE"
+  log_event "ERR" "command_end" "desc=Telegram getMe health check exit_code=$rc"
+  return 1
+}
+
+wait_for_service_stable(){
+  local base="$1" split="${2:-0}" units=()
+  if [[ "$split" == "1" ]]; then
+    units=("${base}-bot" "${base}-worker")
+  else
+    units=("$base")
+  fi
+  info "Waiting briefly for service stability"
+  sleep 6
+  local unit result substate restarts status
+  for unit in "${units[@]}"; do
+    result="$(systemctl show "$unit" -p Result --value 2>/dev/null || true)"
+    substate="$(systemctl show "$unit" -p SubState --value 2>/dev/null || true)"
+    restarts="$(systemctl show "$unit" -p NRestarts --value 2>/dev/null || echo 0)"
+    status="$(systemctl show "$unit" -p ExecMainStatus --value 2>/dev/null || echo 0)"
+    if [[ "$result" != "success" && "$result" != "" ]] || [[ "$substate" != "running" ]] || [[ "${restarts:-0}" != "0" ]] || [[ "${status:-0}" != "0" ]]; then
+      journalctl -u "$unit" -n 80 --no-pager >>"$LOG_FILE" 2>&1 || true
+      err "Service $unit is not stable (result=$result substate=$substate restarts=$restarts status=$status)"
+      return 1
+    fi
+  done
+  ok "Services are stable after startup window"
 }
 
 show_post_deploy_summary(){
@@ -488,9 +595,10 @@ Type=simple
 User=${user}
 WorkingDirectory=${dir}
 ExecStart=${dir}/venv/bin/python ${dir}/telebot.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-${dir}/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -506,9 +614,10 @@ Type=simple
 User=${user}
 WorkingDirectory=${dir}
 ExecStart=${dir}/venv/bin/python ${dir}/rub.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-${dir}/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -546,9 +655,10 @@ Type=simple
 User=${user}
 WorkingDirectory=${dir}
 ExecStart=${dir}/venv/bin/python ${dir}/main.py
-Restart=always
+Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-${dir}/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -560,10 +670,13 @@ EOF
 }
 
 post_deploy_health_check(){
-  local base="$1" dir="$2" split="${3:-0}"
+  local base="$1" dir="$2" split="${3:-0}" user="${4:-root}"
   info "Running post-deploy health checks..."
   [[ -f "$dir/.env" ]] || { err "Missing $dir/.env"; return 1; }
   [[ -f "$dir/requirements.txt" ]] || { err "Missing $dir/requirements.txt"; return 1; }
+  verify_env_values "$dir" || return 1
+  verify_runtime_layout "$dir" "$user" || return 1
+  verify_sqlite_health "$dir" "$user" || return 1
   if [[ "$split" == "1" ]]; then
     run_cmd "bot is-active" systemctl is-active --quiet "${base}-bot"
     run_cmd "worker is-active" systemctl is-active --quiet "${base}-worker"
@@ -573,13 +686,15 @@ post_deploy_health_check(){
     run_cmd "service is-active check" systemctl is-active --quiet "$base"
     run_cmd "service is-enabled check" systemctl is-enabled --quiet "$base"
   fi
+  wait_for_service_stable "$base" "$split" || return 1
   run_cmd "python syntax smoke check" "$dir/venv/bin/python" -m py_compile \
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
     "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" \
     "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py" \
     "$dir/v2/handlers/media_handler.py" \
     "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
-  verify_python_imports "$dir" || return 1
+  verify_python_imports "$dir" "$user" || return 1
+  verify_telegram_getme "$dir" || return 1
   ok "Health check passed for systemd_base=$base split=$split dir=$dir"
   log_event "OK" "health_check_passed" "systemd_base=$base split=$split dir=$dir"
 }
@@ -620,7 +735,7 @@ install_flow(){
   merge_env_defaults "$dir"
   chown_install_dir "$dir" "$user"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
-  post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
+  post_deploy_health_check "$svc" "$dir" "$split_flag" "$user" || return 1
   local ver
   ver="$(read_app_version "$dir/.env")"
   notify_admin "$bot_token" "$admin_ids" \
@@ -657,7 +772,7 @@ update_flow(){
   merge_env_defaults "$dir"
   chown_install_dir "$dir" "$user"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
-  post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
+  post_deploy_health_check "$svc" "$dir" "$split_flag" "$user" || return 1
   if [[ -f "$dir/.env" ]]; then
     bot_token="$(grep '^BOT_TOKEN=' "$dir/.env" | sed 's/^BOT_TOKEN=//' || true)"
     admin_ids="$(grep '^ADMIN_IDS=' "$dir/.env" | sed 's/^ADMIN_IDS=//' || true)"
@@ -673,9 +788,12 @@ update_flow(){
 # Sync .env keys from .env.example without pulling new code (safe repair).
 env_sync_flow(){
   ensure_root; os_check
-  local dir
+  local dir svc split_flag=0 user="root"
   if select_instance; then
     dir="$SELECTED_DIR"
+    svc="$SELECTED_BASE"
+    split_flag="${SELECTED_SPLIT:-0}"
+    user="${SELECTED_USER:-root}"
     info "Selected instance: $SELECTED_LABEL ($dir)"
   else
     dir="$(ask "Install directory" "$DEFAULT_INSTALL_DIR")"
@@ -685,15 +803,12 @@ env_sync_flow(){
   merge_env_defaults "$dir"
   ok "Env sync done. Restart the service to apply new flags."
   if ask_yn "Restart service now?" "y"; then
-    local svc split_flag=0
-    if [[ -n "${SELECTED_BASE:-}" ]]; then
-      svc="$SELECTED_BASE"
-      split_flag="${SELECTED_SPLIT:-0}"
-    else
+    if [[ -z "${svc:-}" ]]; then
       svc="$(ask "Systemd service name (base)" "$DEFAULT_SERVICE_NAME")"
       [[ -f "/etc/systemd/system/${svc}-bot.service" ]] && split_flag=1
     fi
     restart_instance_services "$svc" "$split_flag"
+    post_deploy_health_check "$svc" "$dir" "$split_flag" "$user" || return 1
   fi
 }
 
@@ -718,15 +833,17 @@ backup_flow(){
 
 restore_flow(){
   ensure_root
-  local dir base archive split_flag=0
+  local dir base archive split_flag=0 user="root"
   if select_instance; then
     dir="$SELECTED_DIR"
     base="$SELECTED_BASE"
     split_flag="$SELECTED_SPLIT"
+    user="${SELECTED_USER:-root}"
     info "Selected instance for restore: $SELECTED_LABEL ($dir)"
   else
     dir="$(ask "Install directory" "$DEFAULT_INSTALL_DIR")"
     base="$(ask "Systemd service name (base name)" "$DEFAULT_SERVICE_NAME")"
+    user="$(ask "Run service as user" "root")"
     [[ -f "/etc/systemd/system/${base}-bot.service" ]] && split_flag=1
   fi
   archive="$(ask "Backup file (.tar.gz) path")"
@@ -740,6 +857,7 @@ restore_flow(){
     setup_venv "$dir" || warn "venv refresh after restore failed — run Update from menu"
   fi
   merge_env_defaults "$dir"
+  chown_install_dir "$dir" "$user"
   restart_instance_services "$base" "$split_flag"
   if [[ "$split_flag" == "1" ]]; then
     run_cmd "service status (bot)" systemctl --no-pager --full status "${base}-bot" || true
@@ -747,6 +865,7 @@ restore_flow(){
   else
     run_cmd "service status" systemctl --no-pager --full status "$base" || true
   fi
+  post_deploy_health_check "$base" "$dir" "$split_flag" "$user" || return 1
   ok "Restore completed."
 }
 

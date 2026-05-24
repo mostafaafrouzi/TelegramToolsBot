@@ -40,8 +40,8 @@ def detect_link_type(url: str) -> str:
         return "unsupported"
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
         return "unsupported"
-    host = (parsed.netloc or "").lower()
-    if any(h in host for h in _YT_HOSTS) or host == "youtu.be":
+    host = (parsed.hostname or parsed.netloc or "").lower().strip(".")
+    if any(host == h or host.endswith(f".{h}") for h in _YT_HOSTS):
         return "youtube"
     return "direct"
 

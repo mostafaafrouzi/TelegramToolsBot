@@ -297,6 +297,10 @@ I18N = {
             "⚙️ **تنظیمات** — حالت مستقیم و شبکه\n\n"
             "در هر زیرمنو «🏠 منوی اصلی» یا «◀️» برای برگشت."
         ),
+        "unknown_input_hint": (
+            "این پیام با منوی فعلی قابل پردازش نیست.\n"
+            "از دکمه‌های زیر استفاده کن یا `/help` را بفرست."
+        ),
         "plan_menu_opened": (
             "📋 حساب و پلن\n"
             "پلن، مصرف، خرید و مدیریت صف."
@@ -403,6 +407,7 @@ I18N = {
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "لغو",
         "link_need_rubika": "روبیکا متصل نیست. `/rubika_connect`",
+        "bale_file_too_large": "حجم فایل برای بله زیاد است. سقف بله `{max_mb}` MB است؛ این فایل ~{size_mb} MB است.",
         "link_probe_unsupported": "این لینک قابل دانلود نیست. ({detail})",
         "link_ytdlp_missing": "یوتیوب نیاز به `yt-dlp` روی سرور دارد.",
         "link_magnet_unsupported": "لینک magnet هنوز پشتیبانی نمی‌شود.",
@@ -731,6 +736,10 @@ I18N = {
             "⚙️ **Settings** — direct mode & network\n\n"
             "Use «🏠 Main menu» or «◀️» to go back."
         ),
+        "unknown_input_hint": (
+            "I could not handle this message in the current menu.\n"
+            "Use the buttons below or send `/help`."
+        ),
         "plan_menu_opened": (
             "📋 Account & plan\n"
             "Plan, usage, purchase, and queue."
@@ -837,6 +846,7 @@ I18N = {
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "Cancel",
         "link_need_rubika": "Rubika not connected. `/rubika_connect`",
+        "bale_file_too_large": "This file is too large for Bale. Bale limit is `{max_mb}` MB; yours is ~{size_mb} MB.",
         "link_probe_unsupported": "Cannot download this link. ({detail})",
         "link_ytdlp_missing": "YouTube needs `yt-dlp` on the server.",
         "link_magnet_unsupported": "Magnet links are not supported yet.",
@@ -1593,6 +1603,18 @@ def get_state(user_id: int) -> dict:
     return out
 
 
+def get_effective_menu_section(user_id: int) -> Optional[str]:
+    """Read menu section from the dual-written state with SQLite fallback."""
+    section = get_state(user_id).get(MENU_SECTION_KEY)
+    if section:
+        return str(section)
+    try:
+        return queue.get_menu_section(user_id)
+    except Exception as e:
+        log_event("v2_user_prefs_read_failed", user_id=user_id, error=str(e))
+        return None
+
+
 def set_state(user_id: int, data: dict):
     states = load_user_states()
     states[get_user_key(user_id)] = data
@@ -1910,6 +1932,22 @@ def cancel_job(job_id: str):
     queue.cancel_job(str(job_id))
 
 
+def cleanup_task_artifacts(task: dict) -> None:
+    """Remove local files for tasks that will not be queued or processed."""
+    paths = []
+    if isinstance(task, dict):
+        if task.get("path"):
+            paths.append(task.get("path"))
+        paths.extend(task.get("files") or [])
+    for raw in paths:
+        try:
+            p = Path(str(raw))
+            if p.exists() and p.is_file():
+                p.unlink()
+        except Exception:
+            pass
+
+
 def was_deleted(job_id=None, message_id=None) -> bool:
     return queue.was_deleted(job_id=job_id, message_id=message_id)
 
@@ -1970,7 +2008,7 @@ def pretty_size(size) -> str:
 
 
 def processing_display_for_queue(user_id: int) -> str:
-    """Current worker job for this user's Rubika session (reads queue/processing.json)."""
+    """Current worker job for this user (Rubika/Bale/Drive/SSH)."""
     if not PROCESSING_FILE.exists():
         return tr(user_id, "queue_processing_none")
     try:
@@ -1978,7 +2016,13 @@ def processing_display_for_queue(user_id: int) -> str:
     except Exception:
         return tr(user_id, "queue_processing_none")
     session = get_user_session(user_id)
-    if not session or data.get("rubika_session") != session:
+    task_uid = data.get("telegram_user_id")
+    matches_user = False
+    try:
+        matches_user = int(task_uid or 0) == int(user_id)
+    except (TypeError, ValueError):
+        matches_user = False
+    if not matches_user and (not session or data.get("rubika_session") != session):
         return tr(user_id, "queue_processing_none")
     jid = str(data.get("job_id", "?"))
     typ = str(data.get("type", "?"))
@@ -2469,12 +2513,14 @@ QUEUE_COMMAND_DEPS = QueueCommandDeps(
     extract_first_url=extract_first_url,
     get_user_session=get_user_session,
     queue_count_by_session=queue.queue_count_by_session,
+    queue_count_for_user=queue.count_tasks_for_user,
     processing_display_for_queue=processing_display_for_queue,
     failed_count=failed_count,
     queue_deleted_count=queue.deleted_count,
     queue_cancelled_count=queue.cancelled_count,
     queue_all_tasks=queue.all_tasks,
     queue_remove_tasks_by_session=queue.remove_tasks_by_session,
+    queue_remove_tasks_by_user=queue.remove_tasks_by_user,
     mark_deleted=mark_deleted,
 )
 
@@ -2544,6 +2590,7 @@ async def queue_or_confirm(
     task["telegram_user_id"] = user_id
     if get_direct_mode_target(user_id):
         if not await gate_quota(message, user_id, task):
+            cleanup_task_artifacts(task)
             return
         anchor = status_message
         if anchor:
@@ -2554,7 +2601,7 @@ async def queue_or_confirm(
             except Exception:
                 pass
             pushed = queue.push_task(task)
-            qpos = queue.queue_count_by_session(task.get("rubika_session") or "")
+            qpos = queue.count_tasks_for_user(user_id)
             log_event(
                 "task_queued",
                 user_id=user_id,
@@ -2575,7 +2622,7 @@ async def queue_or_confirm(
         task["chat_id"] = message.chat.id
         task["status_message_id"] = status.id
         pushed = queue.push_task(task)
-        qpos = queue.queue_count_by_session(task.get("rubika_session") or "")
+        qpos = queue.count_tasks_for_user(user_id)
         log_event(
             "task_queued",
             user_id=user_id,
@@ -2633,6 +2680,7 @@ async def push_task_direct(
     task["telegram_user_id"] = user_id
     task["chat_id"] = message.chat.id
     if not await gate_quota(message, user_id, task):
+        cleanup_task_artifacts(task)
         return
     anchor = status_message
     if not anchor:
@@ -2881,6 +2929,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     queue_manage_handler=queue_manage_handler,
     netstatus_handler=netstatus_handler,
     admin_handler=admin_handler,
+    version_handler=version_handler,
     direct_mode_handler=direct_mode_handler,
     plan_handler=plan_handler,
     usage_handler=usage_handler,
@@ -2970,7 +3019,9 @@ LINK_DIRECT_HANDLER_DEPS = LinkDirectHandlerDeps(
     download_dir=DOWNLOAD_DIR,
     queue=queue,
     extract_first_url=extract_first_url,
-    get_menu_section=queue.get_menu_section,
+    get_menu_section=get_effective_menu_section,
+    get_state=get_state,
+    set_state_preserving_menu=set_state_preserving_menu,
     get_user_session=get_user_session,
     load_settings=load_settings,
     effective_max_file_bytes=effective_max_file_bytes,
@@ -2998,12 +3049,14 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     clear_queue_handler=clear_queue_handler,
     get_user_session=get_user_session,
     queue_count_by_session=queue.queue_count_by_session,
+    count_tasks_for_user=queue.count_tasks_for_user,
     failed_count=failed_count,
     recent_failed_detail_text=recent_failed_detail_text,
     recent_jobs_summary=recent_jobs_summary,
     gate_quota=gate_quota,
     queue_push_task=queue.push_task,
     clear_state=clear_state,
+    cleanup_task_artifacts=cleanup_task_artifacts,
     log_event=log_event,
     handle_link_dest_callback=_link_dest_callback_route,
 )
@@ -3034,6 +3087,7 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     get_state=get_state,
     set_menu_section=set_menu_section,
     build_plan_menu=build_plan_menu,
+    build_main_menu=build_main_menu,
     resolve_reply_button_route=menu_engine.resolve_reply_button_route,
     dispatch_reply_keyboard_route=dispatch_reply_keyboard_route,
     reply_route_deps=REPLY_ROUTE_DEPS,
@@ -3060,7 +3114,7 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     base_dir=BASE_DIR,
     queue=queue,
     get_user_session=get_user_session,
-    get_menu_section=queue.get_menu_section,
+    get_menu_section=get_effective_menu_section,
     get_bale_credentials=queue.get_bale_credentials,
     get_state=get_state,
     set_state_preserving_menu=set_state_preserving_menu,

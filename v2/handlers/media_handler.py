@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
+from v2.transfer.bale_client import BALE_MAX_BYTES
 from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
 TranslateFn = Callable[..., str]
@@ -165,6 +166,19 @@ async def _download_and_queue(
         await message.reply_text(deps.tr(user_id, "media_bad_type"), parse_mode=None)
         return
 
+    declared_size = int(getattr(media, "file_size", 0) or 0)
+    if task_type == "transfer_to_bale" and declared_size > BALE_MAX_BYTES:
+        await message.reply_text(
+            deps.tr(
+                user_id,
+                "bale_file_too_large",
+                max_mb=BALE_MAX_BYTES // (1024 * 1024),
+                size_mb=deps.fmt_mb_bytes(declared_size),
+            ),
+            parse_mode=None,
+        )
+        return
+
     download_name = deps.build_download_filename(message, media_type, media)
     download_path = deps.download_dir / download_name
     status = await message.reply_text(deps.tr(user_id, "media_download_status"), parse_mode=None)
@@ -187,6 +201,22 @@ async def _download_and_queue(
             raise RuntimeError("Downloaded file not found.")
 
         file_size = downloaded_path.stat().st_size
+        if task_type == "transfer_to_bale" and file_size > BALE_MAX_BYTES:
+            try:
+                downloaded_path.unlink()
+            except Exception:
+                pass
+            await status.edit_text(
+                deps.tr(
+                    user_id,
+                    "bale_file_too_large",
+                    max_mb=BALE_MAX_BYTES // (1024 * 1024),
+                    size_mb=deps.fmt_mb_bytes(file_size),
+                ),
+                parse_mode=None,
+            )
+            return
+
         lim_b = deps.effective_max_file_bytes(user_id)
         if lim_b is not None and file_size > lim_b:
             try:

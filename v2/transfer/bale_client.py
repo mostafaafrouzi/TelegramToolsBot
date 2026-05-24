@@ -88,6 +88,9 @@ def send_photo(
     path = Path(file_path)
     if not path.is_file():
         return False, "file not found"
+    size = path.stat().st_size
+    if size > BALE_MAX_BYTES:
+        return False, f"file exceeds Bale limit ({BALE_MAX_BYTES // (1024 * 1024)} MB)"
     data = {"chat_id": str(chat_id)}
     if caption:
         data["caption"] = caption[:1024]

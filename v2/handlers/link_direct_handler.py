@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import asdict
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -11,6 +12,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.core.menu_sections import MenuSection
+from v2.transfer.bale_client import BALE_MAX_BYTES
 from v2.transfer.link_direct import LinkMetadata, download_to_path, probe_metadata
 from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
@@ -25,6 +27,8 @@ class LinkDirectHandlerDeps:
     queue: Any
     extract_first_url: Callable[[str], Optional[str]]
     get_menu_section: Callable[[int], Optional[str]]
+    get_state: Callable[[int], dict]
+    set_state_preserving_menu: Callable[..., None]
     get_user_session: Callable[[int], Optional[str]]
     load_settings: Callable[[], dict]
     effective_max_file_bytes: Callable[[int], Optional[int]]
@@ -35,6 +39,47 @@ class LinkDirectHandlerDeps:
     queue_or_confirm: Callable[..., Any]
     push_task_direct: Callable[..., Any]
     log_event: Callable[..., None]
+
+
+def _forget_pending_meta(deps: LinkDirectHandlerDeps, user_id: int) -> None:
+    _pending_link_meta.pop(user_id, None)
+    try:
+        deps.set_state_preserving_menu(user_id, {})
+    except Exception:
+        pass
+
+
+def _remember_pending_meta(deps: LinkDirectHandlerDeps, user_id: int, meta: LinkMetadata) -> None:
+    _pending_link_meta[user_id] = meta
+    try:
+        deps.set_state_preserving_menu(user_id, {"pending_link_meta": asdict(meta)})
+    except Exception:
+        pass
+
+
+def _pending_meta(deps: LinkDirectHandlerDeps, user_id: int) -> Optional[LinkMetadata]:
+    meta = _pending_link_meta.get(user_id)
+    if meta:
+        return meta
+    raw = deps.get_state(user_id).get("pending_link_meta")
+    if not isinstance(raw, dict):
+        return None
+    try:
+        return LinkMetadata(**raw)
+    except TypeError:
+        return None
+
+
+async def _reply_bale_limit(deps: LinkDirectHandlerDeps, message: Message, user_id: int, file_size: int) -> None:
+    await message.reply_text(
+        deps.tr(
+            user_id,
+            "bale_file_too_large",
+            max_mb=BALE_MAX_BYTES // (1024 * 1024),
+            size_mb=deps.fmt_mb_bytes(file_size),
+        ),
+        parse_mode=None,
+    )
 
 
 def _dest_keyboard(user_id: int, tr: TranslateFn) -> InlineKeyboardMarkup:
@@ -107,6 +152,14 @@ async def enqueue_downloaded_file(
     extra: dict,
 ) -> None:
     file_size = local_path.stat().st_size
+    if dest == "bale" and file_size > BALE_MAX_BYTES:
+        try:
+            local_path.unlink()
+        except OSError:
+            pass
+        await _reply_bale_limit(deps, message, user_id, file_size)
+        return
+
     lim = deps.effective_max_file_bytes(user_id)
     if lim is not None and file_size > lim:
         try:
@@ -142,18 +195,30 @@ async def enqueue_downloaded_file(
         task["type"] = "local_file"
         summary = deps.tr(user_id, "file_prepared_summary", name=local_path.name)
         if not await deps.gate_quota(message, user_id, task):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
             return
         status = await message.reply_text(deps.tr(user_id, "link_download_done_queue"), parse_mode=None)
         await deps.queue_or_confirm(message, task, summary, status_message=status)
     elif dest == "bale":
         task["type"] = "transfer_to_bale"
         if not await deps.gate_quota(message, user_id, task):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
             return
         status = await message.reply_text(deps.tr(user_id, "link_download_done_queue"), parse_mode=None)
         await deps.push_task_direct(message, task, status_message=status)
     else:
         task["type"] = "transfer_to_drive"
         if not await deps.gate_quota(message, user_id, task):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
             return
         status = await message.reply_text(deps.tr(user_id, "link_download_done_queue"), parse_mode=None)
         await deps.push_task_direct(message, task, status_message=status)
@@ -207,9 +272,8 @@ async def handle_link_direct_text(
     except MessageNotModified:
         pass
 
-    # Stash URL metadata in reply_to message id — callback uses inline data only (url in callback too long).
-    # Store pending in a module-level cache keyed by user_id (simple; cleared on pick/cancel).
-    _pending_link_meta[user_id] = meta
+    # Callback data cannot safely carry long URLs; persist enough metadata for restart recovery.
+    _remember_pending_meta(deps, user_id, meta)
     return True
 
 
@@ -220,12 +284,13 @@ async def handle_link_dest_callback(
     dest: str,
 ) -> bool:
     user_id = callback_query.from_user.id
-    meta = _pending_link_meta.pop(user_id, None)
+    meta = _pending_meta(deps, user_id)
     if not meta:
         await callback_query.answer(deps.tr(user_id, "link_session_expired"), show_alert=True)
         return True
 
     if dest == "cancel":
+        _forget_pending_meta(deps, user_id)
         await callback_query.answer()
         try:
             await callback_query.message.edit_text(deps.tr(user_id, "link_cancelled"), reply_markup=None)
@@ -238,6 +303,19 @@ async def handle_link_dest_callback(
         await callback_query.answer(deps.tr(user_id, err_key), show_alert=True)
         return True
 
+    if dest == "bale" and meta.size_bytes and meta.size_bytes > BALE_MAX_BYTES:
+        await callback_query.answer(
+            deps.tr(
+                user_id,
+                "bale_file_too_large",
+                max_mb=BALE_MAX_BYTES // (1024 * 1024),
+                size_mb=deps.fmt_mb_bytes(int(meta.size_bytes)),
+            ),
+            show_alert=True,
+        )
+        return True
+
+    _forget_pending_meta(deps, user_id)
     await callback_query.answer()
     anchor = callback_query.message
     try:
@@ -295,6 +373,18 @@ async def handle_link_direct_for_direct_mode(
     meta = await asyncio.to_thread(probe_metadata, url)
     if not meta.downloadable:
         await status.edit_text(deps.tr(user_id, "link_probe_unsupported", detail=meta.detail), parse_mode=None)
+        return True
+
+    if dest == "bale" and meta.size_bytes and meta.size_bytes > BALE_MAX_BYTES:
+        await status.edit_text(
+            deps.tr(
+                user_id,
+                "bale_file_too_large",
+                max_mb=BALE_MAX_BYTES // (1024 * 1024),
+                size_mb=deps.fmt_mb_bytes(int(meta.size_bytes)),
+            ),
+            parse_mode=None,
+        )
         return True
 
     try:

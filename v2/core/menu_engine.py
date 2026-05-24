@@ -83,6 +83,7 @@ _STATIC_BUTTON_ROUTES: Dict[str, str] = {
     "/usage": "/usage",
     "/purchase": "/purchase",
     "/queue": "/queue",
+    "/version": "/version",
     "/dns": "/dns",
     "/myip": "/myip",
     "/ping": "/ping",

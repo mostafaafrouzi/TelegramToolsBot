@@ -21,6 +21,7 @@ class TextEntryDeps:
     get_state: Callable[[int], dict]
     set_menu_section: Callable[[int, MenuSection], None]
     build_plan_menu: Callable[[int], Any]
+    build_main_menu: Callable[[int], Any]
     resolve_reply_button_route: Callable[..., Optional[str]]
     dispatch_reply_keyboard_route: AsyncRouteFn
     reply_route_deps: Any
@@ -94,3 +95,9 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
 
     if await deps.handle_direct_url_sendlink_hint(message, user_id, text, deps.direct_url_hint_deps):
         return
+
+    await message.reply_text(
+        deps.tr(user_id, "unknown_input_hint"),
+        reply_markup=deps.build_main_menu(user_id),
+        parse_mode=None,
+    )

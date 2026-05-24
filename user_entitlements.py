@@ -396,7 +396,14 @@ def estimate_task_bytes(task: dict) -> int:
     t = task.get("type")
     if t == "text_message":
         return min(4096, len((task.get("text") or "").encode("utf-8")))
-    if t == "local_file":
+    if t in {
+        "local_file",
+        "transfer_to_bale",
+        "transfer_to_drive",
+        "ssh_put",
+        "ssh_get",
+        "drive_download",
+    }:
         return int(task.get("file_size") or 0)
     if t == "direct_url":
         return int(task.get("file_size") or 0)

@@ -74,7 +74,7 @@ async def dispatch_rubika_connect_wizard(
             await message.reply_text(tr(user_id, "rubika_code_sent"))
         except Exception as e:
             deps.clear_state(user_id)
-            await message.reply_text(tr(user_id, "rubika_send_code_error", error=str(e)))
+            await message.reply_text(tr(user_id, "rubika_send_code_error", error=str(e)), parse_mode=None)
         return True
 
     if step == "await_pass_key":
@@ -99,7 +99,7 @@ async def dispatch_rubika_connect_wizard(
             await message.reply_text(tr(user_id, "rubika_code_sent"))
         except Exception as e:
             deps.clear_state(user_id)
-            await message.reply_text(tr(user_id, "rubika_send_code_error", error=str(e)))
+            await message.reply_text(tr(user_id, "rubika_send_code_error", error=str(e)), parse_mode=None)
         return True
 
     if step == "await_code":
@@ -127,7 +127,7 @@ async def dispatch_rubika_connect_wizard(
         except Exception as e:
             deps.clear_state(user_id)
             deps.log_event("rubika_connect_failed", user_id=user_id, error=str(e))
-            await message.reply_text(tr(user_id, "rubika_bad_code", error=str(e)))
+            await message.reply_text(tr(user_id, "rubika_bad_code", error=str(e)), parse_mode=None)
         return True
 
     return False

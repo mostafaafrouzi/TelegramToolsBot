@@ -17,6 +17,7 @@ def run_bot() -> None:
         tb.log_event("v2_ephemeral_read_mode", primary="sqlite")
     tb.clear_old_status()
     tb.app.start()
+    tb.log_event("bot_started", version=getattr(tb, "APP_VERSION", "unknown"))
     tb.app.loop.create_task(tb.status_watcher())
     tb.app.loop.create_task(tb.maybe_broadcast_update())
     tb.app.loop.create_task(tb.payment_reconcile_loop())

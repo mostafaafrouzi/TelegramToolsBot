@@ -11,6 +11,7 @@ from v2.transfer.link_direct import detect_link_type, probe_metadata
 def test_detect() -> None:
     assert detect_link_type("https://example.com/a.zip") == "direct"
     assert detect_link_type("https://www.youtube.com/watch?v=x") == "youtube"
+    assert detect_link_type("https://notyoutube.com.evil.example/watch") == "direct"
     assert detect_link_type("magnet:?xt=urn:btih:abc") == "magnet"
 
 
