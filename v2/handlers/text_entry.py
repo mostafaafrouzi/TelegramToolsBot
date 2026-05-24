@@ -49,13 +49,25 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     user_id = message.from_user.id
     state = deps.get_state(user_id)
 
-    # Tool wizard input must run BEFORE reply-keyboard routing so a typed value
-    # (e.g. "example.com" or a piece of text) isn't accidentally interpreted as a button.
-    if state.get("step") == "await_tool_input":
-        if await handle_tool_input(deps.tool_wizard_deps, message, user_id, state, text):
-            return
-
+    # When awaiting tool input, allow nav buttons (menu/back/show_*) to cancel
+    # the wizard. Otherwise pass the raw text to the tool runner.
     mapped = deps.resolve_reply_button_route(text, user_id, deps.tr)
+    if state.get("step") == "await_tool_input":
+        wizard_cancel_routes = {
+            "/menu", "/help", "/loghelp",
+            "/show_plan_menu", "/show_transfer_menu", "/show_toolkit_menu",
+            "/show_toolkit_network_menu", "/show_toolkit_crypto_menu",
+            "/show_toolkit_text_menu", "/show_toolkit_gen_menu",
+            "/show_toolkit_conv_menu", "/show_rubika_menu", "/show_bale_menu",
+            "/show_drive_menu", "/show_ssh_menu", "/show_files_menu",
+            "/show_link_direct_menu", "/show_settings_menu", "/show_admin_menu",
+        }
+        if mapped in wizard_cancel_routes or (mapped or "").startswith("/tool "):
+            deps.clear_state(user_id)
+        else:
+            if await handle_tool_input(deps.tool_wizard_deps, message, user_id, state, text):
+                return
+
     if await deps.dispatch_reply_keyboard_route(client, message, user_id, mapped, deps.reply_route_deps):
         return
 

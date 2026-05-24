@@ -410,21 +410,27 @@ show_post_deploy_summary(){
   ver="$(read_app_version "$dir/.env" 2>/dev/null || echo unknown)"
   echo
   echo "=============================================="
-  echo " Tele2Rub deploy summary (v2 menus + transfers)"
+  echo " Tele2Rub deploy summary (super-bot v2)"
   echo "=============================================="
   echo "Install dir : $dir"
   echo "Version     : $ver"
   echo "Systemd     : $([[ "$split" == "1" ]] && echo "split (bot + worker)" || echo "combined (main.py)")"
   echo
-  echo "Telegram bot quick test:"
-  echo "  /start  /menu  — main menus (Transfer, Tools, Plan)"
-  echo "  /dns google.com  — toolkit"
+  echo "What the bot offers (after /start or /menu):"
+  echo "  📁 Transfer — Rubika · Bale · Google Drive · SSH · Files/ZIP"
+  echo "  🔗 Link/video — direct HTTP & YouTube downloads (yt-dlp)"
+  echo "  🧰 Tools (38 utilities in 5 categories):"
+  echo "       Network  : DNS, MyIP, Ping, Port, SSL, Reverse DNS, IP info,"
+  echo "                  HTTP headers, WHOIS"
+  echo "       Hash/enc : MD5, SHA1/256/512, Base64, URL enc/dec, JWT decode"
+  echo "       Text     : count, Upper/Lower/Title, Reverse, Slug, Trim"
+  echo "       Generate : UUID, strong password, hex token, random number, Lorem"
+  echo "       Convert  : Now, Unix↔date, number base, color, size, JSON, calculator"
+  echo "  📤 Direct send — Rubika / Bale / Drive (one active target)"
   echo
-  echo "Transfer hub (reply menu):"
-  echo "  Rubika — connect then send files (default FILES section)"
-  echo "  Bale   — set BALE_BOT_TOKEN in .env, /bale_set_chat, open Bale menu, send file"
-  echo "  Drive  — GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON + FOLDER_ID, open Drive menu, send file"
-  echo "  SSH    — /ssh_add label host port user password  then  /ssh_put id /remote/path"
+  echo "Tip: each tool opens a wizard — tap a button, then send the value."
+  echo "Connections are per-user: /rubika_connect, /bale_connect, /drive_connect,"
+  echo "/ssh_add. No global tokens required in .env for those services."
   echo
   echo "Config file : $dir/.env"
   echo "Secrets dir : $dir/secrets  (place Drive service-account JSON here)"
@@ -577,8 +583,15 @@ post_deploy_health_check(){
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
     "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" \
     "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py" \
-    "$dir/v2/handlers/media_handler.py" \
-    "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
+    "$dir/v2/handlers/media_handler.py" "$dir/v2/handlers/tool_wizard.py" \
+    "$dir/v2/handlers/link_direct_handler.py" "$dir/v2/handlers/link_direct_commands.py" \
+    "$dir/v2/handlers/direct_send_commands.py" "$dir/v2/handlers/callback_routes.py" \
+    "$dir/v2/handlers/text_entry.py" "$dir/v2/handlers/reply_routes.py" \
+    "$dir/v2/toolkit/extended_tools.py" "$dir/v2/toolkit/dns_light.py" \
+    "$dir/v2/toolkit/text_utils_light.py" "$dir/v2/toolkit/ping_light.py" \
+    "$dir/v2/toolkit/myip_light.py" \
+    "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" \
+    "$dir/v2/transfer/ssh_client.py" "$dir/v2/transfer/link_direct.py"
   verify_python_imports "$dir" || return 1
   ok "Health check passed for systemd_base=$base split=$split dir=$dir"
   log_event "OK" "health_check_passed" "systemd_base=$base split=$split dir=$dir"
@@ -664,7 +677,7 @@ update_flow(){
     local ver
     ver="$(read_app_version "$dir/.env")"
     [[ -n "$bot_token" && -n "$admin_ids" ]] && notify_admin "$bot_token" "$admin_ids" \
-      "telegramtorubika updated on $(hostname) v=${ver}. Send /start to refresh menus (Transfer/Tools). Toolkit defaults merged if missing."
+      "telegramtorubika updated on $(hostname) v=${ver}. Send /start to load the new super-bot menu (Transfer + Link/Video + 38-tool toolkit + Direct send)."
   fi
   show_post_deploy_summary "$dir" "$split_flag"
   ok "Update completed."

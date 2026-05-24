@@ -628,8 +628,10 @@ I18N = {
         "version_line": "telegramtorubika `{version}`",
         "update_notice": (
             "ربات به‌روز شد ✅\n"
-            "نسخه: `{version}`\n"
-            "`/menu` منوی اصلی · `/lang` زبان"
+            "نسخه: `{version}`\n\n"
+            "🆕 منوی اصلی بازطراحی شد و ۳۸ ابزار جدید در ۵ دسته اضافه شده:\n"
+            "🌐 شبکه · 🔐 رمز/کدگذاری · ✏️ متن · 🎲 تولید · 🔄 تبدیل/محاسبه\n\n"
+            "`/menu` منوی اصلی · `/help` راهنما · `/lang` زبان"
         ),
         "prompt_quick_message": (
             "پیام بعدی‌ات را بفرست (متن خالی، فقط لینک، یا متن همراه لینک).\n"
@@ -1139,8 +1141,10 @@ I18N = {
         "version_line": "telegramtorubika `{version}`",
         "update_notice": (
             "Bot updated ✅\n"
-            "Version: `{version}`\n"
-            "`/menu` main menu · `/lang` language"
+            "Version: `{version}`\n\n"
+            "🆕 The main menu has been redesigned and 38 new tools are now grouped in 5 categories:\n"
+            "🌐 Network · 🔐 Hash/encoding · ✏️ Text · 🎲 Generators · 🔄 Convert/calc\n\n"
+            "`/menu` main menu · `/help` help · `/lang` language"
         ),
         "prompt_quick_message": (
             "Send your next message (plain text, a link, or both).\n"

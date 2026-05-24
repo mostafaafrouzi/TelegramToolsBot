@@ -1,20 +1,58 @@
-# telegramtorubika
+# telegramtorubika — super-bot
 
-Telegram to Rubika transfer bot with queueing, batch zip/split, per-user Rubika sessions, and server installer.
+Telegram bot that started as a Telegram → Rubika file bridge and grew into a
+multi-tool super-bot. File transfer is now **one** of many features.
 
 Repository: [github.com/mostafaafrouzi/telegramtorubika](http://github.com/mostafaafrouzi/telegramtorubika)
 
-## Features
+## What the bot can do
 
-- Per-user Rubika connection from Telegram bot (`/rubika_connect`)
-- Queue-based processing (SQLite)
-- Batch mode: collect many files, zip, split parts
-- Direct URL download
-- Safe mode (zip with password)
-- Direct mode (send everything immediately to queue)
-- Interactive server installer (install/update/uninstall/backup/restore)
-- Per-user **plans & quotas** (default tiers guest/free/pro in SQLite; `/usage` for users; `/admin_tier`, `/admin_bonus` for admins; optional `DISABLE_USAGE_LIMITS=1` for private hosts)
-- Optional **`ENABLE_UPLOAD_CHECKSUM`** on worker (MD5 logged before Rubika upload); optional **`tools/payment_webhook_stub.py`** to activate paid tiers via HTTP
+### 📁 File transfer (per-user accounts, no global tokens needed)
+
+- **Rubika** — `/rubika_connect` once, then send files. Big files are split and
+  queued; resume on Telegram/Rubika hiccups.
+- **Bale** — `/bale_connect` with your own Bale bot token + chat id.
+- **Google Drive** — `/drive_connect` with your own service-account JSON +
+  folder id. Upload + `/drive_download <file_id>`.
+- **SSH** — `/ssh_add label host port user password`, then `/ssh_put id path`
+  and `/ssh_get id path`.
+- **ZIP / split** — batch many files into one archive, optional password.
+
+### 🔗 Link / video direct download (AzuDL-style, no Colab)
+
+Open the **🔗 Link / video** menu, paste a link, choose the destination
+(Rubika / Bale / Drive). Server-side `requests` for plain HTTP; `yt-dlp` for
+YouTube. Connection to the chosen destination is verified **before** the
+server starts downloading, so no bandwidth is wasted.
+
+### 📤 Direct send mode
+
+`/directmode rubika|bale|drive on|off` — every file (and every link) you send
+goes straight to the active destination, no confirmation prompt.
+
+### 🧰 Toolkit — 38 utilities in 5 categories (tap-and-go UX)
+
+Tap a tool button → bot asks for the value → you send it → bot replies.
+No need to remember slash arguments.
+
+| Category | Tools |
+|----------|-------|
+| 🌐 Network | DNS, MyIP, Ping (TCP), Port check, SSL info, Reverse DNS, IP info (GeoIP), HTTP headers, WHOIS |
+| 🔐 Hash & encoding | MD5, SHA1, SHA256, SHA512, Base64 enc/dec, URL enc/dec, JWT decode |
+| ✏️ Text | Count (chars/words/lines), UPPER/lower/Title, Reverse, Slug, Trim whitespace |
+| 🎲 Generators | UUID, strong password, hex token, random number, Lorem ipsum |
+| 🔄 Convert & calc | Now (UTC/Tehran), Unix↔date, number base (dec/hex/oct/bin), color (hex↔rgb), size (B↔MiB↔GiB…), JSON format/validate, safe calculator |
+
+### ⚙️ Other features
+
+- Queue-based processing (SQLite, deduped, recoverable)
+- Per-user **plans & quotas** (default tiers `guest`/`free`/`pro` in SQLite;
+  `/usage`, `/plan`, `/purchase`; admin tools `/admin_tier`, `/admin_bonus`;
+  `DISABLE_USAGE_LIMITS=1` for private hosts)
+- Bilingual menus (Persian + English); `/lang`
+- Interactive server installer (install/update/uninstall/backup/restore/logs)
+- Optional `ENABLE_UPLOAD_CHECKSUM` (MD5 logged before Rubika upload)
+- Optional `tools/payment_webhook_stub.py` to activate paid tiers via HTTP
 
 ## Fast server install (curl)
 
