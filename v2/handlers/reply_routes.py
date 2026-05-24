@@ -323,6 +323,20 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/admin_bonus_help":
         await message.reply_text(tr(user_id, "admin_bonus_usage"), parse_mode=None)
         return True
+    if mapped == "/admin_tier_wizard":
+        if user_id not in deps.admin_ids:
+            await message.reply_text(tr(user_id, "admin_denied"))
+            return True
+        deps.set_state_preserving_menu(user_id, {"step": "admin_tier_user"})
+        await message.reply_text(tr(user_id, "admin_wizard_user_ask"), parse_mode=None)
+        return True
+    if mapped == "/admin_bonus_wizard":
+        if user_id not in deps.admin_ids:
+            await message.reply_text(tr(user_id, "admin_denied"))
+            return True
+        deps.set_state_preserving_menu(user_id, {"step": "admin_bonus_user"})
+        await message.reply_text(tr(user_id, "admin_wizard_user_ask"), parse_mode=None)
+        return True
     if mapped == "/admin_clear_prefs_help":
         await message.reply_text(tr(user_id, "admin_clear_prefs_hint"), parse_mode=None)
         return True
