@@ -9,7 +9,7 @@ from typing import Optional
 import requests
 
 BALE_API_BASE = (os.getenv("BALE_API_BASE") or "https://tapi.bale.ai").rstrip("/")
-BALE_MAX_BYTES = int(os.getenv("BALE_MAX_FILE_MB") or "20") * 1024 * 1024
+BALE_MAX_BYTES = int(os.getenv("BALE_MAX_FILE_MB") or "50") * 1024 * 1024
 
 
 def _api_url(token: str, method: str) -> str:
@@ -88,6 +88,9 @@ def send_photo(
     path = Path(file_path)
     if not path.is_file():
         return False, "file not found"
+    size = path.stat().st_size
+    if size > BALE_MAX_BYTES:
+        return False, f"file exceeds Bale limit ({BALE_MAX_BYTES // (1024 * 1024)} MB)"
     data = {"chat_id": str(chat_id)}
     if caption:
         data["caption"] = caption[:1024]

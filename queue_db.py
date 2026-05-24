@@ -30,6 +30,23 @@ class QueueDB:
         if "telegram_user_id" not in cols:
             conn.execute("ALTER TABLE tasks ADD COLUMN telegram_user_id INTEGER")
 
+    def _backfill_tasks_user_ids(self, conn):
+        rows = conn.execute(
+            "SELECT id, payload FROM tasks WHERE telegram_user_id IS NULL"
+        ).fetchall()
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"])
+                uid = payload.get("telegram_user_id")
+                if uid is None:
+                    continue
+                conn.execute(
+                    "UPDATE tasks SET telegram_user_id = ? WHERE id = ?",
+                    (int(uid), row["id"]),
+                )
+            except Exception:
+                continue
+
     def _migrate_v2_user_prefs_lang(self, conn):
         try:
             rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
@@ -110,6 +127,7 @@ class QueueDB:
                 """
             )
             self._migrate_tasks_table(conn)
+            self._backfill_tasks_user_ids(conn)
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS deleted_jobs (
@@ -376,6 +394,20 @@ class QueueDB:
                 rows = conn.execute(
                     "SELECT id, payload FROM tasks WHERE rubika_session = ?",
                     (rubika_session,),
+                ).fetchall()
+                ids = [r["id"] for r in rows]
+                if ids:
+                    conn.executemany("DELETE FROM tasks WHERE id = ?", [(i,) for i in ids])
+                    conn.commit()
+                return [json.loads(r["payload"]) for r in rows]
+
+    def remove_tasks_for_user(self, telegram_user_id: int) -> list[dict]:
+        """Remove all pending queue rows owned by a Telegram user."""
+        with self._lock:
+            with self._connect() as conn:
+                rows = conn.execute(
+                    "SELECT id, payload FROM tasks WHERE telegram_user_id = ?",
+                    (int(telegram_user_id),),
                 ).fetchall()
                 ids = [r["id"] for r in rows]
                 if ids:

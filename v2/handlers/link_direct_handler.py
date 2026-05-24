@@ -11,6 +11,7 @@ from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.core.menu_sections import MenuSection
+from v2.transfer.bale_client import BALE_MAX_BYTES
 from v2.transfer.link_direct import LinkMetadata, download_to_path, probe_metadata
 from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
@@ -123,6 +124,21 @@ async def enqueue_downloaded_file(
             parse_mode=None,
         )
         return
+    if dest == "bale" and file_size > BALE_MAX_BYTES:
+        try:
+            local_path.unlink()
+        except OSError:
+            pass
+        await message.reply_text(
+            deps.tr(
+                user_id,
+                "bale_file_too_large",
+                max_mb=BALE_MAX_BYTES // (1024 * 1024),
+                size_mb=deps.fmt_mb_bytes(file_size),
+            ),
+            parse_mode=None,
+        )
+        return
 
     settings = deps.load_settings()
     task: dict = {
@@ -142,21 +158,48 @@ async def enqueue_downloaded_file(
         task["type"] = "local_file"
         summary = deps.tr(user_id, "file_prepared_summary", name=local_path.name)
         if not await deps.gate_quota(message, user_id, task):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
             return
         status = await message.reply_text(deps.tr(user_id, "link_download_done_queue"), parse_mode=None)
-        await deps.queue_or_confirm(message, task, summary, status_message=status)
+        queued_or_pending = await deps.queue_or_confirm(message, task, summary, status_message=status)
+        if queued_or_pending is False:
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
     elif dest == "bale":
         task["type"] = "transfer_to_bale"
         if not await deps.gate_quota(message, user_id, task):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
             return
         status = await message.reply_text(deps.tr(user_id, "link_download_done_queue"), parse_mode=None)
-        await deps.push_task_direct(message, task, status_message=status)
+        queued = await deps.push_task_direct(message, task, status_message=status)
+        if queued is False:
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
     else:
         task["type"] = "transfer_to_drive"
         if not await deps.gate_quota(message, user_id, task):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
             return
         status = await message.reply_text(deps.tr(user_id, "link_download_done_queue"), parse_mode=None)
-        await deps.push_task_direct(message, task, status_message=status)
+        queued = await deps.push_task_direct(message, task, status_message=status)
+        if queued is False:
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
 
     deps.log_event(
         "link_direct_queued",

@@ -402,6 +402,7 @@ I18N = {
         "link_dest_bale": "بله",
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "لغو",
+        "link_dest_invalid": "مقصد نامعتبر است.",
         "link_need_rubika": "روبیکا متصل نیست. `/rubika_connect`",
         "link_probe_unsupported": "این لینک قابل دانلود نیست. ({detail})",
         "link_ytdlp_missing": "یوتیوب نیاز به `yt-dlp` روی سرور دارد.",
@@ -411,6 +412,7 @@ I18N = {
         "link_downloading": "در حال دانلود روی سرور…",
         "link_download_failed": "دانلود ناموفق: {error}",
         "link_download_done_queue": "دانلود شد؛ در صف ارسال…",
+        "link_media_hint": "در بخش لینک/ویدیو باید لینک بفرستی. برای ارسال فایل از «📁 انتقال فایل» مقصد را انتخاب کن.",
         "newbatch_ok": (
             "جلسه فایل ZIP فعال شد.\n"
             "فایل‌ها را ارسال کن. بعد از اتمام، «پایان فایل ZIP» یا `/done` را بزن."
@@ -419,7 +421,7 @@ I18N = {
         "prompt_sendlink": "لینک را ارسال کن.",
         "queue_panel": (
             "مدیریت صف:\n\n"
-            "- در انتظار در صف SQLite: `{pending}`\n"
+            "- در انتظار در صف SQLite (همه مقصدهای تو): `{pending}`\n"
             "- هم‌اکنون در حال پردازش (worker): `{processing}`\n"
             "- کل خطاها (global): `{failed}`\n"
             "- حذف‌شده‌ها: `{deleted}`\n"
@@ -642,6 +644,8 @@ I18N = {
         "cleanup_done": "پاکسازی `downloads/`: {n} فایل، حدود {mb} MB آزاد شد.",
         "direct_need_rubika": "برای حالت مستقیم اول `/rubika_connect` بزن.",
         "file_too_large": "فایل از سقف مجاز بزرگ‌تر است (حداکثر ~`{max_mb}` مگابایت با توجه به پلن و `MAX_FILE_MB`). حجم این فایل: ~`{size_mb}` مگابایت.",
+        "bale_file_too_large": "بله این فایل را نمی‌پذیرد (حداکثر `{max_mb}` MB). حجم فایل: ~`{size_mb}` MB.",
+        "text_unhandled_hint": "متوجه این پیام نشدم. از دکمه‌های منو استفاده کن یا `/help` را بزن.",
         "admin_max_file": "`MAX_FILE_MB` (سقف آپلود env): `{mb}` (`0` یا خالی = بدون سقف env)",
         "admin_plan_note": "سهمیه پلن‌ها در SQLite (`user_entitlements`) — `/usage` برای کاربران.",
         "admin_clear_prefs_hint": "پاک کردن ردیف mirror prefs در SQLite: `/admin_clear_prefs <telegram_user_id>`",
@@ -836,6 +840,7 @@ I18N = {
         "link_dest_bale": "Bale",
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "Cancel",
+        "link_dest_invalid": "Invalid destination.",
         "link_need_rubika": "Rubika not connected. `/rubika_connect`",
         "link_probe_unsupported": "Cannot download this link. ({detail})",
         "link_ytdlp_missing": "YouTube needs `yt-dlp` on the server.",
@@ -845,6 +850,7 @@ I18N = {
         "link_downloading": "Downloading on server…",
         "link_download_failed": "Download failed: {error}",
         "link_download_done_queue": "Downloaded; queuing upload…",
+        "link_media_hint": "This section expects a link/video URL. To send a file, open File transfer and choose a destination.",
         "newbatch_ok": (
             "ZIP batch started.\n"
             "Send files, then tap «End ZIP» or `/done`."
@@ -853,7 +859,7 @@ I18N = {
         "prompt_sendlink": "Send the link.",
         "queue_panel": (
             "Queue:\n\n"
-            "- Pending in SQLite (your session): `{pending}`\n"
+            "- Pending in SQLite (all your destinations): `{pending}`\n"
             "- Currently processing (worker): `{processing}`\n"
             "- Failed (global): `{failed}`\n"
             "- Deleted: `{deleted}`\n"
@@ -1068,6 +1074,8 @@ I18N = {
         "cleanup_done": "Cleaned `downloads/`: {n} files, ~{mb} MB freed.",
         "direct_need_rubika": "Link Rubika first: `/rubika_connect`",
         "file_too_large": "File exceeds the limit (max ~`{max_mb}` MB from plan + `MAX_FILE_MB`). This file is ~`{size_mb}` MB.",
+        "bale_file_too_large": "Bale cannot accept this file (max `{max_mb}` MB). This file is ~`{size_mb}` MB.",
+        "text_unhandled_hint": "I did not understand that message. Use the menu buttons or send `/help`.",
         "admin_max_file": "`MAX_FILE_MB` (env cap): `{mb}` (`0` or empty = no env cap)",
         "admin_plan_note": "Per-user plans live in SQLite (`user_entitlements`). Users: `/usage`.",
         "admin_clear_prefs_hint": "Clear cached `v2_user_prefs` row: `/admin_clear_prefs <telegram_user_id>`",
@@ -1631,6 +1639,19 @@ def set_menu_section(user_id: int, section: MenuSection) -> None:
         log_event("v2_user_prefs_upsert_failed", user_id=user_id, error=str(e))
 
 
+def get_effective_menu_section(user_id: int) -> Optional[str]:
+    """Read menu section from the same merged state source used by text routing."""
+    state = get_state(user_id)
+    section = state.get(MENU_SECTION_KEY)
+    if section:
+        return str(section)
+    try:
+        return queue.get_menu_section(user_id)
+    except Exception as e:
+        log_event("v2_user_prefs_read_failed", user_id=user_id, error=str(e))
+        return None
+
+
 def set_state_preserving_menu(user_id: int, new_state: dict) -> None:
     """Replace wizard/session keys but keep MENU_SECTION_KEY if already set."""
     prev = get_state(user_id)
@@ -1949,7 +1970,12 @@ def extract_first_url(text: str) -> Optional[str]:
         return None
 
     match = re.search(r"https?://\S+", text)
-    return match.group(0) if match else None
+    if match:
+        return match.group(0).rstrip(".,)")
+    match = re.search(r"(?:www\.|youtu\.be/|youtube\.com/)[^\s]+", text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    return f"https://{match.group(0).rstrip('.,)')}"
 
 
 def progress_bar(percent: float, length: int = 12) -> str:
@@ -2469,12 +2495,14 @@ QUEUE_COMMAND_DEPS = QueueCommandDeps(
     extract_first_url=extract_first_url,
     get_user_session=get_user_session,
     queue_count_by_session=queue.queue_count_by_session,
+    count_tasks_for_user=queue.count_tasks_for_user,
     processing_display_for_queue=processing_display_for_queue,
     failed_count=failed_count,
     queue_deleted_count=queue.deleted_count,
     queue_cancelled_count=queue.cancelled_count,
     queue_all_tasks=queue.all_tasks,
     queue_remove_tasks_by_session=queue.remove_tasks_by_session,
+    queue_remove_tasks_for_user=queue.remove_tasks_for_user,
     mark_deleted=mark_deleted,
 )
 
@@ -2539,12 +2567,12 @@ async def queue_or_confirm(
     task: dict,
     summary: str,
     status_message: Optional[Message] = None,
-):
+) -> bool:
     user_id = message.from_user.id
     task["telegram_user_id"] = user_id
     if get_direct_mode_target(user_id):
         if not await gate_quota(message, user_id, task):
-            return
+            return False
         anchor = status_message
         if anchor:
             task["chat_id"] = message.chat.id
@@ -2569,7 +2597,7 @@ async def queue_or_confirm(
                 )
             except MessageNotModified:
                 pass
-            return
+            return True
 
         status = await message.reply_text(tr(user_id, "queued_processing"))
         task["chat_id"] = message.chat.id
@@ -2590,7 +2618,7 @@ async def queue_or_confirm(
             )
         except MessageNotModified:
             pass
-        return
+        return True
 
     set_state_preserving_menu(
         user_id,
@@ -2621,19 +2649,20 @@ async def queue_or_confirm(
         user_id=user_id,
         task_type=task.get("type"),
     )
+    return True
 
 
 async def push_task_direct(
     message: Message,
     task: dict,
     status_message: Optional[Message] = None,
-) -> None:
+) -> bool:
     """Queue non-Rubika transfer tasks immediately (Bale, Drive, SSH)."""
     user_id = message.from_user.id
     task["telegram_user_id"] = user_id
     task["chat_id"] = message.chat.id
     if not await gate_quota(message, user_id, task):
-        return
+        return False
     anchor = status_message
     if not anchor:
         anchor = await message.reply_text(tr(user_id, "text_queueing"), parse_mode=None)
@@ -2657,6 +2686,7 @@ async def push_task_direct(
     st = get_state(user_id)
     if st.get("step") == "await_ssh_put_file":
         clear_state(user_id)
+    return True
 
 
 async def safe_delete_user_message(message: Message):
@@ -2970,7 +3000,7 @@ LINK_DIRECT_HANDLER_DEPS = LinkDirectHandlerDeps(
     download_dir=DOWNLOAD_DIR,
     queue=queue,
     extract_first_url=extract_first_url,
-    get_menu_section=queue.get_menu_section,
+    get_menu_section=get_effective_menu_section,
     get_user_session=get_user_session,
     load_settings=load_settings,
     effective_max_file_bytes=effective_max_file_bytes,
@@ -2998,6 +3028,7 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     clear_queue_handler=clear_queue_handler,
     get_user_session=get_user_session,
     queue_count_by_session=queue.queue_count_by_session,
+    count_tasks_for_user=queue.count_tasks_for_user,
     failed_count=failed_count,
     recent_failed_detail_text=recent_failed_detail_text,
     recent_jobs_summary=recent_jobs_summary,
@@ -3053,6 +3084,7 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     direct_url_hint_deps=DIRECT_URL_HINT_DEPS,
     handle_link_direct_text=handle_link_direct_text,
     link_direct_deps=LINK_DIRECT_HANDLER_DEPS,
+    build_main_menu=build_main_menu,
 )
 
 MEDIA_HANDLER_DEPS = MediaHandlerDeps(
@@ -3060,7 +3092,7 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     base_dir=BASE_DIR,
     queue=queue,
     get_user_session=get_user_session,
-    get_menu_section=queue.get_menu_section,
+    get_menu_section=get_effective_menu_section,
     get_bale_credentials=queue.get_bale_credentials,
     get_state=get_state,
     set_state_preserving_menu=set_state_preserving_menu,

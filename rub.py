@@ -695,7 +695,7 @@ def process_task(task: dict):
         local_path = Path(task.get("path", ""))
         if not local_path.exists():
             raise RuntimeError("Local file not found.")
-        token = str(task.get("bale_bot_token") or os.getenv("BALE_BOT_TOKEN") or "").strip()
+        token = str(task.get("bale_bot_token") or "").strip()
         chat_id = str(task.get("bale_chat_id") or "").strip()
         if not token:
             raise RuntimeError("Bale bot token missing. Use /bale_connect in the bot.")
@@ -703,18 +703,20 @@ def process_task(task: dict):
             raise RuntimeError("Bale chat_id missing. Use /bale_connect in the bot.")
         from v2.transfer.bale_client import send_file_auto
 
-        push_status(task, "در حال ارسال به بله ...", "uploading")
-        ok, detail = send_file_auto(token, chat_id, local_path, caption=caption)
-        if not ok:
-            raise RuntimeError(detail)
-        bill_upload_usage(task, local_path.stat().st_size)
-        push_status(task, f"فایل با موفقیت به بله ارسال شد.\n{detail}", "done")
         try:
-            if local_path.exists():
-                local_path.unlink()
-        except Exception:
-            pass
-        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+            push_status(task, "در حال ارسال به بله ...", "uploading")
+            ok, detail = send_file_auto(token, chat_id, local_path, caption=caption)
+            if not ok:
+                raise RuntimeError(detail)
+            bill_upload_usage(task, local_path.stat().st_size)
+            push_status(task, f"فایل با موفقیت به بله ارسال شد.\n{detail}", "done")
+            wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        finally:
+            try:
+                if local_path.exists():
+                    local_path.unlink()
+            except Exception:
+                pass
         return
 
     elif task_type == "transfer_to_drive":
@@ -725,23 +727,25 @@ def process_task(task: dict):
 
         sa_path = str(task.get("drive_sa_path") or "").strip() or None
         folder_id = str(task.get("drive_folder_id") or "").strip() or None
-        push_status(task, "در حال آپلود به Google Drive ...", "uploading")
-        ok, link, _meta = upload_file(
-            local_path,
-            file_name=task.get("file_name") or local_path.name,
-            service_account_path=sa_path,
-            folder_id=folder_id,
-        )
-        if not ok:
-            raise RuntimeError(link)
-        bill_upload_usage(task, local_path.stat().st_size)
-        push_status(task, f"آپلود Drive انجام شد.\n{link}", "done")
         try:
-            if local_path.exists():
-                local_path.unlink()
-        except Exception:
-            pass
-        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+            push_status(task, "در حال آپلود به Google Drive ...", "uploading")
+            ok, link, _meta = upload_file(
+                local_path,
+                file_name=task.get("file_name") or local_path.name,
+                service_account_path=sa_path,
+                folder_id=folder_id,
+            )
+            if not ok:
+                raise RuntimeError(link)
+            bill_upload_usage(task, local_path.stat().st_size)
+            push_status(task, f"آپلود Drive انجام شد.\n{link}", "done")
+            wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        finally:
+            try:
+                if local_path.exists():
+                    local_path.unlink()
+            except Exception:
+                pass
         return
 
     elif task_type == "ssh_put":
@@ -751,21 +755,28 @@ def process_task(task: dict):
         srv = task.get("ssh_server") or {}
         from v2.transfer.ssh_client import sftp_put
 
-        push_status(task, "در حال SFTP put ...", "uploading")
-        ok, detail = sftp_put(
-            srv.get("host", ""),
-            int(srv.get("port") or 22),
-            srv.get("ssh_user", ""),
-            local_path,
-            str(task.get("remote_path") or ""),
-            password=srv.get("ssh_secret"),
-            key_filename=srv.get("ssh_key_path"),
-        )
-        if not ok:
-            raise RuntimeError(detail)
-        bill_upload_usage(task, local_path.stat().st_size)
-        push_status(task, f"SFTP put OK → {detail}", "done")
-        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        try:
+            push_status(task, "در حال SFTP put ...", "uploading")
+            ok, detail = sftp_put(
+                srv.get("host", ""),
+                int(srv.get("port") or 22),
+                srv.get("ssh_user", ""),
+                local_path,
+                str(task.get("remote_path") or ""),
+                password=srv.get("ssh_secret"),
+                key_filename=srv.get("ssh_key_path"),
+            )
+            if not ok:
+                raise RuntimeError(detail)
+            bill_upload_usage(task, local_path.stat().st_size)
+            push_status(task, f"SFTP put OK → {detail}", "done")
+            wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        finally:
+            try:
+                if local_path.exists():
+                    local_path.unlink()
+            except Exception:
+                pass
         return
 
     elif task_type == "ssh_get":

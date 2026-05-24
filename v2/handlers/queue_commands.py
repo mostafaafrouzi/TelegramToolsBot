@@ -22,12 +22,14 @@ class QueueCommandDeps:
     extract_first_url: Callable[[str], Optional[str]]
     get_user_session: Callable[[int], Optional[str]]
     queue_count_by_session: Callable[[str], int]
+    count_tasks_for_user: Callable[[int], int]
     processing_display_for_queue: Callable[[int], str]
     failed_count: Callable[[], int]
     queue_deleted_count: Callable[[], int]
     queue_cancelled_count: Callable[[], int]
     queue_all_tasks: Callable[[], list[dict]]
     queue_remove_tasks_by_session: Callable[[Optional[str]], None]
+    queue_remove_tasks_for_user: Callable[[int], list[dict]]
     mark_deleted: Callable[[dict], None]
 
 
@@ -62,8 +64,7 @@ async def handle_queue_manage(
 ) -> None:
     user_id = target_user_id if target_user_id is not None else message.from_user.id
     deps.set_menu_section(user_id, MenuSection.PLAN)
-    session = deps.get_user_session(user_id)
-    pending = deps.queue_count_by_session(session or "")
+    pending = deps.count_tasks_for_user(user_id)
     proc = deps.processing_display_for_queue(user_id)
     summary = deps.tr(
         user_id,
@@ -104,8 +105,11 @@ async def handle_clear_queue(
     acting_user_id: Optional[int] = None,
 ) -> None:
     uid = acting_user_id if acting_user_id is not None else message.from_user.id
-    user_session = deps.get_user_session(uid)
-    tasks = [t for t in deps.queue_all_tasks() if t.get("rubika_session") == user_session]
+    tasks = [
+        t
+        for t in deps.queue_all_tasks()
+        if int(t.get("telegram_user_id") or 0) == int(uid)
+    ]
     if not tasks:
         await message.reply_text(deps.tr(uid, "queue_empty"))
         return
@@ -134,5 +138,5 @@ async def handle_clear_queue(
         except Exception:
             pass
 
-    deps.queue_remove_tasks_by_session(user_session)
+    deps.queue_remove_tasks_for_user(uid)
     await message.reply_text(deps.tr(uid, "queue_cleared_all"))

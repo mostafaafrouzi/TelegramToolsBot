@@ -40,6 +40,7 @@ class TextEntryDeps:
     direct_url_hint_deps: Any
     handle_link_direct_text: AsyncWizardFn
     link_direct_deps: Any
+    build_main_menu: Callable[[int], Any]
 
 
 async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) -> None:
@@ -94,3 +95,9 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
 
     if await deps.handle_direct_url_sendlink_hint(message, user_id, text, deps.direct_url_hint_deps):
         return
+
+    await message.reply_text(
+        deps.tr(user_id, "text_unhandled_hint"),
+        reply_markup=deps.build_main_menu(user_id),
+        parse_mode=None,
+    )

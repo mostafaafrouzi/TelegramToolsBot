@@ -396,10 +396,28 @@ os.chdir('$dir')
 import telebot
 print('telebot-import-ok')
 " || return 1
+  run_cmd "python worker import smoke test" "$dir/venv/bin/python" -c "
+import os
+os.chdir('$dir')
+import rub
+print('rub-import-ok')
+" || return 1
   if "$dir/venv/bin/python" -c "import google.oauth2; import googleapiclient" 2>/dev/null; then
     ok "Google Drive Python libraries available"
   else
     warn "Google Drive libraries not importable (optional until GOOGLE_DRIVE_* configured)"
+  fi
+  return 0
+}
+
+check_recent_journal_errors(){
+  local unit="$1"
+  local logs
+  logs="$(journalctl -u "$unit" --since "1 minute ago" --no-pager 2>/dev/null || true)"
+  if echo "$logs" | grep -E "Traceback|NameError|ModuleNotFoundError|RuntimeError|Failed to start" >/dev/null 2>&1; then
+    err "Recent errors detected in journal for $unit"
+    echo "$logs" | tail -n 80 >>"$LOG_FILE" 2>&1 || true
+    return 1
   fi
   return 0
 }
@@ -422,8 +440,8 @@ show_post_deploy_summary(){
   echo
   echo "Transfer hub (reply menu):"
   echo "  Rubika — connect then send files (default FILES section)"
-  echo "  Bale   — set BALE_BOT_TOKEN in .env, /bale_set_chat, open Bale menu, send file"
-  echo "  Drive  — GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON + FOLDER_ID, open Drive menu, send file"
+  echo "  Bale   — each user runs /bale_connect with their own Bale bot token"
+  echo "  Drive  — each user runs /drive_connect with their own service-account JSON + folder"
   echo "  SSH    — /ssh_add label host port user password  then  /ssh_put id /remote/path"
   echo
   echo "Config file : $dir/.env"
@@ -491,6 +509,7 @@ ExecStart=${dir}/venv/bin/python ${dir}/telebot.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-${dir}/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -509,6 +528,7 @@ ExecStart=${dir}/venv/bin/python ${dir}/rub.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-${dir}/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -549,6 +569,7 @@ ExecStart=${dir}/venv/bin/python ${dir}/main.py
 Restart=always
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-${dir}/.env
 
 [Install]
 WantedBy=multi-user.target
@@ -580,6 +601,16 @@ post_deploy_health_check(){
     "$dir/v2/handlers/media_handler.py" \
     "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
   verify_python_imports "$dir" || return 1
+  sleep 3
+  if [[ "$split" == "1" ]]; then
+    run_cmd "bot post-restart active check" systemctl is-active --quiet "${base}-bot"
+    run_cmd "worker post-restart active check" systemctl is-active --quiet "${base}-worker"
+    check_recent_journal_errors "${base}-bot" || return 1
+    check_recent_journal_errors "${base}-worker" || return 1
+  else
+    run_cmd "service post-restart active check" systemctl is-active --quiet "$base"
+    check_recent_journal_errors "$base" || return 1
+  fi
   ok "Health check passed for systemd_base=$base split=$split dir=$dir"
   log_event "OK" "health_check_passed" "systemd_base=$base split=$split dir=$dir"
 }

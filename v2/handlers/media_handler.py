@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
+from v2.transfer.bale_client import BALE_MAX_BYTES
 from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
 TranslateFn = Callable[..., str]
@@ -48,6 +49,10 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
     user_id = message.from_user.id
     state = deps.get_state(user_id)
     section = (deps.get_menu_section(user_id) or MenuSection.MAIN.value).strip().lower()
+
+    if section == MenuSection.LINK_DIRECT.value:
+        await message.reply_text(deps.tr(user_id, "link_media_hint"), parse_mode=None)
+        return
 
     if state.get("step") == "await_drive_sa_json":
         if not message.document:
@@ -203,6 +208,21 @@ async def _download_and_queue(
                 parse_mode=None,
             )
             return
+        if task_type == "transfer_to_bale" and file_size > BALE_MAX_BYTES:
+            try:
+                downloaded_path.unlink()
+            except Exception:
+                pass
+            await status.edit_text(
+                deps.tr(
+                    user_id,
+                    "bale_file_too_large",
+                    max_mb=BALE_MAX_BYTES // (1024 * 1024),
+                    size_mb=deps.fmt_mb_bytes(file_size),
+                ),
+                parse_mode=None,
+            )
+            return
 
         settings = deps.load_settings()
         batch = deps.get_batch(user_id)
@@ -257,9 +277,19 @@ async def _download_and_queue(
 
         if task_type == "local_file":
             summary = deps.tr(user_id, "file_prepared_summary", name=download_name)
-            await deps.queue_or_confirm(message, task, summary, status_message=status)
+            queued_or_pending = await deps.queue_or_confirm(message, task, summary, status_message=status)
+            if queued_or_pending is False:
+                try:
+                    downloaded_path.unlink()
+                except Exception:
+                    pass
         else:
-            await deps.push_task_direct(message, task, status_message=status)
+            queued = await deps.push_task_direct(message, task, status_message=status)
+            if queued is False:
+                try:
+                    downloaded_path.unlink()
+                except Exception:
+                    pass
 
         deps.log_event(
             "media_prepared",
