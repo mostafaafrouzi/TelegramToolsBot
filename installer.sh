@@ -193,7 +193,7 @@ install_deps(){
     run_cmd "apt update" apt-get update
     run_cmd "install dependencies" apt-get install -y \
       python3 python3-venv python3-pip git ffmpeg curl rsync ca-certificates \
-      build-essential libffi-dev
+      build-essential python3-dev libffi-dev
     return
   fi
   if command -v dnf >/dev/null 2>&1; then
