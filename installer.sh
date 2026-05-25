@@ -417,7 +417,8 @@ print('rub-import-ok')
 check_recent_journal_errors(){
   local unit="$1"
   local logs
-  logs="$(journalctl -u "$unit" --since "1 minute ago" --no-pager 2>/dev/null || true)"
+  # Only lines after the latest restart (avoid failing update due to pre-restart crash loop).
+  logs="$(journalctl -u "$unit" -n 80 --no-pager 2>/dev/null || true)"
   if echo "$logs" | grep -E "Traceback|NameError|ModuleNotFoundError|Failed to start" | grep -v "task_failed\|upload.*error\|rubika.*error" >/dev/null 2>&1; then
     err "Recent errors detected in journal for $unit"
     echo "$logs" | tail -n 80 >>"$LOG_FILE" 2>&1 || true
@@ -602,10 +603,20 @@ post_deploy_health_check(){
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
     "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" \
     "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py" \
-    "$dir/v2/handlers/media_handler.py" "$dir/v2/handlers/cloudflare_commands.py" \
+    "$dir/v2/handlers/media_handler.py" "$dir/v2/handlers/admin_commands.py" \
+    "$dir/v2/handlers/cloudflare_commands.py" \
     "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
   verify_python_imports "$dir" || return 1
-  sleep 3
+  # Ensure SQLite schema (e.g. v2_user_activity) exists before service handles messages.
+  run_cmd "sqlite schema migration smoke" "$dir/venv/bin/python" -c "
+import os
+os.chdir('$dir')
+from queue_db import QueueDB
+q = QueueDB()
+q.record_user_activity(0, first_name='schema-check', username='')
+print('schema-ok')
+" || return 1
+  sleep 5
   if [[ "$split" == "1" ]]; then
     run_cmd "bot post-restart active check" systemctl is-active --quiet "${base}-bot"
     run_cmd "worker post-restart active check" systemctl is-active --quiet "${base}-worker"

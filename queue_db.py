@@ -226,6 +226,21 @@ class QueueDB:
             )
             conn.execute(
                 """
+                CREATE TABLE IF NOT EXISTS v2_user_activity (
+                    telegram_user_id INTEGER PRIMARY KEY,
+                    first_name TEXT,
+                    username TEXT,
+                    first_seen_at INTEGER NOT NULL,
+                    last_seen_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_v2_user_activity_last_seen "
+                "ON v2_user_activity(last_seen_at DESC)"
+            )
+            conn.execute(
+                """
                 CREATE TABLE IF NOT EXISTS v2_ssh_servers (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     telegram_user_id INTEGER NOT NULL,
@@ -493,6 +508,23 @@ class QueueDB:
             row = conn.execute("SELECT COUNT(1) AS c FROM deleted_jobs").fetchone()
             return int(row["c"] if row else 0)
 
+    def _ensure_v2_user_activity_table(self, conn: sqlite3.Connection) -> None:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS v2_user_activity (
+                telegram_user_id INTEGER PRIMARY KEY,
+                first_name TEXT,
+                username TEXT,
+                first_seen_at INTEGER NOT NULL,
+                last_seen_at INTEGER NOT NULL
+            )
+            """
+        )
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_v2_user_activity_last_seen "
+            "ON v2_user_activity(last_seen_at DESC)"
+        )
+
     def record_user_activity(
         self,
         telegram_user_id: int,
@@ -503,6 +535,7 @@ class QueueDB:
         now = int(time.time())
         with self._lock:
             with self._connect() as conn:
+                self._ensure_v2_user_activity_table(conn)
                 conn.execute(
                     """
                     INSERT INTO v2_user_activity (telegram_user_id, first_name, username, first_seen_at, last_seen_at)

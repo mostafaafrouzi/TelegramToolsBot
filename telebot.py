@@ -3461,23 +3461,31 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
 )
 
 
-async def text_handler(client: Client, message: Message):
-    if message.from_user:
+def _touch_user_activity(message: Message) -> None:
+    user = message.from_user
+    if not user:
+        return
+    try:
         queue.record_user_activity(
-            message.from_user.id,
-            first_name=message.from_user.first_name or "",
-            username=message.from_user.username or "",
+            user.id,
+            first_name=user.first_name or "",
+            username=user.username or "",
         )
+    except Exception as e:
+        log_event(
+            "record_user_activity_failed",
+            user_id=user.id,
+            error=str(e),
+        )
+
+
+async def text_handler(client: Client, message: Message):
+    _touch_user_activity(message)
     await handle_text_entry(TEXT_ENTRY_DEPS, client, message)
 
-    
+
 async def media_handler(client: Client, message: Message):
-    if message.from_user:
-        queue.record_user_activity(
-            message.from_user.id,
-            first_name=message.from_user.first_name or "",
-            username=message.from_user.username or "",
-        )
+    _touch_user_activity(message)
     await handle_media_message(MEDIA_HANDLER_DEPS, client, message)
 
 
