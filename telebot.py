@@ -2805,7 +2805,7 @@ async def queue_or_confirm(
             except Exception:
                 pass
             pushed = queue.push_task(task)
-            qpos = queue.queue_count_by_session(task.get("rubika_session") or "")
+            qpos = queue.count_tasks_for_user(user_id)
             log_event(
                 "task_queued",
                 user_id=user_id,
@@ -2826,7 +2826,7 @@ async def queue_or_confirm(
         task["chat_id"] = message.chat.id
         task["status_message_id"] = status.id
         pushed = queue.push_task(task)
-        qpos = queue.queue_count_by_session(task.get("rubika_session") or "")
+        qpos = queue.count_tasks_for_user(user_id)
         log_event(
             "task_queued",
             user_id=user_id,

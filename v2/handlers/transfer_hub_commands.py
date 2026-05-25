@@ -158,10 +158,6 @@ async def handle_drive_ls(deps: TransferHubDeps, client: Any, message: Message) 
         deps.tr(uid, "drive_ls_result", detail=detail) if ok else deps.tr(uid, "drive_ls_error", error=detail),
         parse_mode=None,
     )
-    await message.reply_text(
-        deps.tr(uid, "drive_status_line", ok="yes" if ok else "no", detail=detail),
-        parse_mode=None,
-    )
 
 
 async def handle_show_ssh_menu(deps: TransferHubDeps, client: Any, message: Message) -> None:

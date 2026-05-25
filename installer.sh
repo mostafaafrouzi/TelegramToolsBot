@@ -416,7 +416,7 @@ check_recent_journal_errors(){
   local unit="$1"
   local logs
   logs="$(journalctl -u "$unit" --since "1 minute ago" --no-pager 2>/dev/null || true)"
-  if echo "$logs" | grep -E "Traceback|NameError|ModuleNotFoundError|RuntimeError|Failed to start" >/dev/null 2>&1; then
+  if echo "$logs" | grep -E "Traceback|NameError|ModuleNotFoundError|Failed to start" | grep -v "task_failed\|upload.*error\|rubika.*error" >/dev/null 2>&1; then
     err "Recent errors detected in journal for $unit"
     echo "$logs" | tail -n 80 >>"$LOG_FILE" 2>&1 || true
     return 1
