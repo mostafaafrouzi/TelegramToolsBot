@@ -54,6 +54,13 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
         await message.reply_text(deps.tr(user_id, "link_media_hint"), parse_mode=None)
         return
 
+    if section == MenuSection.CLOUDFLARE.value:
+        if state.get("step") == "await_cloudflare_token":
+            await message.reply_text(deps.tr(user_id, "cf_ask_token"), parse_mode=None)
+            return
+        await message.reply_text(deps.tr(user_id, "cf_media_hint"), parse_mode=None)
+        return
+
     if state.get("step") == "await_drive_sa_json":
         if not message.document:
             await message.reply_text(deps.tr(user_id, "drive_sa_need_document"), parse_mode=None)

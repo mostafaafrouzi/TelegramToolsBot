@@ -153,6 +153,21 @@ discover_instances(){
   done
 }
 
+select_instance_auto(){
+  discover_instances
+  if [[ ${#INST_DIRS[@]} -eq 0 ]]; then
+    warn "No installed ${DISPLAY_NAME} instances were auto-detected."
+    return 1
+  fi
+  SELECTED_LABEL="${INST_LABELS[0]}"
+  SELECTED_DIR="${INST_DIRS[0]}"
+  SELECTED_USER="${INST_USERS[0]}"
+  SELECTED_BASE="${INST_BASES[0]}"
+  SELECTED_SPLIT="${INST_SPLITS[0]}"
+  info "Auto-selected instance: ${SELECTED_LABEL} (${SELECTED_DIR})"
+  return 0
+}
+
 select_instance(){
   discover_instances
   if [[ ${#INST_DIRS[@]} -eq 0 ]]; then
@@ -167,13 +182,8 @@ select_instance(){
   done
   echo
   if [[ ! -t 0 ]]; then
-    SELECTED_LABEL="${INST_LABELS[0]}"
-    SELECTED_DIR="${INST_DIRS[0]}"
-    SELECTED_USER="${INST_USERS[0]}"
-    SELECTED_BASE="${INST_BASES[0]}"
-    SELECTED_SPLIT="${INST_SPLITS[0]}"
-    info "Non-interactive mode: auto-selected instance ${SELECTED_LABEL}"
-    return 0
+    select_instance_auto
+    return $?
   fi
   local pick
   while true; do
@@ -675,10 +685,19 @@ install_flow(){
   ok "Install completed."
 }
 
+UPDATE_SKIP_BACKUP=0
+UPDATE_FORCE_AUTO=0
+
 update_flow(){
   ensure_root; os_check
   local dir svc user bot_token admin_ids split_flag=0
-  if select_instance; then
+  if [[ "${UPDATE_FORCE_AUTO:-0}" == "1" ]]; then
+    select_instance_auto || return 1
+    dir="$SELECTED_DIR"
+    svc="$SELECTED_BASE"
+    user="$SELECTED_USER"
+    split_flag="$SELECTED_SPLIT"
+  elif select_instance; then
     dir="$SELECTED_DIR"
     svc="$SELECTED_BASE"
     user="$SELECTED_USER"
@@ -693,7 +712,11 @@ update_flow(){
     fi
   fi
   [[ -d "$dir" ]] || { err "Install directory not found: $dir"; return 1; }
-  if ask_yn "Create backup before update?" "y"; then backup_flow "$dir"; fi
+  if [[ "${UPDATE_SKIP_BACKUP:-0}" == "1" ]]; then
+    info "Skipping backup (quick update)"
+  elif ask_yn "Create backup before update?" "y"; then
+    backup_flow "$dir"
+  fi
   stop_instance_services "$svc" "$split_flag"
   install_deps || return 1
   clone_or_update_repo "$dir" || return 1
@@ -714,6 +737,19 @@ update_flow(){
   fi
   show_post_deploy_summary "$dir" "$split_flag"
   ok "Update completed."
+}
+
+# Non-interactive full update: first detected instance, no backup, full deploy steps.
+update_quick_flow(){
+  UPDATE_SKIP_BACKUP=1
+  UPDATE_FORCE_AUTO=1
+  log_event "INFO" "update_quick_start" "skip_backup=1 auto_instance=1"
+  info "Quick update: auto-select instance, no backup, pull code + venv + health check + restart"
+  update_flow
+  local rc=$?
+  UPDATE_SKIP_BACKUP=0
+  UPDATE_FORCE_AUTO=0
+  return "$rc"
 }
 
 # Sync .env keys from .env.example without pulling new code (safe repair).
@@ -877,10 +913,24 @@ worker_logs_flow(){
   tail -n 300 "$dir/queue/worker_events.jsonl" || true
 }
 
+_dump_log_section(){
+  local title="$1" path="$2" max="${3:-2000}"
+  echo "===== $title ====="
+  if [[ -f "$path" ]]; then
+    local lines
+    lines="$(wc -l < "$path" 2>/dev/null | tr -d ' ')"
+    echo "path=$path lines=${lines:-0}"
+    tail -n "$max" "$path" 2>/dev/null || true
+  else
+    echo "(missing) $path"
+  fi
+  echo
+}
+
 all_logs_flow(){
   # Avoid exiting entire script on missing files / journal quirks (set -e at top of installer)
   set +e
-  local base dir out split_flag=0
+  local base dir out split_flag=0 max_lines=2000
   if select_instance; then
     base="$SELECTED_BASE"
     split_flag="$SELECTED_SPLIT"
@@ -895,43 +945,95 @@ all_logs_flow(){
   [[ -z "${base:-}" ]] && base="$DEFAULT_SERVICE_NAME"
   [[ -z "${dir:-}" ]] && dir="$DEFAULT_INSTALL_DIR"
 
+  log_event "INFO" "diag_export_start" "dir=$dir base=$base"
   out="/tmp/tele2rub-all-logs-$(date +%Y%m%d-%H%M%S).txt"
   {
-    echo "===== ${DISPLAY_NAME} ALL LOGS ====="
+    echo "===== ${DISPLAY_NAME} DIAGNOSTIC BUNDLE ====="
     echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo "hostname=$(hostname 2>/dev/null || echo unknown)"
     echo "systemd_base=$base"
     echo "split=$split_flag"
     echo "install_dir=$dir"
     echo
 
-    echo "===== INSTALLER LOG (tail -n 300) ====="
-    tail -n 300 "$LOG_FILE" 2>/dev/null || echo "(missing) $LOG_FILE"
-    echo
-
-    echo "===== INSTALLER JSON LOG (tail -n 300) ====="
-    tail -n 300 "$LOG_JSON_FILE" 2>/dev/null || echo "(missing) $LOG_JSON_FILE"
-    echo
-
-    echo "===== SERVICE JOURNAL (tail -n 300) ====="
-    if [[ "$split_flag" == "1" ]]; then
-      journalctl -u "${base}-bot" -u "${base}-worker" -n 300 --no-pager 2>/dev/null || echo "(journal unavailable for ${base}-bot / ${base}-worker)"
+    echo "===== DEPLOY / VERSION ====="
+    if [[ -d "$dir/.git" ]]; then
+      git -C "$dir" rev-parse HEAD 2>/dev/null && git -C "$dir" log -1 --oneline 2>/dev/null
     else
-      journalctl -u "$base" -n 300 --no-pager 2>/dev/null || echo "(journal unavailable for $base)"
+      echo "(no git metadata in $dir)"
+    fi
+    grep -E '^APP_VERSION=' "$dir/.env" 2>/dev/null || echo "APP_VERSION=(unset)"
+    echo
+
+    echo "===== SYSTEMD STATUS ====="
+    if [[ "$split_flag" == "1" ]]; then
+      systemctl --no-pager --full status "${base}-bot" 2>/dev/null || true
+      systemctl --no-pager --full status "${base}-worker" 2>/dev/null || true
+    else
+      systemctl --no-pager --full status "$base" 2>/dev/null || true
     fi
     echo
 
-    echo "===== BOT EVENTS (tail -n 300) ====="
-    tail -n 300 "$dir/queue/bot_events.jsonl" 2>/dev/null || echo "(missing) $dir/queue/bot_events.jsonl"
+    echo "===== SERVICE JOURNAL (last $max_lines lines, current boot) ====="
+    if [[ "$split_flag" == "1" ]]; then
+      journalctl -u "${base}-bot" -u "${base}-worker" -b -n "$max_lines" --no-pager 2>/dev/null \
+        || echo "(journal unavailable for ${base}-bot / ${base}-worker)"
+    else
+      journalctl -u "$base" -b -n "$max_lines" --no-pager 2>/dev/null \
+        || echo "(journal unavailable for $base)"
+    fi
     echo
 
-    echo "===== WORKER EVENTS (tail -n 300) ====="
-    tail -n 300 "$dir/queue/worker_events.jsonl" 2>/dev/null || echo "(missing) $dir/queue/worker_events.jsonl"
+    _dump_log_section "INSTALLER LOG (text)" "$LOG_FILE" "$max_lines"
+    _dump_log_section "INSTALLER LOG (jsonl)" "$LOG_JSON_FILE" "$max_lines"
+    _dump_log_section "BOT STRUCTURED EVENTS" "$dir/queue/bot_events.jsonl" "$max_lines"
+    _dump_log_section "WORKER STRUCTURED EVENTS" "$dir/queue/worker_events.jsonl" "$max_lines"
+    _dump_log_section "BOT INTERACTIONS (user text / menus / callbacks)" "$dir/queue/bot_interactions.jsonl" "$max_lines"
+
+    echo "===== SQLITE SCHEMA CHECK ====="
+    if [[ -f "$dir/queue/queue.sqlite3" ]]; then
+      sqlite3 "$dir/queue/queue.sqlite3" ".tables" 2>/dev/null || echo "(sqlite3 unavailable)"
+      sqlite3 "$dir/queue/queue.sqlite3" "SELECT name FROM sqlite_master WHERE type='table' ORDER BY 1;" 2>/dev/null || true
+    else
+      echo "(missing) $dir/queue/queue.sqlite3"
+    fi
     echo
+
+    echo "===== ENV KEYS (values redacted) ====="
+    if [[ -f "$dir/.env" ]]; then
+      grep -E '^[A-Z0-9_]+=' "$dir/.env" 2>/dev/null | sed 's/=.*$/=***redacted***/' || true
+    else
+      echo "(missing) $dir/.env"
+    fi
+    echo
+
+    echo "===== USER STATE SNAPSHOT (wizard keys only) ====="
+    if [[ -f "$dir/queue/user_states.json" ]]; then
+      python3 - <<PY 2>/dev/null || echo "(python snapshot failed)"
+import json
+from pathlib import Path
+p = Path("$dir/queue/user_states.json")
+data = json.loads(p.read_text(encoding="utf-8") or "{}")
+for uid, st in list(data.items())[:30]:
+    if not isinstance(st, dict):
+        continue
+    slim = {k: st[k] for k in st if k in ("menu_section", "step") or str(k).startswith("admin_")}
+    if slim:
+        print(f"user={uid} {slim}")
+PY
+    else
+      echo "(missing) $dir/queue/user_states.json"
+    fi
+    echo
+
+    echo "===== END DIAGNOSTIC BUNDLE ====="
+    echo "Share this entire file for remote debugging."
   } > "$out"
   local rc=$?
   set -e
 
-  ok "All logs exported: $out"
+  log_event "OK" "diag_export_done" "path=$out"
+  ok "Diagnostic bundle exported: $out"
   echo
   cat "$out"
   return "$rc"
@@ -953,7 +1055,7 @@ menu(){
     echo "8) Show Installer JSON Logs"
     echo "9) Show Bot Logs"
     echo "10) Show Worker Logs"
-    echo "11) Export + Show All Logs (copy-friendly)"
+    echo "11) Export diagnostic bundle (logs + chats + journal)"
     echo "12) Sync .env defaults only (no code update)"
     echo "13) Exit"
     echo
@@ -982,6 +1084,7 @@ run_quick_flag(){
   case "$flag" in
     --install) install_flow; exit $? ;;
     --update) update_flow; exit $? ;;
+    --update-quick) update_quick_flow; exit $? ;;
     --uninstall) uninstall_flow; exit $? ;;
     --backup) backup_flow; exit $? ;;
     --restore) restore_flow; exit $? ;;
@@ -995,7 +1098,7 @@ run_quick_flag(){
     "") return 0 ;;
     *)
       err "Unknown flag: $flag"
-      echo "Usage: bash installer.sh [--install|--update|--env-sync|--uninstall|--backup|--restore|--logs|--installer-logs|--installer-json-logs|--bot-logs|--worker-logs|--all-logs]"
+      echo "Usage: bash installer.sh [--install|--update|--update-quick|--env-sync|--uninstall|--backup|--restore|--logs|--installer-logs|--installer-json-logs|--bot-logs|--worker-logs|--all-logs]"
       exit 1
       ;;
   esac

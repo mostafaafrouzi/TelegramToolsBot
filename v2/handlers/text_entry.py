@@ -53,7 +53,12 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     user_id = message.from_user.id
     state = deps.get_state(user_id)
 
-    mapped = deps.resolve_reply_button_route(text, user_id, deps.tr)
+    section = None
+    try:
+        section = deps.get_state(user_id).get("menu_section")
+    except Exception:
+        section = None
+    mapped = deps.resolve_reply_button_route(text, user_id, deps.tr, menu_section=section)
     if await deps.dispatch_reply_keyboard_route(client, message, user_id, mapped, deps.reply_route_deps):
         return
 
@@ -80,14 +85,15 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     ):
         return
 
-    if await deps.dispatch_cloudflare_wizard(
-        message,
-        user_id,
-        state,
-        text,
-        deps.cloudflare_command_deps,
-    ):
-        return
+    if state.get("step") == "await_cloudflare_token" and section == "cloudflare":
+        if await deps.dispatch_cloudflare_wizard(
+            message,
+            user_id,
+            state,
+            text,
+            deps.cloudflare_command_deps,
+        ):
+            return
 
     if await deps.dispatch_zip_batch_wizard(
         message,

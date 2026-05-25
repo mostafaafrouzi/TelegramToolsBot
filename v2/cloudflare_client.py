@@ -7,12 +7,21 @@ import requests
 CF_API = "https://api.cloudflare.com/client/v4"
 
 
+def _normalize_token(token: str) -> str:
+    """Cloudflare API tokens are ASCII; strip whitespace and non-ASCII paste noise."""
+    raw = (token or "").strip()
+    if not raw:
+        return ""
+    return "".join(ch for ch in raw if ord(ch) < 128).strip()
+
+
 def _headers(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token.strip()}", "Content-Type": "application/json"}
+    tok = _normalize_token(token)
+    return {"Authorization": f"Bearer {tok}", "Content-Type": "application/json"}
 
 
 def _get(token: str, path: str, *, params: dict | None = None) -> tuple[bool, dict | str]:
-    tok = (token or "").strip()
+    tok = _normalize_token(token)
     if not tok:
         return False, "missing_token"
     try:

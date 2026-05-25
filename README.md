@@ -23,7 +23,13 @@ curl -fsSL http://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main
 sudo bash installer.sh
 ```
 
-One-line update mode (pulls code, refreshes `venv`, merges new `.env` keys from `.env.example`, restarts service):
+Quick one-line update (recommended for servers: auto-picks the first detected install, **no backup**, full pull + `venv` + health check + restart):
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --update-quick
+```
+
+Interactive update (menu or `--update`; may prompt for instance and optional backup):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --update
@@ -35,7 +41,7 @@ Sync only missing environment variables (no code update):
 curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --env-sync
 ```
 
-In non-interactive flag mode, the installer auto-selects the first detected instance.
+`--update-quick` and other non-interactive flags auto-select the first detected systemd instance (`/opt/tele2rub` / `tele2rub` by default).
 
 After install/update, the installer prints a checklist (Transfer hub: Rubika/Bale/Drive/SSH, toolkit commands, optional `BALE_BOT_TOKEN` and Google Drive service-account paths under `secrets/`).
 
@@ -191,6 +197,7 @@ Set `MAX_FILE_MB` in `.env` to reject files (and batch ZIPs) over that size in m
   ```bash
   sudo bash installer.sh --install
   sudo bash installer.sh --update
+  sudo bash installer.sh --update-quick
   sudo bash installer.sh --uninstall
   sudo bash installer.sh --backup
   sudo bash installer.sh --restore

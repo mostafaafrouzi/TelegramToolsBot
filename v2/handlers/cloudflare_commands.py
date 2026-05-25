@@ -9,9 +9,14 @@ from typing import Any, Callable, Optional
 from pyrogram.types import Message
 
 from v2.cloudflare_client import list_dns_records, list_zones, verify_token
+from v2.core.interaction_log import log_interaction
 from v2.core.menu_sections import MenuSection
 
 TranslateFn = Callable[..., str]
+
+
+def _log_bot_reply(user_id: int, text: str, *, handler: str) -> None:
+    log_interaction("bot_reply", user_id=user_id, handler=handler, text=text)
 
 
 @dataclass(frozen=True)
@@ -31,7 +36,11 @@ async def dispatch_cloudflare_wizard(message: Message, user_id: int, state: dict
     if state.get("step") != "await_cloudflare_token":
         return False
     token = text.strip()
-    ok, detail = await asyncio.to_thread(verify_token, token)
+    try:
+        ok, detail = await asyncio.to_thread(verify_token, token)
+    except Exception as e:
+        await message.reply_text(deps.tr(user_id, "cf_token_invalid", detail=str(e)[:500]), parse_mode=None)
+        return True
     if not ok:
         await message.reply_text(deps.tr(user_id, "cf_token_invalid", detail=detail), parse_mode=None)
         return True
@@ -62,22 +71,30 @@ async def handle_cf_connect(deps: CloudflareCommandDeps, client: Any, message: M
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) >= 2 and parts[1].strip():
         token = parts[1].strip()
-        ok, detail = await asyncio.to_thread(verify_token, token)
+        try:
+            ok, detail = await asyncio.to_thread(verify_token, token)
+        except Exception as e:
+            await message.reply_text(deps.tr(uid, "cf_token_invalid", detail=str(e)[:500]), parse_mode=None)
+            return
         if not ok:
             await message.reply_text(deps.tr(uid, "cf_token_invalid", detail=detail), parse_mode=None)
             return
         deps.upsert_token(uid, token)
+        deps.clear_state(uid)
+        deps.set_menu_section(uid, MenuSection.CLOUDFLARE)
         deps.log_event("cloudflare_connect_ok", user_id=uid)
         await message.reply_text(deps.tr(uid, "cf_connected_ok", detail=detail), reply_markup=deps.build_cloudflare_menu(uid), parse_mode=None)
         return
     deps.set_state_preserving_menu(uid, {"step": "await_cloudflare_token"})
-    await message.reply_text(deps.tr(uid, "cf_ask_token"), parse_mode=None)
+    body = deps.tr(uid, "cf_ask_token")
+    _log_bot_reply(uid, body, handler="cf_connect_prompt")
+    await message.reply_text(body, parse_mode=None)
 
 
 async def handle_cf_disconnect(deps: CloudflareCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     deps.clear_token(uid)
-    deps.clear_state(uid)
+    deps.set_state_preserving_menu(uid, {})
     deps.log_event("cloudflare_disconnect", user_id=uid)
     await message.reply_text(deps.tr(uid, "cf_disconnected"), reply_markup=deps.build_cloudflare_menu(uid), parse_mode=None)
 

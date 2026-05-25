@@ -148,11 +148,54 @@ _STATIC_BUTTON_ROUTES: Dict[str, str] = {
     "/cf_disconnect": "/cf_disconnect",
 }
 
+# When several menus share the same visible label, resolve using active menu section.
+_SECTION_I18N_PRIORITY: Dict[str, frozenset[str]] = {
+    "cloudflare": frozenset(
+        {
+            "btn_cf_connect",
+            "btn_cf_status",
+            "btn_cf_zones",
+            "btn_cf_dns_help",
+            "btn_cf_disconnect",
+        }
+    ),
+    "rubika": frozenset({"btn_rub_connect", "btn_rub_status"}),
+    "bale": frozenset(
+        {
+            "btn_bale_connect",
+            "btn_bale_status",
+            "btn_bale_set_chat",
+            "btn_bale_disconnect",
+        }
+    ),
+    "drive": frozenset(
+        {
+            "btn_drive_connect",
+            "btn_drive_status",
+            "btn_drive_ls",
+            "btn_drive_download_help",
+            "btn_drive_disconnect",
+        }
+    ),
+    "settings": frozenset(
+        {
+            "btn_direct_rubika_on",
+            "btn_direct_bale_on",
+            "btn_direct_drive_on",
+            "btn_direct_rubika_off",
+            "btn_direct_bale_off",
+            "btn_direct_drive_off",
+            "btn_netstatus",
+        }
+    ),
+}
+
 
 def resolve_reply_button_route(
     text: str,
     user_id: Optional[int] = None,
     tr: Optional[Translator] = None,
+    menu_section: Optional[str] = None,
 ) -> Optional[str]:
     """Return internal route for a reply-keyboard label."""
     raw = (text or "").strip()
@@ -164,10 +207,32 @@ def resolve_reply_button_route(
     if raw in _STATIC_BUTTON_ROUTES:
         return _STATIC_BUTTON_ROUTES[raw]
     if user_id is not None and tr is not None:
+        matches: list[str] = []
         for i18n_key, route in _I18N_BUTTON_ROUTES.items():
             if raw == tr(user_id, i18n_key):
-                return route
+                matches.append(i18n_key)
+        if not matches:
+            return None
+        if len(matches) == 1:
+            return _I18N_BUTTON_ROUTES[matches[0]]
+        section = (menu_section or "").strip().lower()
+        preferred = _SECTION_I18N_PRIORITY.get(section)
+        if preferred:
+            for key in matches:
+                if key in preferred:
+                    return _I18N_BUTTON_ROUTES[key]
+        return _I18N_BUTTON_ROUTES[matches[0]]
     return None
+
+
+def _grid(labels: List[str], cols: int = 3) -> List[List[str]]:
+    """Pack button labels into rows of up to ``cols`` (fewer rows, less scrolling)."""
+    if not labels:
+        return []
+    rows: List[List[str]] = []
+    for i in range(0, len(labels), cols):
+        rows.append(labels[i : i + cols])
+    return rows
 
 
 def _reply(rows: List[List[str]]) -> ReplyKeyboardMarkup:
@@ -179,90 +244,116 @@ def _reply(rows: List[List[str]]) -> ReplyKeyboardMarkup:
 
 
 def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboardMarkup:
-    rows: List[List[str]] = [
-        [tr(user_id, "btn_main_transfer")],
-        [tr(user_id, "btn_main_link_direct")],
-        [tr(user_id, "btn_main_toolkit")],
-        [tr(user_id, "btn_main_cloudflare")],
-        [tr(user_id, "btn_main_plan_section")],
-        [tr(user_id, "btn_main_settings"), tr(user_id, "btn_main_help")],
+    items = [
+        tr(user_id, "btn_main_transfer"),
+        tr(user_id, "btn_main_link_direct"),
+        tr(user_id, "btn_main_toolkit"),
+        tr(user_id, "btn_main_cloudflare"),
+        tr(user_id, "btn_main_plan_section"),
+        tr(user_id, "btn_main_settings"),
+        tr(user_id, "btn_main_help"),
     ]
     if is_admin:
-        rows.append([tr(user_id, "btn_main_admin")])
-    return _reply(rows)
+        items.append(tr(user_id, "btn_main_admin"))
+    return _reply(_grid(items, 3))
 
 
 def build_plan_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_plan_plan"), tr(user_id, "btn_plan_usage")],
-            [tr(user_id, "btn_plan_buy")],
-            [tr(user_id, "btn_queue")],
-            [tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_plan_plan"),
+                tr(user_id, "btn_plan_usage"),
+                tr(user_id, "btn_plan_buy"),
+                tr(user_id, "btn_queue"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_main")]]
     )
 
 
 def build_transfer_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_transfer_rubika")],
-            [tr(user_id, "btn_transfer_bale"), tr(user_id, "btn_transfer_drive")],
-            [tr(user_id, "btn_transfer_ssh")],
-            [tr(user_id, "btn_transfer_files")],
-            [tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_transfer_rubika"),
+                tr(user_id, "btn_transfer_bale"),
+                tr(user_id, "btn_transfer_drive"),
+                tr(user_id, "btn_transfer_ssh"),
+                tr(user_id, "btn_transfer_files"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_main")]]
     )
 
 
 def build_rubika_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
+        _grid(
             [tr(user_id, "btn_rub_connect"), tr(user_id, "btn_rub_status")],
-            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
-        ]
+            3,
+        )
+        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
     )
 
 
 def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_bale_connect"), tr(user_id, "btn_bale_status")],
-            [tr(user_id, "btn_bale_set_chat"), tr(user_id, "btn_bale_disconnect")],
-            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_bale_connect"),
+                tr(user_id, "btn_bale_status"),
+                tr(user_id, "btn_bale_set_chat"),
+                tr(user_id, "btn_bale_disconnect"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
     )
 
 
 def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_drive_connect"), tr(user_id, "btn_drive_status")],
-            [tr(user_id, "btn_drive_ls"), tr(user_id, "btn_drive_download_help")],
-            [tr(user_id, "btn_drive_disconnect")],
-            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_drive_connect"),
+                tr(user_id, "btn_drive_status"),
+                tr(user_id, "btn_drive_ls"),
+                tr(user_id, "btn_drive_download_help"),
+                tr(user_id, "btn_drive_disconnect"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
     )
 
 
 def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_ssh_list"), tr(user_id, "btn_ssh_add_help")],
-            [tr(user_id, "btn_ssh_put_help"), tr(user_id, "btn_ssh_get_help")],
-            [tr(user_id, "btn_ssh_ls_help"), tr(user_id, "btn_ssh_del_help")],
-            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_ssh_list"),
+                tr(user_id, "btn_ssh_add_help"),
+                tr(user_id, "btn_ssh_put_help"),
+                tr(user_id, "btn_ssh_get_help"),
+                tr(user_id, "btn_ssh_ls_help"),
+                tr(user_id, "btn_ssh_del_help"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
     )
 
 
 def build_toolkit_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_toolkit_network")],
-            [tr(user_id, "btn_toolkit_crypto")],
-            [tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [tr(user_id, "btn_toolkit_network"), tr(user_id, "btn_toolkit_crypto")],
+            3,
+        )
+        + [[tr(user_id, "btn_back_main")]]
     )
 
 
@@ -313,12 +404,17 @@ def build_link_direct_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_cloudflare_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_cf_connect"), tr(user_id, "btn_cf_status")],
-            [tr(user_id, "btn_cf_zones"), tr(user_id, "btn_cf_dns_help")],
-            [tr(user_id, "btn_cf_disconnect")],
-            [tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_cf_connect"),
+                tr(user_id, "btn_cf_status"),
+                tr(user_id, "btn_cf_zones"),
+                tr(user_id, "btn_cf_dns_help"),
+                tr(user_id, "btn_cf_disconnect"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_main")]]
     )
 
 
@@ -349,17 +445,27 @@ def build_settings_menu(
         rows.append([tr(user_id, "btn_direct_drive_off")])
     rows.append([tr(user_id, "btn_netstatus")])
     rows.append([tr(user_id, "btn_back_main")])
-    return _reply(rows)
+    flat: List[str] = []
+    for row in rows:
+        flat.extend(row)
+    back = flat.pop() if flat and flat[-1] == tr(user_id, "btn_back_main") else tr(user_id, "btn_back_main")
+    body = [x for x in flat if x != back]
+    return _reply(_grid(body, 3) + [[back]])
 
 
 def build_admin_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_admin_panel"), tr(user_id, "btn_admin_version")],
-            [tr(user_id, "btn_admin_users"), tr(user_id, "btn_admin_billing")],
-            [tr(user_id, "btn_admin_maintenance")],
-            [tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_admin_panel"),
+                tr(user_id, "btn_admin_version"),
+                tr(user_id, "btn_admin_users"),
+                tr(user_id, "btn_admin_billing"),
+                tr(user_id, "btn_admin_maintenance"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_main")]]
     )
 
 

@@ -37,6 +37,7 @@ from user_entitlements import (
     set_user_tier,
 )
 from v2.core import menu_engine
+from v2.core.interaction_log import log_interaction
 from v2.core.direct_mode import load_direct_mode_target, save_direct_mode_target
 from v2.core.menu_sections import MenuSection
 from v2.handlers.reply_routes import ReplyRouteDeps, dispatch_reply_keyboard_route
@@ -414,8 +415,8 @@ I18N = {
         "btn_admin_cleanup": "پاکسازی دانلودها",
         "btn_admin_users_list": "📋 لیست کاربران",
         "admin_users_list_empty": "هنوز کاربری ثبت نشده.",
-        "btn_cf_connect": "🔐 اتصال",
-        "btn_cf_status": "✅ وضعیت",
+        "btn_cf_connect": "🔐 اتصال CF",
+        "btn_cf_status": "✅ وضعیت CF",
         "btn_cf_zones": "🌐 دامنه‌ها",
         "btn_cf_dns_help": "📋 DNS رکوردها",
         "btn_cf_disconnect": "❌ قطع Cloudflare",
@@ -495,6 +496,7 @@ I18N = {
         "cf_dns_usage": "استفاده: `/cf_dns <zone_id> [record-name]`\nابتدا «دامنه‌ها» را بزن و zone_id را بردار.",
         "cf_dns_result": "DNS records:\n{detail}",
         "cf_error": "خطای Cloudflare: {error}",
+        "cf_media_hint": "در منوی Cloudflare فقط توکن API (متن) می‌پذیریم. برای ارسال فایل به «تنظیمات» یا «انتقال فایل» برو.",
         "newbatch_ok": (
             "جلسه فایل ZIP فعال شد.\n"
             "فایل‌ها را ارسال کن. بعد از اتمام، «پایان فایل ZIP» یا `/done` را بزن."
@@ -953,8 +955,8 @@ I18N = {
         "btn_admin_cleanup": "Cleanup downloads",
         "btn_admin_users_list": "📋 User List",
         "admin_users_list_empty": "No users recorded yet.",
-        "btn_cf_connect": "🔐 Connect",
-        "btn_cf_status": "✅ Status",
+        "btn_cf_connect": "🔐 CF Connect",
+        "btn_cf_status": "✅ CF Status",
         "btn_cf_zones": "🌐 Zones",
         "btn_cf_dns_help": "📋 DNS records",
         "btn_cf_disconnect": "❌ CF Disconnect",
@@ -1022,6 +1024,7 @@ I18N = {
         "cf_dns_usage": "Usage: `/cf_dns <zone_id> [record-name]`\nTap Zones first to get zone_id.",
         "cf_dns_result": "DNS records:\n{detail}",
         "cf_error": "Cloudflare error: {error}",
+        "cf_media_hint": "In Cloudflare menu send only your API token as text. For file uploads use Settings or Transfer.",
         "newbatch_ok": (
             "ZIP batch started.\n"
             "Send files, then tap «End ZIP» or `/done`."
@@ -1867,8 +1870,27 @@ def merge_user_state(user_id: int, patch: dict) -> None:
     set_state(user_id, cur)
 
 
+def _strip_wizard_keys(state: dict) -> dict:
+    """Remove ephemeral wizard keys when navigating menus."""
+    drop_exact = {
+        "step",
+        "pending_task",
+        "admin_target_user_id",
+        "admin_target_tier",
+        "ssh_server_id",
+        "ssh_remote_path",
+    }
+    cleaned = dict(state)
+    for key in drop_exact:
+        cleaned.pop(key, None)
+    return cleaned
+
+
 def set_menu_section(user_id: int, section: MenuSection) -> None:
-    merge_user_state(user_id, {MENU_SECTION_KEY: section.value})
+    cur = dict(get_state(user_id))
+    cur = _strip_wizard_keys(cur)
+    cur[MENU_SECTION_KEY] = section.value
+    set_state(user_id, cur)
     try:
         queue.upsert_menu_section(user_id, section.value)
     except Exception as e:
@@ -3159,6 +3181,13 @@ async def done_batch_handler(client: Client, message: Message):
 
 
 async def callback_handler(client: Client, callback_query):
+    uid = callback_query.from_user.id if callback_query.from_user else 0
+    log_interaction(
+        "user_callback",
+        user_id=uid,
+        data=callback_query.data or "",
+        message_id=callback_query.message.id if callback_query.message else None,
+    )
     if await dispatch_admin_inline_callbacks(ADMIN_COMMAND_DEPS, client, callback_query):
         return
 
@@ -3481,6 +3510,20 @@ def _touch_user_activity(message: Message) -> None:
 
 async def text_handler(client: Client, message: Message):
     _touch_user_activity(message)
+    uid = message.from_user.id if message.from_user else 0
+    section = get_effective_menu_section(uid) if uid else None
+    mapped = menu_engine.resolve_reply_button_route(
+        message.text or "", uid, tr, menu_section=section
+    )
+    log_interaction(
+        "user_text",
+        user_id=uid,
+        chat_id=message.chat.id if message.chat else None,
+        text=message.text or "",
+        menu_section=section,
+        mapped_route=mapped,
+        message_id=message.id,
+    )
     await handle_text_entry(TEXT_ENTRY_DEPS, client, message)
 
 

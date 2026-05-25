@@ -107,6 +107,17 @@ async def dispatch_reply_keyboard_route(
     """Run handler for mapped reply route. Returns True if consumed."""
     if not mapped:
         return False
+    try:
+        from v2.core.interaction_log import log_interaction
+
+        log_interaction(
+            "menu_route",
+            user_id=user_id,
+            mapped_route=mapped,
+            button_text=message.text or "",
+        )
+    except Exception:
+        pass
     tr = deps.tr
 
     if mapped == "/menu":
