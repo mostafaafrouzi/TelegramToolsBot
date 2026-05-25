@@ -290,10 +290,18 @@ def build_toolkit_crypto_menu(user_id: int, tr: Translator) -> ReplyKeyboardMark
 def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
-            [tr(user_id, "btn_zip_start"), tr(user_id, "btn_zip_end")],
             [tr(user_id, "btn_send_content")],
             [tr(user_id, "btn_queue"), tr(user_id, "btn_clear_all")],
             [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+        ]
+    )
+
+
+def build_toolkit_zip_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        [
+            [tr(user_id, "btn_zip_start"), tr(user_id, "btn_zip_end")],
+            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
         ]
     )
 
