@@ -87,6 +87,7 @@ class ReplyRouteDeps:
     build_admin_menu: MenuBuilder
     build_admin_users_menu: MenuBuilder
     build_admin_billing_menu: MenuBuilder
+    build_toolkit_zip_menu: MenuBuilder
     build_admin_maintenance_menu: MenuBuilder
 
 
@@ -316,6 +317,9 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/admin_reconcile_billing":
         await deps.admin_reconcile_billing_handler(client, message)
+        return True
+    if mapped == "/admin_users_list":
+        await deps.admin_users_list_handler(client, message)
         return True
     if mapped == "/admin_tier_help":
         await message.reply_text(tr(user_id, "admin_tier_usage"), parse_mode=None)

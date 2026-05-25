@@ -139,4 +139,6 @@ async def handle_clear_queue(
             pass
 
     deps.queue_remove_tasks_for_user(uid)
+    if session:
+        deps.queue_remove_tasks_by_session(session)
     await message.reply_text(deps.tr(uid, "queue_cleared_all"))
