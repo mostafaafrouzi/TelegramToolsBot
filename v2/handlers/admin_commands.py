@@ -356,3 +356,94 @@ async def handle_admin_reconcile_billing(deps: AdminCommandDeps, client: Any, me
         ),
         parse_mode=None,
     )
+
+
+def _format_timestamp(ts: int) -> str:
+    from datetime import datetime, timezone
+    if not ts:
+        return "—"
+    return datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d %H:%M")
+
+
+async def handle_admin_users_list(deps: AdminCommandDeps, client: Any, message: Message) -> None:
+    uid = message.from_user.id
+    if uid not in deps.admin_ids:
+        await message.reply_text(deps.tr(uid, "admin_denied"))
+        return
+    parts = (message.text or "").split()
+    page = 0
+    if len(parts) >= 2:
+        try:
+            page = max(0, int(parts[1]) - 1)
+        except ValueError:
+            pass
+    per_page = 15
+    total = deps.count_users()
+    users = deps.list_users(per_page, page * per_page)
+    if not users:
+        await message.reply_text(deps.tr(uid, "admin_users_list_empty"), parse_mode=None)
+        return
+    lines = [f"👥 کاربران ربات ({total} نفر) — صفحه {page + 1}\n"]
+    for u in users:
+        name = u.get("first_name") or "—"
+        uname = f"@{u['username']}" if u.get("username") else ""
+        last = _format_timestamp(u.get("last_seen_at", 0))
+        lines.append(f"`{u['telegram_user_id']}` {name} {uname} — آخرین: {last}")
+    kb_rows = []
+    for u in users:
+        name = u.get("first_name") or str(u["telegram_user_id"])
+        kb_rows.append([InlineKeyboardButton(
+            f"👤 {name} ({u['telegram_user_id']})",
+            callback_data=f"adminuser:{u['telegram_user_id']}",
+        )])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"adminuserpage:{page}"))
+    if (page + 1) * per_page < total:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"adminuserpage:{page + 2}"))
+    if nav:
+        kb_rows.append(nav)
+    await message.reply_text(
+        "\n".join(lines),
+        reply_markup=InlineKeyboardMarkup(kb_rows),
+        parse_mode=None,
+    )
+
+
+async def handle_admin_user_detail_callback(
+    deps: AdminCommandDeps, client: Any, callback_query: Any, target_user_id: int
+) -> bool:
+    uid = callback_query.from_user.id
+    if uid not in deps.admin_ids:
+        await callback_query.answer(deps.tr(uid, "admin_denied"), show_alert=True)
+        return True
+    info = deps.get_user_info(target_user_id)
+    usage = deps.get_usage_snapshot(target_user_id)
+    name = (info or {}).get("first_name", "—")
+    uname = f"@{info['username']}" if info and info.get("username") else ""
+    first = _format_timestamp((info or {}).get("first_seen_at", 0))
+    last = _format_timestamp((info or {}).get("last_seen_at", 0))
+    tier = usage.get("tier", "guest")
+    month_used = usage.get("month_used_mb", 0)
+    month_limit = usage.get("month_limit_mb", 0)
+    text = (
+        f"👤 {name} {uname}\n"
+        f"ID: `{target_user_id}`\n"
+        f"پلن: `{tier}`\n"
+        f"مصرف ماهانه: `{month_used:.1f}` / `{month_limit}` MB\n"
+        f"اولین ورود: {first}\n"
+        f"آخرین فعالیت: {last}"
+    )
+    kb = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(f"⬆️ ارتقای پلن", callback_data=f"adminusertier:{target_user_id}"),
+            InlineKeyboardButton(f"➕ افزودن حجم", callback_data=f"adminuserbonus:{target_user_id}"),
+        ],
+        [InlineKeyboardButton(f"💳 پرداخت‌ها", callback_data=f"adminuserpay:{target_user_id}")],
+    ])
+    await callback_query.answer()
+    try:
+        await callback_query.message.edit_text(text, reply_markup=kb, parse_mode=None)
+    except Exception:
+        await callback_query.message.reply_text(text, reply_markup=kb, parse_mode=None)
+    return True
