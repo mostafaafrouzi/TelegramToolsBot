@@ -325,11 +325,12 @@ I18N = {
         "toolkit_menu_title": "🧰 ابزارها\nمستقل از انتقال — دسته را انتخاب کن.",
         "toolkit_network_menu_title": "🌐 ابزار شبکه\nبعد از انتخاب، دستور + مقدار را بفرست (مثلاً `/dns google.com`).",
         "toolkit_crypto_menu_title": "🔐 هش و Base64\nمثلاً `/md5 متن` یا `/b64e سلام`",
+        "toolkit_zip_menu_title": "📦 ساخت فایل zip\nفایل‌ها را ارسال کن، سپس ZIP کن و به مقصد بفرست.",
         "rubika_menu_title": "💬 روبیکا\nاتصال و وضعیت حساب خودت.",
         "bale_menu_title": "📨 بله\nربات و مقصد خودت — `/bale_connect`",
         "drive_menu_title": "☁️ گوگل درایو\n`/drive_connect` سپس ارسال فایل.",
-        "ssh_menu_title": "🖥 سرور SSH\nلیست سرورهای خودت. آپلود: `/ssh_put id مسیر`",
-        "files_menu_title": "📦 فایل، ZIP و صف\nروبیکا باید متصل باشد.",
+        "ssh_menu_title": "🖥 مدیریت و اتصال به سرور از طریق ربات\nلیست سرورهای خودت. آپلود: `/ssh_put id مسیر`",
+        "files_menu_title": "📦 فایل و صف\nروبیکا باید متصل باشد.",
         "settings_menu_title": "📤 ارسال مستقیم\nفقط یک مقصد فعال — قبل از فعال‌سازی اتصال همان مقصد را برقرار کن.",
         "direct_send_menu_title": "📤 ارسال مستقیم",
         "admin_menu_title": "🛡 پنل ادمین",
@@ -345,6 +346,7 @@ I18N = {
         "btn_main_settings": "📤 ارسال مستقیم",
         "btn_main_link_direct": "🔗 لینک / ویدیو",
         "btn_main_cloudflare": "☁️ Cloudflare",
+        "btn_main_ssh": "🖥 مدیریت و اتصال به سرور از طریق ربات",
         "btn_main_help": "❓ راهنما",
         "btn_main_plan_section": "📋 حساب و پلن",
         "btn_main_admin": "🛡 پنل ادمین",
@@ -354,8 +356,8 @@ I18N = {
         "btn_transfer_rubika": "💬 روبیکا",
         "btn_transfer_bale": "📨 بله",
         "btn_transfer_drive": "☁️ درایو",
-        "btn_transfer_ssh": "🖥 SSH",
-        "btn_transfer_files": "📦 فایل و ZIP",
+        "btn_transfer_ssh": "🖥 مدیریت و اتصال به سرور از طریق ربات",
+        "btn_transfer_files": "📦 فایل و صف",
         "btn_rub_connect": "🔗 اتصال",
         "btn_rub_status": "✅ وضعیت",
         "btn_zip_start": "📥 شروع ZIP",
@@ -365,6 +367,7 @@ I18N = {
         "btn_clear_all": "🗑 پاکسازی",
         "btn_toolkit_network": "🌐 شبکه و IP",
         "btn_toolkit_crypto": "🔐 هش و Base64",
+        "btn_toolkit_zip": "📦 ساخت فایل zip",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 IP من",
         "btn_tool_ping": "📡 Ping",
@@ -833,6 +836,7 @@ I18N = {
         "toolkit_menu_title": "🧰 Tools\nSeparate from transfer — pick a category.",
         "toolkit_network_menu_title": "🌐 Network tools\nThen send command + value (e.g. `/dns google.com`).",
         "toolkit_crypto_menu_title": "🔐 Hash & Base64\ne.g. `/md5 text` or `/b64e hello`",
+        "toolkit_zip_menu_title": "📦 Create ZIP file\nSend files, then ZIP and send to destination.",
         "rubika_menu_title": "💬 Rubika\nConnect and check your account.",
         "bale_menu_title": "📨 Bale\nYour bot & destination — `/bale_connect`",
         "drive_menu_title": "☁️ Google Drive\n`/drive_connect` then send files.",
@@ -853,6 +857,7 @@ I18N = {
         "btn_main_settings": "📤 Direct send",
         "btn_main_link_direct": "🔗 Link / video",
         "btn_main_cloudflare": "☁️ Cloudflare",
+        "btn_main_ssh": "🖥 Server Management via Bot",
         "btn_main_help": "❓ Help",
         "btn_main_plan_section": "📋 Account & plan",
         "btn_main_admin": "🛡 Admin",
@@ -862,8 +867,8 @@ I18N = {
         "btn_transfer_rubika": "💬 Rubika",
         "btn_transfer_bale": "📨 Bale",
         "btn_transfer_drive": "☁️ Drive",
-        "btn_transfer_ssh": "🖥 SSH",
-        "btn_transfer_files": "📦 Files & ZIP",
+        "btn_transfer_ssh": "🖥 Server Management via Bot",
+        "btn_transfer_files": "📦 Files & Queue",
         "btn_rub_connect": "🔗 Connect",
         "btn_rub_status": "✅ Status",
         "btn_zip_start": "📥 Start ZIP",
@@ -873,6 +878,7 @@ I18N = {
         "btn_clear_all": "🗑 Clear all",
         "btn_toolkit_network": "🌐 Network & IP",
         "btn_toolkit_crypto": "🔐 Hash & Base64",
+        "btn_toolkit_zip": "📦 Create ZIP file",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 My IP",
         "btn_tool_ping": "📡 Ping",
@@ -1481,6 +1487,10 @@ def build_toolkit_network_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_toolkit_crypto_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_toolkit_crypto_menu(user_id, tr)
+
+
+def build_toolkit_zip_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_zip_menu(user_id, tr)
 
 
 def build_bale_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -3202,6 +3212,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     build_admin_menu=build_admin_menu,
     build_admin_users_menu=build_admin_users_menu,
     build_admin_billing_menu=build_admin_billing_menu,
+    build_toolkit_zip_menu=build_toolkit_zip_menu,
     build_admin_maintenance_menu=build_admin_maintenance_menu,
 )
 
