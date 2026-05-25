@@ -433,10 +433,16 @@ I18N = {
         "direct_off_wrong_target": "مقصد فعال `{active}` است — ابتدا همان را خاموش کن.",
         "direct_url_only_for_bale_drive": "در مستقیم بله/درایو فقط لینک/ویدیو پشتیبانی می‌شود.",
         "link_menu_opened": (
-            "🔗 دانلود لینک / ویدیو\n"
-            "یک لینک HTTP(S) یا یوتیوب بفرست.\n"
-            "ابتدا اطلاعات فایل نمایش داده می‌شود؛ بعد مقصد را انتخاب کن.\n"
-            "تا مقصد و اتصال تأیید نشود، دانلود روی سرور شروع نمی‌شود."
+            "🔗 دانلود لینک / ویدیو\n\n"
+            "📌 لینک‌های پشتیبانی‌شده:\n"
+            "• لینک مستقیم فایل (HTTP/HTTPS)\n"
+            "• یوتیوب (ویدیو و صدا، انتخاب کیفیت)\n"
+            "• هر سایتی که yt-dlp پشتیبانی کند\n\n"
+            "📖 نحوه استفاده:\n"
+            "1️⃣ لینک را بفرست\n"
+            "2️⃣ اطلاعات فایل نمایش داده می‌شود\n"
+            "3️⃣ کیفیت و مقصد (روبیکا/بله/درایو) را انتخاب کن\n"
+            "4️⃣ دانلود و ارسال خودکار انجام می‌شود"
         ),
         "link_send_url": "لطفاً یک لینک معتبر (http/https یا یوتیوب) بفرست.",
         "link_probing": "در حال بررسی لینک (بدون دانلود)…",
@@ -457,6 +463,9 @@ I18N = {
         "link_magnet_unsupported": "لینک magnet هنوز پشتیبانی نمی‌شود.",
         "link_session_expired": "انتخاب منقضی شد — لینک را دوباره بفرست.",
         "link_cancelled": "لغو شد.",
+        "link_audio_only": "فقط صدا",
+        "link_quality_set": "کیفیت {quality}p انتخاب شد. حالا مقصد را انتخاب کن.",
+        "link_quality_audio_set": "حالت فقط صدا فعال شد. حالا مقصد را انتخاب کن.",
         "link_downloading": "در حال دانلود روی سرور…",
         "link_download_failed": "دانلود ناموفق: {error}",
         "link_download_done_queue": "دانلود شد؛ در صف ارسال…",
@@ -965,6 +974,9 @@ I18N = {
         "link_magnet_unsupported": "Magnet links are not supported yet.",
         "link_session_expired": "Selection expired — send the link again.",
         "link_cancelled": "Cancelled.",
+        "link_audio_only": "Audio only",
+        "link_quality_set": "Quality {quality}p selected. Now pick a destination.",
+        "link_quality_audio_set": "Audio-only mode enabled. Now pick a destination.",
         "link_downloading": "Downloading on server…",
         "link_download_failed": "Download failed: {error}",
         "link_download_done_queue": "Downloaded; queuing upload…",
@@ -3301,6 +3313,7 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     clear_state=clear_state,
     log_event=log_event,
     handle_link_dest_callback=_link_dest_callback_route,
+    handle_link_quality_callback=lambda c, cq, q: handle_link_quality_callback(LINK_DIRECT_HANDLER_DEPS, c, cq, q),
 )
 
 

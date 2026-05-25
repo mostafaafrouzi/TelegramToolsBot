@@ -264,12 +264,22 @@ def _download_direct(
     return target
 
 
+def _build_youtube_format(quality: str = "best", audio_only: bool = False) -> str:
+    if audio_only:
+        return "bestaudio/best"
+    if quality == "best" or not quality:
+        return "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best"
+    return f"bestvideo[height<={quality}][ext=mp4]+bestaudio[ext=m4a]/best[height<={quality}]/best"
+
+
 def _download_youtube(
     url: str,
     dest_dir: Path,
     meta: LinkMetadata,
     *,
     progress_cb: Optional[Callable[[str], None]],
+    quality: str = "best",
+    audio_only: bool = False,
 ) -> Path:
     try:
         import yt_dlp
@@ -282,19 +292,31 @@ def _download_youtube(
         if progress_cb and d.get("status") == "downloading":
             total = d.get("total_bytes") or d.get("total_bytes_estimate") or 0
             done = d.get("downloaded_bytes") or 0
+            speed = d.get("speed") or 0
+            speed_str = f" @ {speed / (1024 * 1024):.1f} MB/s" if speed else ""
             if total:
-                progress_cb(f"YouTube {done * 100 // total}%")
+                progress_cb(f"YouTube {done * 100 // total}%{speed_str}")
             else:
-                progress_cb("YouTube downloading...")
+                progress_cb(f"YouTube downloading...{speed_str}")
+
+    fmt = _build_youtube_format(quality, audio_only)
+    postprocessors = []
+    if audio_only:
+        postprocessors.append({"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "320"})
+    else:
+        postprocessors.append({"key": "FFmpegMetadata"})
 
     opts: dict[str, Any] = {
         "quiet": True,
         "no_warnings": True,
         "noplaylist": True,
         "outtmpl": outtmpl,
-        "format": "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "merge_output_format": "mp4",
+        "format": fmt,
+        "merge_output_format": "mp3" if audio_only else "mp4",
         "progress_hooks": [_hook],
+        "retries": 10,
+        "fragment_retries": 10,
+        "postprocessors": postprocessors,
     }
     with yt_dlp.YoutubeDL(opts) as ydl:
         info = ydl.extract_info(url, download=True)

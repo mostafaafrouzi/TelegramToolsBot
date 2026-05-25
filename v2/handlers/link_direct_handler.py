@@ -294,13 +294,18 @@ async def handle_link_dest_callback(
         except Exception:
             pass
 
+    quality = _pending_link_quality.pop(user_id, "best")
+    audio_only = _pending_link_audio_only.pop(user_id, False)
+
     try:
         local_path = await asyncio.to_thread(
             download_to_path,
             meta.url,
             deps.download_dir,
             metadata=meta,
-            progress_cb=lambda m: None,  # sync thread — skip live edits to avoid asyncio issues
+            progress_cb=lambda m: None,
+            quality=quality,
+            audio_only=audio_only,
         )
     except Exception as e:
         deps.log_event("link_direct_download_failed", user_id=user_id, error=str(e))

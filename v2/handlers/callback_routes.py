@@ -127,6 +127,10 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
         await callback_query.answer("Queued")
         return True
 
+    if data.startswith("linkquality:"):
+        quality = data.split(":", 1)[1]
+        return await deps.handle_link_quality_callback(client, callback_query, quality)
+
     if data.startswith("linkdest:"):
         dest = data.split(":", 1)[1]
         return await deps.handle_link_dest_callback(client, callback_query, dest)
