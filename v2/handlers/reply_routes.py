@@ -87,6 +87,7 @@ class ReplyRouteDeps:
     build_admin_menu: MenuBuilder
     build_admin_users_menu: MenuBuilder
     build_admin_billing_menu: MenuBuilder
+    build_toolkit_zip_menu: MenuBuilder
     build_admin_maintenance_menu: MenuBuilder
 
 

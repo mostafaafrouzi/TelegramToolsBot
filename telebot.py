@@ -327,11 +327,12 @@ I18N = {
         "toolkit_menu_title": "🧰 ابزارها\nمستقل از انتقال — دسته را انتخاب کن.",
         "toolkit_network_menu_title": "🌐 ابزار شبکه\nبعد از انتخاب، دستور + مقدار را بفرست (مثلاً `/dns google.com`).",
         "toolkit_crypto_menu_title": "🔐 هش و Base64\nمثلاً `/md5 متن` یا `/b64e سلام`",
+        "toolkit_zip_menu_title": "📦 ساخت فایل zip\nفایل‌ها را ارسال کن، سپس ZIP کن و به مقصد بفرست.",
         "rubika_menu_title": "💬 روبیکا\nاتصال و وضعیت حساب خودت.",
         "bale_menu_title": "📨 بله\nربات و مقصد خودت — `/bale_connect`",
         "drive_menu_title": "☁️ گوگل درایو\n`/drive_connect` سپس ارسال فایل.",
-        "ssh_menu_title": "🖥 سرور SSH\nلیست سرورهای خودت. آپلود: `/ssh_put id مسیر`",
-        "files_menu_title": "📦 فایل، ZIP و صف\nروبیکا باید متصل باشد.",
+        "ssh_menu_title": "🖥 مدیریت و اتصال به سرور از طریق ربات\nلیست سرورهای خودت. آپلود: `/ssh_put id مسیر`",
+        "files_menu_title": "📦 فایل و صف\nروبیکا باید متصل باشد.",
         "settings_menu_title": "📤 ارسال مستقیم\nفقط یک مقصد فعال — قبل از فعال‌سازی اتصال همان مقصد را برقرار کن.",
         "direct_send_menu_title": "📤 ارسال مستقیم",
         "admin_menu_title": "🛡 پنل ادمین",
@@ -347,6 +348,7 @@ I18N = {
         "btn_main_settings": "📤 ارسال مستقیم",
         "btn_main_link_direct": "🔗 لینک / ویدیو",
         "btn_main_cloudflare": "☁️ Cloudflare",
+        "btn_main_ssh": "🖥 مدیریت و اتصال به سرور از طریق ربات",
         "btn_main_help": "❓ راهنما",
         "btn_main_plan_section": "📋 حساب و پلن",
         "btn_main_admin": "🛡 پنل ادمین",
@@ -356,8 +358,8 @@ I18N = {
         "btn_transfer_rubika": "💬 روبیکا",
         "btn_transfer_bale": "📨 بله",
         "btn_transfer_drive": "☁️ درایو",
-        "btn_transfer_ssh": "🖥 SSH",
-        "btn_transfer_files": "📦 فایل و ZIP",
+        "btn_transfer_ssh": "🖥 مدیریت و اتصال به سرور از طریق ربات",
+        "btn_transfer_files": "📦 فایل و صف",
         "btn_rub_connect": "🔗 اتصال",
         "btn_rub_status": "✅ وضعیت",
         "btn_zip_start": "📥 شروع ZIP",
@@ -367,6 +369,7 @@ I18N = {
         "btn_clear_all": "🗑 پاکسازی",
         "btn_toolkit_network": "🌐 شبکه و IP",
         "btn_toolkit_crypto": "🔐 هش و Base64",
+        "btn_toolkit_zip": "📦 ساخت فایل zip",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 IP من",
         "btn_tool_ping": "📡 Ping",
@@ -415,7 +418,7 @@ I18N = {
         "btn_cf_status": "✅ وضعیت",
         "btn_cf_zones": "🌐 دامنه‌ها",
         "btn_cf_dns_help": "📋 DNS رکوردها",
-        "btn_cf_disconnect": "❌ قطع",
+        "btn_cf_disconnect": "❌ قطع Cloudflare",
         "btn_inline_refresh": "بروزرسانی",
         "btn_inline_pending": "نمایش Pending",
         "btn_inline_failed": "نمایش Failed",
@@ -466,7 +469,13 @@ I18N = {
         "link_download_done_queue": "دانلود شد؛ در صف ارسال…",
         "link_media_hint": "در بخش لینک/ویدیو باید لینک بفرستی. برای ارسال فایل از «📁 انتقال فایل» مقصد را انتخاب کن.",
         "cf_menu_title": "☁️ Cloudflare\nاتصال per-user با API Token. فعلاً عملیات امن read-only: وضعیت، دامنه‌ها، DNS records.",
-        "cf_ask_token": "توکن Cloudflare API خودت را بفرست. پیشنهاد: API Token با دسترسی Zone/DNS Read.",
+        "cf_ask_token": (
+            "📖 راهنمای اتصال Cloudflare:\n\n"
+            "1️⃣ به dash.cloudflare.com/profile/api-tokens بروید\n"
+            "2️⃣ روی Create Token کلیک کنید\n"
+            "3️⃣ قالب «Read all resources» یا دسترسی Zone/DNS Read را انتخاب کنید\n"
+            "4️⃣ توکن ساخته‌شده را همینجا بفرستید"
+        ),
         "cf_token_invalid": "توکن Cloudflare نامعتبر است: {detail}",
         "cf_connected_ok": "Cloudflare متصل شد ✅ وضعیت توکن: {detail}",
         "cf_disconnected": "اتصال Cloudflare قطع شد.",
@@ -497,8 +506,12 @@ I18N = {
         "queue_processing_detail": "`{job_id}` نوع `{task_type}` — `{file}` (~{size})",
         "bale_not_connected": "بله متصل نیست. `/bale_connect` — ربات بله خودت را بساز و توکن را وارد کن.",
         "bale_ask_token": (
-            "توکن ربات بله خودت را بفرست (از @botfather در بله).\n"
-            "این توکن فقط برای حساب تلگرام تو ذخیره می‌شود."
+            "📖 راهنمای اتصال بله:\n\n"
+            "1️⃣ اپلیکیشن بله را باز کنید\n"
+            "2️⃣ به @botfather پیام دهید و `/newbot` بفرستید\n"
+            "3️⃣ نام و یوزرنیم ربات را وارد کنید\n"
+            "4️⃣ توکنی که دریافت می‌کنید را همینجا بفرستید\n\n"
+            "این توکن فقط برای حساب تلگرام شما ذخیره می‌شود."
         ),
         "bale_token_invalid": "توکن بله نامعتبر است: {detail}",
         "bale_token_ok": "ربات بله تأیید شد (@{bot}).\nحالا `chat_id` مقصد را بفرست (گروه/کاربر در بله).",
@@ -507,10 +520,10 @@ I18N = {
         "bale_connected_ok": "بله متصل شد ✅ مقصد: `{chat_id}`",
         "bale_already_connected": "بله قبلاً متصل است. برای اتصال مجدد `/bale_disconnect` سپس `/bale_connect`.",
         "bale_disconnected": "اتصال بله قطع شد.",
-        "btn_bale_connect": "🔗 اتصال",
-        "btn_bale_status": "✅ وضعیت",
-        "btn_bale_set_chat": "🎯 تغییر مقصد",
-        "btn_bale_disconnect": "❌ قطع",
+        "btn_bale_connect": "🔗 اتصال بله",
+        "btn_bale_status": "✅ وضعیت بله",
+        "btn_bale_set_chat": "🎯 تغییر مقصد بله",
+        "btn_bale_disconnect": "❌ قطع بله",
         "bale_status_no_chat": "توکن OK ({detail}). chat_id نداری — در ویزارد `/bale_connect` ادامه بده.",
         "bale_status_ok": "بله: chat_id=`{chat_id}` — {detail}",
         "bale_set_chat_usage": "استفاده: `/bale_set_chat <bale_chat_id>` (بعد از `/bale_connect`)",
@@ -519,17 +532,22 @@ I18N = {
             "گوگل درایو متصل نیست. `/drive_connect` — فایل JSON سرویس‌اکانت خودت را آپلود کن."
         ),
         "drive_ask_sa_json": (
-            "فایل JSON سرویس‌اکانت Google (Drive API) را به‌صورت **سند** بفرست.\n"
-            "پوشه Drive را با ایمیل سرویس‌اکانت Share کن."
+            "📖 راهنمای اتصال گوگل درایو:\n\n"
+            "1️⃣ به console.cloud.google.com بروید\n"
+            "2️⃣ پروژه جدید بسازید و Google Drive API را فعال کنید\n"
+            "3️⃣ از بخش IAM > Service Accounts یک سرویس‌اکانت بسازید\n"
+            "4️⃣ کلید JSON آن را دانلود کنید\n"
+            "5️⃣ پوشه Drive خود را با ایمیل سرویس‌اکانت Share کنید\n"
+            "6️⃣ فایل JSON را به‌صورت **سند** (document) همینجا بفرستید"
         ),
         "drive_ask_folder_id": "شناسه پوشه Drive (folder ID از URL) را بفرست:",
         "drive_folder_empty": "folder_id خالی است.",
         "drive_sa_missing_retry": "فایل سرویس‌اکانت پیدا نشد. دوباره `/drive_connect`.",
         "drive_connected_ok": "درایو متصل شد ✅ folder=`{folder_id}`",
         "drive_disconnected": "اتصال درایو قطع شد.",
-        "btn_drive_connect": "🔗 اتصال",
-        "btn_drive_status": "✅ وضعیت",
-        "btn_drive_disconnect": "❌ قطع",
+        "btn_drive_connect": "🔗 اتصال درایو",
+        "btn_drive_status": "✅ وضعیت درایو",
+        "btn_drive_disconnect": "❌ قطع درایو",
         "drive_sa_need_document": "JSON را به‌صورت فایل (document) بفرست، نه متن.",
         "drive_sa_need_json": "نام فایل باید `.json` باشد.",
         "drive_sa_invalid": "JSON نامعتبر: {error}",
@@ -837,6 +855,7 @@ I18N = {
         "toolkit_menu_title": "🧰 Tools\nSeparate from transfer — pick a category.",
         "toolkit_network_menu_title": "🌐 Network tools\nThen send command + value (e.g. `/dns google.com`).",
         "toolkit_crypto_menu_title": "🔐 Hash & Base64\ne.g. `/md5 text` or `/b64e hello`",
+        "toolkit_zip_menu_title": "📦 Create ZIP file\nSend files, then ZIP and send to destination.",
         "rubika_menu_title": "💬 Rubika\nConnect and check your account.",
         "bale_menu_title": "📨 Bale\nYour bot & destination — `/bale_connect`",
         "drive_menu_title": "☁️ Google Drive\n`/drive_connect` then send files.",
@@ -857,6 +876,7 @@ I18N = {
         "btn_main_settings": "📤 Direct send",
         "btn_main_link_direct": "🔗 Link / video",
         "btn_main_cloudflare": "☁️ Cloudflare",
+        "btn_main_ssh": "🖥 Server Management via Bot",
         "btn_main_help": "❓ Help",
         "btn_main_plan_section": "📋 Account & plan",
         "btn_main_admin": "🛡 Admin",
@@ -866,8 +886,8 @@ I18N = {
         "btn_transfer_rubika": "💬 Rubika",
         "btn_transfer_bale": "📨 Bale",
         "btn_transfer_drive": "☁️ Drive",
-        "btn_transfer_ssh": "🖥 SSH",
-        "btn_transfer_files": "📦 Files & ZIP",
+        "btn_transfer_ssh": "🖥 Server Management via Bot",
+        "btn_transfer_files": "📦 Files & Queue",
         "btn_rub_connect": "🔗 Connect",
         "btn_rub_status": "✅ Status",
         "btn_zip_start": "📥 Start ZIP",
@@ -877,6 +897,7 @@ I18N = {
         "btn_clear_all": "🗑 Clear all",
         "btn_toolkit_network": "🌐 Network & IP",
         "btn_toolkit_crypto": "🔐 Hash & Base64",
+        "btn_toolkit_zip": "📦 Create ZIP file",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 My IP",
         "btn_tool_ping": "📡 Ping",
@@ -925,7 +946,7 @@ I18N = {
         "btn_cf_status": "✅ Status",
         "btn_cf_zones": "🌐 Zones",
         "btn_cf_dns_help": "📋 DNS records",
-        "btn_cf_disconnect": "❌ Disconnect",
+        "btn_cf_disconnect": "❌ CF Disconnect",
         "btn_inline_refresh": "Refresh",
         "btn_inline_pending": "Pending",
         "btn_inline_failed": "Failed",
@@ -1006,7 +1027,14 @@ I18N = {
         "queue_processing_none": "`—`",
         "queue_processing_detail": "`{job_id}` type `{task_type}` — `{file}` (~{size})",
         "bale_not_connected": "Bale is not linked. Use `/bale_connect` with your own Bale bot token.",
-        "bale_ask_token": "Send your Bale bot token (from Bale @botfather). Stored only for your Telegram account.",
+        "bale_ask_token": (
+            "📖 How to connect Bale:\n\n"
+            "1️⃣ Open Bale app\n"
+            "2️⃣ Message @botfather and send `/newbot`\n"
+            "3️⃣ Enter bot name and username\n"
+            "4️⃣ Send the token you receive here\n\n"
+            "The token is stored only for your Telegram account."
+        ),
         "bale_token_invalid": "Invalid Bale token: {detail}",
         "bale_token_ok": "Bale bot verified (@{bot}). Send the destination `chat_id`.",
         "bale_chat_id_empty": "chat_id is empty.",
@@ -1014,24 +1042,32 @@ I18N = {
         "bale_connected_ok": "Bale linked ✅ destination: `{chat_id}`",
         "bale_already_connected": "Bale already linked. `/bale_disconnect` then `/bale_connect` to replace.",
         "bale_disconnected": "Bale disconnected.",
-        "btn_bale_connect": "🔗 Connect",
-        "btn_bale_status": "✅ Status",
-        "btn_bale_set_chat": "🎯 Set destination",
-        "btn_bale_disconnect": "❌ Disconnect",
+        "btn_bale_connect": "🔗 Bale Connect",
+        "btn_bale_status": "✅ Bale Status",
+        "btn_bale_set_chat": "🎯 Bale Set destination",
+        "btn_bale_disconnect": "❌ Bale Disconnect",
         "bale_status_no_chat": "Token OK ({detail}). Missing chat_id — continue `/bale_connect`.",
         "bale_status_ok": "Bale: chat_id=`{chat_id}` — {detail}",
         "bale_set_chat_usage": "Usage: `/bale_set_chat <bale_chat_id>` (after `/bale_connect`)",
         "bale_set_chat_saved": "Bale destination saved: `{chat_id}`",
         "drive_not_connected": "Google Drive not linked. Use `/drive_connect` and upload your service-account JSON.",
-        "drive_ask_sa_json": "Send your Google service-account JSON as a **document** file.",
+        "drive_ask_sa_json": (
+            "📖 How to connect Google Drive:\n\n"
+            "1️⃣ Go to console.cloud.google.com\n"
+            "2️⃣ Create a project and enable Google Drive API\n"
+            "3️⃣ Go to IAM > Service Accounts, create one\n"
+            "4️⃣ Download its JSON key\n"
+            "5️⃣ Share your Drive folder with the service account email\n"
+            "6️⃣ Send the JSON file as a **document** here"
+        ),
         "drive_ask_folder_id": "Send the Drive folder ID (from the folder URL):",
         "drive_folder_empty": "folder_id is empty.",
         "drive_sa_missing_retry": "Service account file missing. Run `/drive_connect` again.",
         "drive_connected_ok": "Drive linked ✅ folder=`{folder_id}`",
         "drive_disconnected": "Drive disconnected.",
-        "btn_drive_connect": "🔗 Connect",
-        "btn_drive_status": "✅ Status",
-        "btn_drive_disconnect": "❌ Disconnect",
+        "btn_drive_connect": "🔗 Drive Connect",
+        "btn_drive_status": "✅ Drive Status",
+        "btn_drive_disconnect": "❌ Drive Disconnect",
         "drive_sa_need_document": "Send the JSON as a document file, not plain text.",
         "drive_sa_need_json": "File name must end with `.json`.",
         "drive_sa_invalid": "Invalid JSON: {error}",
@@ -1487,6 +1523,10 @@ def build_toolkit_network_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_toolkit_crypto_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_toolkit_crypto_menu(user_id, tr)
+
+
+def build_toolkit_zip_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_zip_menu(user_id, tr)
 
 
 def build_bale_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -2815,7 +2855,7 @@ async def queue_or_confirm(
             except Exception:
                 pass
             pushed = queue.push_task(task)
-            qpos = queue.queue_count_by_session(task.get("rubika_session") or "")
+            qpos = queue.count_tasks_for_user(user_id)
             log_event(
                 "task_queued",
                 user_id=user_id,
@@ -2836,7 +2876,7 @@ async def queue_or_confirm(
         task["chat_id"] = message.chat.id
         task["status_message_id"] = status.id
         pushed = queue.push_task(task)
-        qpos = queue.queue_count_by_session(task.get("rubika_session") or "")
+        qpos = queue.count_tasks_for_user(user_id)
         log_event(
             "task_queued",
             user_id=user_id,
@@ -3217,6 +3257,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     build_admin_menu=build_admin_menu,
     build_admin_users_menu=build_admin_users_menu,
     build_admin_billing_menu=build_admin_billing_menu,
+    build_toolkit_zip_menu=build_toolkit_zip_menu,
     build_admin_maintenance_menu=build_admin_maintenance_menu,
 )
 
