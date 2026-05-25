@@ -32,6 +32,7 @@ class CallbackRouteDeps:
     clear_state: Callable[[int], None]
     log_event: Callable[..., None]
     handle_link_dest_callback: Callable[..., Awaitable[bool]]
+    handle_link_quality_callback: Callable[..., Awaitable[bool]]
 
 
 async def dispatch_callback_route(client: Any, callback_query: Any, deps: CallbackRouteDeps) -> bool:

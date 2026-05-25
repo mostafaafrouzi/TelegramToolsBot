@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Internal ids/paths (unchanged for existing installs under /opt/tele2rub, tele2rub.service, etc.)
 APP_NAME="tele2rub"
+DISPLAY_NAME="TelegramToolsBot"
 REPO_URL="https://github.com/mostafaafrouzi/telegramtorubika.git"
 DEFAULT_INSTALL_DIR="/opt/tele2rub"
 DEFAULT_SERVICE_NAME="tele2rub"
@@ -154,7 +156,7 @@ discover_instances(){
 select_instance(){
   discover_instances
   if [[ ${#INST_DIRS[@]} -eq 0 ]]; then
-    warn "No installed Tele2Rub instances were auto-detected."
+    warn "No installed ${DISPLAY_NAME} instances were auto-detected."
     return 1
   fi
   echo
@@ -430,7 +432,7 @@ show_post_deploy_summary(){
   ver="$(read_app_version "$dir/.env" 2>/dev/null || echo unknown)"
   echo
   echo "=============================================="
-  echo " Tele2Rub deploy summary (v2 menus + transfers)"
+  echo " ${DISPLAY_NAME} deploy summary (v2 menus + transfers)"
   echo "=============================================="
   echo "Install dir : $dir"
   echo "Version     : $ver"
@@ -499,7 +501,7 @@ create_service_split(){
   fi
   cat > "/etc/systemd/system/${bot}.service" <<EOF
 [Unit]
-Description=Tele2Rub Telegram bot (telebot.py)
+Description=${DISPLAY_NAME} Telegram bot (telebot.py)
 After=network-online.target
 Wants=network-online.target
 
@@ -518,7 +520,7 @@ WantedBy=multi-user.target
 EOF
   cat > "/etc/systemd/system/${worker}.service" <<EOF
 [Unit]
-Description=Tele2Rub Rubika worker (rub.py)
+Description=${DISPLAY_NAME} Rubika worker (rub.py)
 After=network-online.target
 Wants=network-online.target
 
@@ -559,7 +561,7 @@ create_service(){
   fi
   cat > "/etc/systemd/system/${name}.service" <<EOF
 [Unit]
-Description=Tele2Rub Bot Service
+Description=${DISPLAY_NAME} Bot Service
 After=network-online.target
 Wants=network-online.target
 
@@ -657,7 +659,7 @@ install_flow(){
   local ver
   ver="$(read_app_version "$dir/.env")"
   notify_admin "$bot_token" "$admin_ids" \
-    "telegramtorubika installed on $(hostname) v=${ver}. Use /start — menus: Transfer, Tools, Plan. See server log for Bale/Drive/SSH .env hints."
+    "${DISPLAY_NAME} installed on $(hostname) v=${ver}. Use /start — menus: Transfer, Tools, Plan. See server log for Bale/Drive/SSH .env hints."
   show_post_deploy_summary "$dir" "$split_flag"
   ok "Install completed."
 }
@@ -697,7 +699,7 @@ update_flow(){
     local ver
     ver="$(read_app_version "$dir/.env")"
     [[ -n "$bot_token" && -n "$admin_ids" ]] && notify_admin "$bot_token" "$admin_ids" \
-      "telegramtorubika updated on $(hostname) v=${ver}. Send /start to refresh menus (Transfer/Tools). Toolkit defaults merged if missing."
+      "${DISPLAY_NAME} updated on $(hostname) v=${ver}. Send /start to refresh menus (Transfer/Tools). Toolkit defaults merged if missing."
   fi
   show_post_deploy_summary "$dir" "$split_flag"
   ok "Update completed."
@@ -884,7 +886,7 @@ all_logs_flow(){
 
   out="/tmp/tele2rub-all-logs-$(date +%Y%m%d-%H%M%S).txt"
   {
-    echo "===== TELE2RUB ALL LOGS ====="
+    echo "===== ${DISPLAY_NAME} ALL LOGS ====="
     echo "generated_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "systemd_base=$base"
     echo "split=$split_flag"
@@ -928,7 +930,7 @@ menu(){
   while true; do
     clear
     echo "======================================"
-    echo " Tele2Rub Interactive Installer"
+    echo " ${DISPLAY_NAME} Interactive Installer"
     echo "======================================"
     echo "1) Install"
     echo "2) Update"

@@ -42,6 +42,7 @@ class ReplyRouteDeps:
     version_handler: MessageHandler
     cleanup_downloads_handler: MessageHandler
     admin_reconcile_billing_handler: MessageHandler
+    admin_users_list_handler: MessageHandler
     direct_mode_handler: MessageHandler
     plan_handler: MessageHandler
     usage_handler: MessageHandler

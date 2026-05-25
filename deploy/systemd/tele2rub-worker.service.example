@@ -6,7 +6,7 @@
 # Run alongside tele2rub-bot.service (same WorkingDirectory and .env as the bot).
 
 [Unit]
-Description=telegramtorubika Rubika worker (rub.py)
+Description=TelegramToolsBot Rubika worker (rub.py)
 After=network-online.target
 Wants=network-online.target
 

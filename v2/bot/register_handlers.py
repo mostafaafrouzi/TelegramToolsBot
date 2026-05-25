@@ -70,6 +70,7 @@ _TEXT_EXCLUDED_COMMANDS = [
     "cf_zones",
     "cf_dns",
     "cf_disconnect",
+    "admin_users_list",
     "admin_tier",
     "admin_bonus",
     "admin_clear_prefs",
@@ -147,6 +148,7 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.cf_zones_handler, priv & cmd("cf_zones"))
     mh(tb.cf_dns_handler, priv & cmd("cf_dns"))
     mh(tb.cf_disconnect_handler, priv & cmd("cf_disconnect"))
+    mh(tb.admin_users_list_handler, priv & cmd("admin_users_list"))
     mh(tb.admin_tier_handler, priv & cmd("admin_tier"))
     mh(tb.admin_bonus_handler, priv & cmd("admin_bonus"))
     mh(tb.admin_clear_prefs_handler, priv & cmd("admin_clear_prefs"))

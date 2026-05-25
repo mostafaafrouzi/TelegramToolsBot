@@ -90,6 +90,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_admin_users": "/show_admin_users_menu",
     "btn_admin_billing": "/show_admin_billing_menu",
     "btn_admin_maintenance": "/show_admin_maintenance_menu",
+    "btn_admin_users_list": "/admin_users_list",
     "btn_admin_tier_help": "/admin_tier_wizard",
     "btn_admin_bonus_help": "/admin_bonus_wizard",
     "btn_admin_clear_prefs_help": "/admin_clear_prefs_help",

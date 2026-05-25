@@ -8,12 +8,14 @@ from v2.handlers.direct_mode_text import DirectModeTextDeps, handle_direct_mode_
 from v2.handlers.direct_url_hint import DirectUrlHintDeps, handle_direct_url_sendlink_hint
 from v2.handlers.admin_commands import (
     AdminCommandDeps,
+    dispatch_admin_inline_callbacks,
     handle_admin_bonus,
     handle_admin_panel,
     handle_admin_payment_lookup,
     handle_admin_payment_status,
     handle_admin_reconcile_billing,
     handle_admin_tier,
+    handle_admin_users_list,
     handle_cleanup_downloads,
 )
 from v2.handlers.plan_commands import PlanCommandDeps, handle_plan, handle_purchase, handle_usage
@@ -101,6 +103,8 @@ __all__ = [
     "handle_admin_payment_status",
     "handle_admin_reconcile_billing",
     "handle_cleanup_downloads",
+    "dispatch_admin_inline_callbacks",
+    "handle_admin_users_list",
     "QueueCommandDeps",
     "handle_send_text",
     "handle_send_link",

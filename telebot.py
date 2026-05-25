@@ -59,8 +59,8 @@ from v2.billing import maybe_grant_plan_after_paid, run_reconcile
 from v2.handlers.admin_commands import (
     AdminCommandDeps,
     dispatch_admin_wizard,
+    dispatch_admin_inline_callbacks,
     handle_admin_users_list,
-    handle_admin_user_detail_callback,
     handle_admin_bonus,
     handle_admin_panel,
     handle_admin_payment_lookup,
@@ -759,6 +759,8 @@ I18N = {
         "admin_wizard_tier_done": "پلن کاربر `{target}` روی `{tier}` تنظیم شد.",
         "admin_wizard_bonus_ask": "حجم اضافه ماهانه را به MB بفرست:",
         "admin_wizard_bonus_done": "برای کاربر `{target}` مقدار `{mb}` MB حجم اضافه ثبت شد.",
+        "admin_wizard_tier_for_user": "کاربر `{target}` — پلن را بفرست: `guest`، `free` یا `pro`",
+        "admin_wizard_bonus_for_user": "کاربر `{target}` — حجم اضافه ماهانه را به MB بفرست:",
         "admin_payment_lookup_hint": "لیست آخرین پرداخت‌های SQLite (`v2_payments`): `/admin_payment_lookup <telegram_user_id> [limit]`",
         "admin_payment_lookup_empty": "هیچ ردیف پرداختی برای این کاربر نیست.",
         "admin_payment_lookup_title": "پرداخت‌ها (جدیدترین اول):\n",
@@ -1282,6 +1284,8 @@ I18N = {
         "admin_wizard_tier_done": "User `{target}` tier set to `{tier}`.",
         "admin_wizard_bonus_ask": "Send extra monthly quota in MB:",
         "admin_wizard_bonus_done": "Added `{mb}` MB bonus for user `{target}`.",
+        "admin_wizard_tier_for_user": "User `{target}` — send tier: `guest`, `free`, or `pro`",
+        "admin_wizard_bonus_for_user": "User `{target}` — send extra monthly quota in MB:",
         "admin_payment_lookup_hint": "Recent `v2_payments` rows: `/admin_payment_lookup <telegram_user_id> [limit]`",
         "admin_payment_lookup_empty": "No payment rows for this user.",
         "admin_payment_lookup_title": "Payments (newest first):\n",
@@ -2766,6 +2770,7 @@ ADMIN_COMMAND_DEPS = AdminCommandDeps(
         queue,
         pending_max_age_sec=BILLING_RECONCILE_PENDING_MAX_AGE_SEC,
     ),
+    set_state_preserving_menu=set_state_preserving_menu,
     list_users=queue.list_users,
     count_users=queue.count_users,
     get_user_info=queue.get_user_info,
@@ -3154,6 +3159,9 @@ async def done_batch_handler(client: Client, message: Message):
 
 
 async def callback_handler(client: Client, callback_query):
+    if await dispatch_admin_inline_callbacks(ADMIN_COMMAND_DEPS, client, callback_query):
+        return
+
     handled = await dispatch_callback_route(client, callback_query, CALLBACK_ROUTE_DEPS)
     if handled:
         return

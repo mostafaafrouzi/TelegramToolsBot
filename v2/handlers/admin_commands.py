@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
-from typing import Any, Callable, FrozenSet
+from typing import Any, Awaitable, Callable, FrozenSet
 
-from pyrogram.types import Message
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.billing.status import ALL_STATUSES, PAID
 from v2.core.menu_sections import MenuSection
@@ -36,6 +36,11 @@ class AdminCommandDeps:
     update_v2_payment_status: Callable[[int, str, str | None], None]
     maybe_grant_after_paid: Callable[[int], bool]
     run_billing_reconcile: Callable[[], dict]
+    list_users: Callable[[int, int], list[dict]]
+    count_users: Callable[[], int]
+    get_user_info: Callable[[int], dict | None]
+    get_usage_snapshot: Callable[[int], dict]
+    set_state_preserving_menu: Callable[[int, dict], None]
     log_event: LogEventFn
 
 
@@ -269,13 +274,7 @@ async def handle_admin_payment_lookup(deps: AdminCommandDeps, client: Any, messa
             lim = int(parts[2].strip())
         except ValueError:
             lim = 15
-    lim = max(1, min(lim, 30))
-    rows = deps.list_v2_payments_for_user(target, lim)
-    if not rows:
-        await message.reply_text(deps.tr(uid, "admin_payment_lookup_empty"), parse_mode=None)
-        return
-    body = deps.tr(uid, "admin_payment_lookup_title") + _format_v2_payment_rows(rows)
-    await message.reply_text(body, parse_mode=None)
+    await _reply_payment_lookup(deps, uid, target, message.reply_text, limit=lim)
 
 
 async def handle_admin_payment_status(deps: AdminCommandDeps, client: Any, message: Message) -> None:
@@ -408,6 +407,108 @@ async def handle_admin_users_list(deps: AdminCommandDeps, client: Any, message: 
         reply_markup=InlineKeyboardMarkup(kb_rows),
         parse_mode=None,
     )
+
+
+async def _reply_payment_lookup(
+    deps: AdminCommandDeps,
+    admin_id: int,
+    target_user_id: int,
+    reply_fn: Callable[..., Awaitable[Any]],
+    *,
+    limit: int = 15,
+) -> None:
+    lim = max(1, min(limit, 30))
+    rows = deps.list_v2_payments_for_user(target_user_id, lim)
+    if not rows:
+        await reply_fn(deps.tr(admin_id, "admin_payment_lookup_empty"), parse_mode=None)
+        return
+    body = deps.tr(admin_id, "admin_payment_lookup_title") + _format_v2_payment_rows(rows)
+    await reply_fn(body, parse_mode=None)
+
+
+async def dispatch_admin_inline_callbacks(
+    deps: AdminCommandDeps, client: Any, callback_query: Any
+) -> bool:
+    """Handle inline keyboards from admin user list / detail (adminuser*)."""
+    data = callback_query.data or ""
+    if not data.startswith("adminuser"):
+        return False
+
+    uid = callback_query.from_user.id
+    if uid not in deps.admin_ids:
+        await callback_query.answer(deps.tr(uid, "admin_denied"), show_alert=True)
+        return True
+
+    msg = callback_query.message
+
+    if data.startswith("adminuserpage:"):
+        try:
+            page_one = max(1, int(data.split(":", 1)[1]))
+        except ValueError:
+            page_one = 1
+        msg.text = f"/admin_users_list {page_one}"
+        await handle_admin_users_list(deps, client, msg)
+        await callback_query.answer()
+        return True
+
+    if data.startswith("adminusertier:"):
+        try:
+            target_id = int(data.split(":", 1)[1])
+        except ValueError:
+            await callback_query.answer("Invalid user id", show_alert=True)
+            return True
+        deps.set_menu_section(uid, MenuSection.ADMIN)
+        deps.set_state_preserving_menu(
+            uid, {"step": "admin_tier_tier", "admin_target_user_id": target_id}
+        )
+        await callback_query.answer()
+        await msg.reply_text(
+            deps.tr(uid, "admin_wizard_tier_for_user", target=target_id),
+            parse_mode=None,
+        )
+        return True
+
+    if data.startswith("adminuserbonus:"):
+        try:
+            target_id = int(data.split(":", 1)[1])
+        except ValueError:
+            await callback_query.answer("Invalid user id", show_alert=True)
+            return True
+        deps.set_menu_section(uid, MenuSection.ADMIN)
+        deps.set_state_preserving_menu(
+            uid, {"step": "admin_bonus_mb", "admin_target_user_id": target_id}
+        )
+        await callback_query.answer()
+        await msg.reply_text(
+            deps.tr(uid, "admin_wizard_bonus_for_user", target=target_id),
+            parse_mode=None,
+        )
+        return True
+
+    if data.startswith("adminuserpay:"):
+        try:
+            target_id = int(data.split(":", 1)[1])
+        except ValueError:
+            await callback_query.answer("Invalid user id", show_alert=True)
+            return True
+        await callback_query.answer()
+        await _reply_payment_lookup(
+            deps,
+            uid,
+            target_id,
+            msg.reply_text,
+        )
+        return True
+
+    if data.startswith("adminuser:"):
+        try:
+            target_id = int(data.split(":", 1)[1])
+        except ValueError:
+            await callback_query.answer("Invalid user id", show_alert=True)
+            return True
+        return await handle_admin_user_detail_callback(deps, client, callback_query, target_id)
+
+    return False
 
 
 async def handle_admin_user_detail_callback(
