@@ -127,6 +127,13 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
         await callback_query.answer("Queued")
         return True
 
+    if data.startswith("adminuser:"):
+        try:
+            target = int(data.split(":", 1)[1])
+        except ValueError:
+            return False
+        return await deps.handle_admin_user_detail(client, callback_query, target)
+
     if data.startswith("linkdest:"):
         dest = data.split(":", 1)[1]
         return await deps.handle_link_dest_callback(client, callback_query, dest)

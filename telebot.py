@@ -59,6 +59,8 @@ from v2.billing import maybe_grant_plan_after_paid, run_reconcile
 from v2.handlers.admin_commands import (
     AdminCommandDeps,
     dispatch_admin_wizard,
+    handle_admin_users_list,
+    handle_admin_user_detail_callback,
     handle_admin_bonus,
     handle_admin_panel,
     handle_admin_payment_lookup,
@@ -407,6 +409,8 @@ I18N = {
         "btn_admin_payment_status_help": "تغییر وضعیت پرداخت",
         "btn_admin_reconcile": "تطبیق پرداخت‌ها",
         "btn_admin_cleanup": "پاکسازی دانلودها",
+        "btn_admin_users_list": "📋 لیست کاربران",
+        "admin_users_list_empty": "هنوز کاربری ثبت نشده.",
         "btn_cf_connect": "🔐 اتصال",
         "btn_cf_status": "✅ وضعیت",
         "btn_cf_zones": "🌐 دامنه‌ها",
@@ -915,6 +919,8 @@ I18N = {
         "btn_admin_payment_status_help": "Set payment status",
         "btn_admin_reconcile": "Reconcile billing",
         "btn_admin_cleanup": "Cleanup downloads",
+        "btn_admin_users_list": "📋 User List",
+        "admin_users_list_empty": "No users recorded yet.",
         "btn_cf_connect": "🔐 Connect",
         "btn_cf_status": "✅ Status",
         "btn_cf_zones": "🌐 Zones",
@@ -2708,6 +2714,10 @@ ADMIN_COMMAND_DEPS = AdminCommandDeps(
         queue,
         pending_max_age_sec=BILLING_RECONCILE_PENDING_MAX_AGE_SEC,
     ),
+    list_users=queue.list_users,
+    count_users=queue.count_users,
+    get_user_info=queue.get_user_info,
+    get_usage_snapshot=get_usage_snapshot,
     log_event=log_event,
 )
 
@@ -3010,6 +3020,10 @@ async def admin_payment_status_handler(client: Client, message: Message):
     await handle_admin_payment_status(ADMIN_COMMAND_DEPS, client, message)
 
 
+async def admin_users_list_handler(client: Client, message: Message):
+    await handle_admin_users_list(ADMIN_COMMAND_DEPS, client, message)
+
+
 async def admin_reconcile_billing_handler(client: Client, message: Message):
     await handle_admin_reconcile_billing(ADMIN_COMMAND_DEPS, client, message)
 
@@ -3142,6 +3156,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     version_handler=version_handler,
     cleanup_downloads_handler=cleanup_downloads_handler,
     admin_reconcile_billing_handler=admin_reconcile_billing_handler,
+    admin_users_list_handler=admin_users_list_handler,
     rubika_connect_handler=rubika_connect_handler,
     rubika_status_handler=rubika_status_handler,
     bale_status_handler=bale_status_handler,
@@ -3301,6 +3316,7 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     clear_state=clear_state,
     log_event=log_event,
     handle_link_dest_callback=_link_dest_callback_route,
+    handle_admin_user_detail=lambda c, cq, t: handle_admin_user_detail_callback(ADMIN_COMMAND_DEPS, c, cq, t),
 )
 
 
@@ -3385,10 +3401,22 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
 
 
 async def text_handler(client: Client, message: Message):
+    if message.from_user:
+        queue.record_user_activity(
+            message.from_user.id,
+            first_name=message.from_user.first_name or "",
+            username=message.from_user.username or "",
+        )
     await handle_text_entry(TEXT_ENTRY_DEPS, client, message)
 
     
 async def media_handler(client: Client, message: Message):
+    if message.from_user:
+        queue.record_user_activity(
+            message.from_user.id,
+            first_name=message.from_user.first_name or "",
+            username=message.from_user.username or "",
+        )
     await handle_media_message(MEDIA_HANDLER_DEPS, client, message)
 
 

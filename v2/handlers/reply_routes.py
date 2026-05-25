@@ -317,6 +317,9 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/admin_reconcile_billing":
         await deps.admin_reconcile_billing_handler(client, message)
         return True
+    if mapped == "/admin_users_list":
+        await deps.admin_users_list_handler(client, message)
+        return True
     if mapped == "/admin_tier_help":
         await message.reply_text(tr(user_id, "admin_tier_usage"), parse_mode=None)
         return True

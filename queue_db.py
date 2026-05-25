@@ -493,6 +493,55 @@ class QueueDB:
             row = conn.execute("SELECT COUNT(1) AS c FROM deleted_jobs").fetchone()
             return int(row["c"] if row else 0)
 
+    def record_user_activity(
+        self,
+        telegram_user_id: int,
+        first_name: str = "",
+        username: str = "",
+    ) -> None:
+        """Record or update user activity (first/last seen)."""
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO v2_user_activity (telegram_user_id, first_name, username, first_seen_at, last_seen_at)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT(telegram_user_id) DO UPDATE SET
+                        first_name = excluded.first_name,
+                        username = excluded.username,
+                        last_seen_at = excluded.last_seen_at
+                    """,
+                    (int(telegram_user_id), first_name, username, now, now),
+                )
+                conn.commit()
+
+    def list_users(self, limit: int = 50, offset: int = 0) -> list[dict]:
+        """List users ordered by last_seen_at descending."""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT telegram_user_id, first_name, username, first_seen_at, last_seen_at "
+                "FROM v2_user_activity ORDER BY last_seen_at DESC LIMIT ? OFFSET ?",
+                (limit, offset),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def count_users(self) -> int:
+        """Total number of tracked users."""
+        with self._connect() as conn:
+            row = conn.execute("SELECT COUNT(1) AS c FROM v2_user_activity").fetchone()
+            return int(row["c"] if row else 0)
+
+    def get_user_info(self, telegram_user_id: int) -> dict | None:
+        """Get a single user's activity record."""
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT telegram_user_id, first_name, username, first_seen_at, last_seen_at "
+                "FROM v2_user_activity WHERE telegram_user_id = ?",
+                (int(telegram_user_id),),
+            ).fetchone()
+            return dict(row) if row else None
+
     def upsert_menu_section(self, telegram_user_id: int, menu_section: str) -> None:
         """Mirror reply-keyboard menu section for v2 migration (dual-write with user_states.json)."""
         now = int(time.time())

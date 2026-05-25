@@ -357,6 +357,7 @@ def build_admin_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 def build_admin_users_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
+            [tr(user_id, "btn_admin_users_list")],
             [tr(user_id, "btn_admin_tier_help"), tr(user_id, "btn_admin_bonus_help")],
             [tr(user_id, "btn_admin_clear_prefs_help")],
             [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
