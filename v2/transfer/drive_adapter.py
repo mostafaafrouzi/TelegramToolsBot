@@ -22,7 +22,19 @@ class GoogleDriveTransferAdapter:
         p = Path(service_account_path)
         if not p.is_file():
             return False, "service account file missing"
-        return True, f"folder_id={folder_id}"
+        try:
+            from v2.transfer.drive_client import list_files
+
+            ok, detail = list_files(
+                service_account_path=service_account_path,
+                folder_id=folder_id,
+                limit=1,
+            )
+            if ok:
+                return True, f"folder_id={folder_id} — API OK"
+            return False, f"folder_id={folder_id} — API error: {detail}"
+        except Exception as e:
+            return False, f"folder_id={folder_id} — healthcheck error: {e}"
 
     def resolve_source(self, task: dict) -> Any:
         return task.get("source", {})
