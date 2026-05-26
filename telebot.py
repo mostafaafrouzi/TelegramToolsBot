@@ -40,6 +40,7 @@ from v2.core import menu_engine
 from v2.core.interaction_log import log_interaction
 from v2.core.direct_mode import load_direct_mode_target, save_direct_mode_target
 from v2.core.menu_sections import MenuSection
+from v2.core.network_status import load_network_snapshot
 from v2.handlers.reply_routes import ReplyRouteDeps, dispatch_reply_keyboard_route
 from v2.handlers.rubika_wizard import RubikaWizardDeps, dispatch_rubika_connect_wizard
 from v2.handlers.provider_connect_wizards import (
@@ -2868,7 +2869,7 @@ ADMIN_COMMAND_DEPS = AdminCommandDeps(
     tr=tr,
     set_menu_section=set_menu_section,
     build_admin_menu=build_admin_menu,
-    load_network_snapshot=SESSION_SETTINGS_COMMAND_DEPS.load_network_snapshot,
+    load_network_snapshot=partial(load_network_snapshot, NETWORK_FILE),
     queue_count=queue.queue_count,
     queue_cancelled_count=queue.cancelled_count,
     queue_deleted_count=queue.deleted_count,
