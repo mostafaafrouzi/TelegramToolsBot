@@ -437,6 +437,8 @@ I18N = {
         "direct_on_rubika": "ارسال مستقیم به روبیکا فعال شد.",
         "direct_on_bale": "ارسال مستقیم به بله فعال شد.",
         "direct_on_drive": "ارسال مستقیم به Google Drive فعال شد.",
+        "direct_switched_off": "ارسال مستقیم {old} غیرفعال شد. در حال فعال‌سازی حالت جدید…",
+        "net_reason_ok": "بدون مشکل",
         "direct_off": "ارسال مستقیم غیرفعال شد.",
         "direct_off_wrong_target": "مقصد فعال `{active}` است — ابتدا همان را خاموش کن.",
         "direct_url_only_for_bale_drive": "در مستقیم بله/درایو فقط لینک/ویدیو پشتیبانی می‌شود.",
@@ -977,6 +979,8 @@ I18N = {
         "direct_on_rubika": "Direct send to Rubika enabled.",
         "direct_on_bale": "Direct send to Bale enabled.",
         "direct_on_drive": "Direct send to Google Drive enabled.",
+        "direct_switched_off": "Direct send to {old} disabled. Enabling the new target…",
+        "net_reason_ok": "OK",
         "direct_off": "Direct send disabled.",
         "direct_off_wrong_target": "Active target is `{active}` — turn that off first.",
         "direct_url_only_for_bale_drive": "Bale/Drive direct mode supports links/videos only.",
@@ -2088,6 +2092,72 @@ async def rubika_sign_in(session_name: str, phone_number: str, phone_code_hash: 
 queue = QueueDB()
 
 
+def _upsert_bale_bot_token_persist(user_id: int, token: str) -> None:
+    from v2.core.user_prefs_sync import mirror_bale_to_users_json
+
+    queue.upsert_bale_bot_token(user_id, token)
+    mirror_bale_to_users_json(
+        user_id,
+        load_users=load_users,
+        save_users=save_users,
+        get_user_key=get_user_key,
+        bot_token=token,
+    )
+
+
+def _upsert_bale_chat_id_persist(user_id: int, chat_id: str) -> None:
+    from v2.core.user_prefs_sync import mirror_bale_to_users_json
+
+    queue.upsert_bale_chat_id(user_id, chat_id)
+    mirror_bale_to_users_json(
+        user_id,
+        load_users=load_users,
+        save_users=save_users,
+        get_user_key=get_user_key,
+        chat_id=chat_id,
+    )
+
+
+def _clear_bale_credentials_persist(user_id: int) -> None:
+    from v2.core.user_prefs_sync import mirror_bale_to_users_json
+
+    queue.clear_bale_credentials(user_id)
+    mirror_bale_to_users_json(
+        user_id,
+        load_users=load_users,
+        save_users=save_users,
+        get_user_key=get_user_key,
+        clear=True,
+    )
+
+
+def _upsert_cloudflare_token_persist(user_id: int, token: str) -> None:
+    from v2.core.user_prefs_sync import mirror_cloudflare_to_users_json
+
+    queue.upsert_cloudflare_api_token(user_id, token)
+    mirror_cloudflare_to_users_json(
+        user_id,
+        token,
+        load_users=load_users,
+        save_users=save_users,
+        get_user_key=get_user_key,
+    )
+
+
+def _clear_cloudflare_token_persist(user_id: int) -> None:
+    from v2.core.user_prefs_sync import mirror_cloudflare_to_users_json
+
+    queue.clear_cloudflare_api_token(user_id)
+    mirror_cloudflare_to_users_json(
+        user_id,
+        None,
+        load_users=load_users,
+        save_users=save_users,
+        get_user_key=get_user_key,
+        clear=True,
+    )
+
+
 def sync_v2_ephemeral_mirrors_from_json() -> None:
     """Copy existing ``user_states.json`` / ``batch_sessions.json`` into SQLite mirrors.
 
@@ -2140,6 +2210,36 @@ def sync_v2_ephemeral_mirrors_from_json() -> None:
             )
     if n_state or n_batch:
         log_event("v2_state_mirror_backfill_done", user_states=n_state, batch_sessions=n_batch)
+
+
+def sync_v2_provider_credentials_from_users_json() -> None:
+    """Keep SQLite and ``users.json`` provider prefs in sync across restarts/updates."""
+    from v2.core.user_prefs_sync import (
+        backup_sqlite_provider_prefs_to_users_json,
+        sync_provider_credentials_from_users_json,
+    )
+
+    try:
+        n_back = backup_sqlite_provider_prefs_to_users_json(
+            queue,
+            load_users=load_users,
+            save_users=save_users,
+            get_user_key=get_user_key,
+        )
+        if n_back:
+            log_event("v2_provider_prefs_backed_to_json", rows=n_back)
+    except Exception as e:
+        log_event("v2_provider_prefs_backup_failed", error=str(e))
+    try:
+        n = sync_provider_credentials_from_users_json(
+            queue,
+            load_users=load_users,
+            get_user_key=get_user_key,
+        )
+        if n:
+            log_event("v2_provider_prefs_restored_from_json", rows=n)
+    except Exception as e:
+        log_event("v2_provider_prefs_restore_failed", error=str(e))
 
 
 async def gate_quota(message: Message, user_id: int, task: dict) -> bool:
@@ -2435,11 +2535,7 @@ SESSION_SETTINGS_COMMAND_DEPS = SessionSettingsCommandDeps(
     log_event=log_event,
     build_settings_menu=build_settings_menu,
     build_main_menu=build_main_menu,
-    load_network_snapshot=partial(
-        load_json,
-        NETWORK_FILE,
-        {"mode": "unknown", "reason": "", "updated_at": 0},
-    ),
+    network_file=NETWORK_FILE,
 )
 
 DIRECT_SEND_COMMAND_DEPS = DirectSendCommandDeps(
@@ -2535,8 +2631,8 @@ CLOUDFLARE_COMMAND_DEPS = CloudflareCommandDeps(
     set_state_preserving_menu=set_state_preserving_menu,
     clear_state=clear_state,
     get_token=queue.get_cloudflare_api_token,
-    upsert_token=queue.upsert_cloudflare_api_token,
-    clear_token=queue.clear_cloudflare_api_token,
+    upsert_token=_upsert_cloudflare_token_persist,
+    clear_token=_clear_cloudflare_token_persist,
     build_cloudflare_menu=build_cloudflare_menu,
     log_event=log_event,
 )
@@ -2548,9 +2644,9 @@ PROVIDER_CONNECT_DEPS = ProviderConnectWizardDeps(
     set_state_preserving_menu=set_state_preserving_menu,
     clear_state=clear_state,
     get_bale_credentials=queue.get_bale_credentials,
-    upsert_bale_bot_token=queue.upsert_bale_bot_token,
-    upsert_bale_chat_id=queue.upsert_bale_chat_id,
-    clear_bale_credentials=queue.clear_bale_credentials,
+    upsert_bale_bot_token=_upsert_bale_bot_token_persist,
+    upsert_bale_chat_id=_upsert_bale_chat_id_persist,
+    clear_bale_credentials=_clear_bale_credentials_persist,
     upsert_drive_folder_id=queue.upsert_drive_folder_id,
     upsert_drive_sa_path=queue.upsert_drive_sa_path,
     clear_drive_credentials=queue.clear_drive_credentials,
@@ -3468,6 +3564,7 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     queue=queue,
     get_user_session=get_user_session,
     get_menu_section=get_effective_menu_section,
+    get_direct_mode_target=get_direct_mode_target,
     get_bale_credentials=queue.get_bale_credentials,
     get_state=get_state,
     set_state_preserving_menu=set_state_preserving_menu,

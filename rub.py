@@ -139,12 +139,9 @@ def push_status(task: dict, text: str, status: str = "working", percent: float |
 
 
 def set_network_mode(mode: str, reason: str = ""):
-    data = {
-        "mode": mode,
-        "reason": reason,
-        "updated_at": int(time.time()),
-    }
-    NETWORK_FILE.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    from v2.core.network_status import write_network_snapshot
+
+    write_network_snapshot(NETWORK_FILE, mode, reason)
 
 
 def is_global_network_available() -> bool:
@@ -946,13 +943,25 @@ def worker_loop():
     # Multi-user mode: do not force a global Rubika login on startup.
     # Each user connects Rubika from Telegram bot flow and tasks carry per-user session.
     print("Rubika worker started.")
+    from v2.core.network_status import refresh_network_snapshot
+
+    refresh_network_snapshot(NETWORK_FILE)
+    idle_ticks = 0
 
     while True:
         task = pop_first_task()
 
         if not task:
+            idle_ticks += 1
+            if idle_ticks >= 150:
+                idle_ticks = 0
+                try:
+                    refresh_network_snapshot(NETWORK_FILE)
+                except Exception:
+                    pass
             time.sleep(0.2)
             continue
+        idle_ticks = 0
 
         save_processing(task)
 

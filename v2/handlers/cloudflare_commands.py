@@ -65,12 +65,20 @@ async def handle_show_cloudflare_menu(deps: CloudflareCommandDeps, client: Any, 
     )
 
 
+def _cf_connect_token_from_message(text: str) -> str:
+    """Only treat text after ``/cf_connect`` as a token (not reply-keyboard labels)."""
+    raw = (text or "").strip()
+    if not raw.lower().startswith("/cf_connect"):
+        return ""
+    parts = raw.split(maxsplit=1)
+    return parts[1].strip() if len(parts) >= 2 else ""
+
+
 async def handle_cf_connect(deps: CloudflareCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.CLOUDFLARE)
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) >= 2 and parts[1].strip():
-        token = parts[1].strip()
+    token = _cf_connect_token_from_message(message.text or "")
+    if token:
         try:
             ok, detail = await asyncio.to_thread(verify_token, token)
         except Exception as e:

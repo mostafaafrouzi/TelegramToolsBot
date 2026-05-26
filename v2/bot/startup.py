@@ -13,6 +13,7 @@ def run_bot() -> None:
     import telebot as tb
 
     tb.sync_v2_ephemeral_mirrors_from_json()
+    tb.sync_v2_provider_credentials_from_users_json()
     if getattr(tb, "V2_EPHEMERAL_READ_PRIMARY_SQLITE", False):
         tb.log_event("v2_ephemeral_read_mode", primary="sqlite")
     tb.clear_old_status()

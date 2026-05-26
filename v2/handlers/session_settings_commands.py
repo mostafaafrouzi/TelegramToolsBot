@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Optional
 
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
+from v2.core.network_status import refresh_network_snapshot
 
 TranslateFn = Callable[..., str]
 LogEventFn = Callable[..., None]
@@ -24,7 +26,7 @@ class SessionSettingsCommandDeps:
     log_event: LogEventFn
     build_settings_menu: Callable[[int], Any]
     build_main_menu: Callable[[int], Any]
-    load_network_snapshot: Callable[[], dict]
+    network_file: Path
 
 
 async def handle_rubika_status(deps: SessionSettingsCommandDeps, client: Any, message: Message) -> None:
@@ -58,10 +60,10 @@ async def handle_rubika_connect(deps: SessionSettingsCommandDeps, client: Any, m
 
 async def handle_netstatus(deps: SessionSettingsCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    data = deps.load_network_snapshot()
+    data = await asyncio.to_thread(refresh_network_snapshot, deps.network_file)
     mode = data.get("mode", "unknown")
-    reason = data.get("reason", "") or "---"
-    updated = data.get("updated_at", 0)
+    reason = data.get("reason", "") or deps.tr(uid, "net_reason_ok")
+    updated = int(data.get("updated_at") or 0)
     await message.reply_text(
         deps.tr(uid, "net_status", mode=mode, reason=reason, updated=updated),
         parse_mode=None,

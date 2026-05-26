@@ -89,6 +89,15 @@ async def handle_direct_mode(deps: DirectSendCommandDeps, client: Any, message: 
         )
         return
 
+    current = deps.get_direct_mode_target(uid)
+    if current and current != target:
+        deps.set_direct_mode_target(uid, None)
+        await message.reply_text(
+            deps.tr(uid, "direct_switched_off", old=current),
+            reply_markup=deps.build_settings_menu(uid),
+            parse_mode=None,
+        )
+
     deps.set_direct_mode_target(uid, target)
     await message.reply_text(
         deps.tr(uid, f"direct_on_{target}"),

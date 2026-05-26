@@ -24,6 +24,7 @@ class MediaHandlerDeps:
     queue: Any
     get_user_session: Callable[[int], Optional[str]]
     get_menu_section: Callable[[int], Optional[str]]
+    get_direct_mode_target: Callable[[int], Optional[str]]
     get_bale_credentials: Callable[[int], tuple[Optional[str], Optional[str]]]
     get_state: Callable[[int], dict]
     set_state_preserving_menu: Callable[..., None]
@@ -123,7 +124,11 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
     require_rubika = True
     extra: dict = {}
 
-    if section == MenuSection.BALE.value:
+    direct_target = (deps.get_direct_mode_target(user_id) or "").strip().lower()
+    if direct_target in ("bale", "drive", "rubika"):
+        section = direct_target
+
+    if section == MenuSection.BALE.value or section == "bale":
         task_type = "transfer_to_bale"
         require_rubika = False
         bale = load_bale_credentials(deps.queue, user_id)
@@ -132,7 +137,7 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
             return
         extra["bale_chat_id"] = bale.chat_id
         extra["bale_bot_token"] = bale.bot_token
-    elif section == MenuSection.DRIVE.value:
+    elif section == MenuSection.DRIVE.value or section == "drive":
         task_type = "transfer_to_drive"
         require_rubika = False
         drive = load_drive_credentials(deps.queue, deps.base_dir, user_id)
