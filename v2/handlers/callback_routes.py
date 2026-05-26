@@ -33,6 +33,9 @@ class CallbackRouteDeps:
     log_event: Callable[..., None]
     handle_link_dest_callback: Callable[..., Awaitable[bool]]
     handle_link_quality_callback: Callable[..., Awaitable[bool]]
+    handle_media_dest_callback: Callable[..., Awaitable[bool]]
+    dispatch_inline_menu_callback: Callable[..., Awaitable[bool]]
+    handle_rss_push_callback: Callable[..., Awaitable[bool]]
 
 
 async def dispatch_callback_route(client: Any, callback_query: Any, deps: CallbackRouteDeps) -> bool:
@@ -135,6 +138,31 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
     if data.startswith("linkdest:"):
         dest = data.split(":", 1)[1]
         return await deps.handle_link_dest_callback(client, callback_query, dest)
+
+    if data.startswith("mediadest:"):
+        dest = data.split(":", 1)[1]
+        return await deps.handle_media_dest_callback(client, callback_query, dest)
+
+    if data.startswith("imenu:"):
+        key = data.split(":", 1)[1]
+        return await deps.dispatch_inline_menu_callback(client, callback_query, key)
+
+    if data.startswith("rsspush:"):
+        parts = data.split(":")
+        if len(parts) >= 3:
+            action = parts[1]
+            try:
+                feed_id = int(parts[2])
+            except ValueError:
+                return False
+            return await deps.handle_rss_push_callback(client, callback_query, action, feed_id)
+
+    if data.startswith("rssview:"):
+        try:
+            feed_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return False
+        return await deps.handle_rss_push_callback(client, callback_query, "view", feed_id)
 
     if data == "cancel_send" and state.get("step") == "await_send_confirm":
         deps.clear_state(user_id)

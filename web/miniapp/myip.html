@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>IP من</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 16px; background: var(--tg-theme-bg-color,#fff); color: var(--tg-theme-text-color,#111); }
+    .card { border-radius: 12px; padding: 16px; background: var(--tg-theme-secondary-bg-color,#f4f4f5); margin-bottom: 12px; }
+    h1 { font-size: 1.2rem; margin: 0 0 8px; }
+    button { width: 100%; padding: 12px; border: 0; border-radius: 10px; font-size: 1rem; margin-top: 8px;
+      background: var(--tg-theme-button-color,#2481cc); color: var(--tg-theme-button-text-color,#fff); }
+    pre { white-space: pre-wrap; word-break: break-all; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>📍 IP شما</h1>
+    <pre id="ip">در حال بارگذاری…</pre>
+  </div>
+  <div class="card">
+    <h1>📡 Ping</h1>
+    <pre id="ping">—</pre>
+    <button type="button" id="btnPing">تست Ping (از شبکه شما)</button>
+  </div>
+  <script>
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg) { tg.ready(); tg.expand(); }
+
+    async function loadIp() {
+      const el = document.getElementById('ip');
+      try {
+        const r = await fetch('https://api.ipify.org?format=json');
+        const j = await r.json();
+        el.textContent = 'IP: ' + (j.ip || '?');
+      } catch (e) {
+        el.textContent = 'خطا: ' + e;
+      }
+    }
+
+    document.getElementById('btnPing').onclick = async () => {
+      const el = document.getElementById('ping');
+      el.textContent = 'در حال اندازه‌گیری…';
+      const host = '1.1.1.1';
+      const t0 = performance.now();
+      try {
+        await fetch('https://' + host, { mode: 'no-cors', cache: 'no-store' });
+        const ms = Math.round(performance.now() - t0);
+        el.textContent = 'تقریبی به ' + host + ': ~' + ms + ' ms\n(از مرورگر/شبکه شما)';
+      } catch (e) {
+        el.textContent = 'ناموفق: ' + e;
+      }
+    };
+
+    loadIp();
+  </script>
+</body>
+</html>

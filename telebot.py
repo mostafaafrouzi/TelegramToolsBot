@@ -76,6 +76,18 @@ from v2.handlers.queue_commands import QueueCommandDeps, handle_clear_queue, han
 from v2.handlers.safemode_command import SafeModeCommandDeps, handle_safemode
 from v2.handlers.delete_command import DeleteCommandDeps, handle_delete_one
 from v2.handlers.callback_routes import CallbackRouteDeps, dispatch_callback_route
+from v2.handlers.media_dest_handler import MediaDestHandlerDeps, handle_media_dest_callback
+from v2.handlers.inline_menu_handler import (
+    InlineMenuDeps,
+    dispatch_inline_menu_callback,
+    show_inline_menu,
+)
+from v2.handlers.world_commands import (
+    WorldCommandDeps,
+    dispatch_world_wizard,
+    handle_rss_push_callback,
+    poll_rss_pushes,
+)
 from v2.handlers.batch_commands import BatchCommandDeps, handle_done_batch, handle_new_batch
 from v2.handlers.text_entry import TextEntryDeps, handle_text_entry
 from v2.handlers.media_handler import MediaHandlerDeps, handle_media_message
@@ -92,6 +104,7 @@ from v2.handlers.link_direct_handler import (
     handle_link_dest_callback,
     handle_link_direct_for_direct_mode,
     handle_link_direct_text,
+    handle_link_quality_callback,
 )
 from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 from v2.handlers.toolkit_commands import (
@@ -216,6 +229,18 @@ def _env_flag_on(name: str, *, default_when_unset: bool = False) -> bool:
 # Phase 4 toolkit: default ON when unset (see installer merge_env_defaults).
 TOOLKIT_NETWORK_LIGHT = _env_flag_on("TOOLKIT_NETWORK_LIGHT", default_when_unset=True)
 TOOLKIT_UTILITY_LIGHT = _env_flag_on("TOOLKIT_UTILITY_LIGHT", default_when_unset=True)
+
+MINIAPP_BASE_URL = (os.getenv("MINIAPP_BASE_URL") or "").strip().rstrip("/")
+try:
+    MINIAPP_PORT = int((os.getenv("MINIAPP_PORT") or "8788").strip())
+except ValueError:
+    MINIAPP_PORT = 8788
+MINIAPP_SERVE_LOCAL = _env_flag_on("MINIAPP_SERVE_LOCAL")
+RSS_POLL_ENABLE = _env_flag_on("RSS_POLL_ENABLE", default_when_unset=True)
+try:
+    RSS_POLL_INTERVAL_SEC = max(120, int((os.getenv("RSS_POLL_INTERVAL_SEC") or "900").strip()))
+except ValueError:
+    RSS_POLL_INTERVAL_SEC = 900
 
 
 def max_file_bytes() -> Optional[int]:
@@ -438,6 +463,10 @@ I18N = {
         "direct_on_rubika": "ارسال مستقیم به روبیکا فعال شد.",
         "direct_on_bale": "ارسال مستقیم به بله فعال شد.",
         "direct_on_drive": "ارسال مستقیم به Google Drive فعال شد.",
+        "direct_on_explain": (
+            "حالت ارسال مستقیم فعال است.\n"
+            "از این به بعد هر فایل/متنی که ارسال کنید، مستقیم به مقصد انتخاب‌شده ارسال می‌شود."
+        ),
         "direct_switched_off": "ارسال مستقیم {old} غیرفعال شد. در حال فعال‌سازی حالت جدید…",
         "net_reason_ok": "بدون مشکل",
         "direct_off": "ارسال مستقیم غیرفعال شد.",
@@ -463,11 +492,18 @@ I18N = {
         "link_type_youtube": "یوتیوب",
         "link_type_magnet": "تورنت",
         "link_pick_dest": "مقصد را انتخاب کن:",
+        "link_pick_quality": "کیفیت را انتخاب کن:",
         "link_dest_rubika": "روبیکا",
         "link_dest_bale": "بله",
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "لغو",
         "link_dest_invalid": "مقصد نامعتبر است.",
+        "link_quality_best": "بهترین",
+        "link_quality_1080": "1080p",
+        "link_quality_720": "720p",
+        "link_quality_480": "480p",
+        "link_quality_audio_only": "فقط صدا",
+        "link_quality_best_set": "کیفیت بهترین حالت انتخاب شد. حالا مقصد را انتخاب کن.",
         "link_need_rubika": "روبیکا متصل نیست. `/rubika_connect`",
         "link_probe_unsupported": "این لینک قابل دانلود نیست. ({detail})",
         "link_ytdlp_missing": "یوتیوب نیاز به `yt-dlp` روی سرور دارد.",
@@ -794,9 +830,11 @@ I18N = {
         "toolkit_ping_result": "TCP `{host}:{port}` ≈ `{ms}` ms",
         "toolkit_ping_error": "`{host}:{port}` — {error}",
         "toolkit_ipinfo_usage": "استفاده: `/ipinfo <ip>`",
+        "toolkit_ipinfo_send_only": "IP یا آدرس را بفرست (یا مستقیم `/ipinfo <ip>` ارسال کن).",
         "toolkit_ipinfo_result": "{data}",
         "toolkit_ipinfo_error": "IP info ناموفق: {error}",
         "toolkit_whois_usage": "استفاده: `/whois <domain-or-ip>`",
+        "toolkit_whois_send_only": "آدرس/دومین (یا IP) را بفرست (یا `/whois <domain-or-ip>` ارسال کن).",
         "toolkit_whois_result": "{data}",
         "toolkit_whois_error": "whois/RDAP ناموفق: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
@@ -813,6 +851,45 @@ I18N = {
         "toolkit_b64d_result": "{data}",
         "toolkit_b64d_error": "decode ناموفق: {error}",
         "toolkit_input_truncated": "(ورودی به سقف ۱۲۰۰۰ نویسه بریده شد.)",
+        "toolkit_dns_send_only": "نام دامنه یا IP را بفرست (یا `/dns <host>`).",
+        "toolkit_ping_send_only": "هاست را بفرست؛ اختیاری: `host port` (مثلاً `example.com 443`).",
+        "toolkit_md5_send_only": "متن را برای MD5 بفرست.",
+        "toolkit_sha256_send_only": "متن را برای SHA256 بفرست.",
+        "toolkit_b64e_send_only": "متن را برای Base64 encode بفرست.",
+        "toolkit_b64d_send_only": "رشته Base64 را برای decode بفرست.",
+        "toolkit_myip_server_fallback": "IP خروجی سرور: `{ip}`\n\nبرای IP واقعی خودت، `MINIAPP_BASE_URL` را روی سرور تنظیم کن و دوباره «📍 IP من» را بزن.",
+        "miniapp_myip_open": "برای دیدن IP و پینگ از مرورگر خودت، دکمه زیر را بزن:",
+        "btn_open_myip_app": "📍 باز کردن IP من",
+        "miniapp_setup_hint": "Mini App فعال نیست. در `.env` مقدار `MINIAPP_BASE_URL` (HTTPS) را تنظیم کنید.",
+        "media_pick_dest": "مقصد ارسال فایل را انتخاب کن:",
+        "media_dest_session_expired": "انتخاب منقضی شد — فایل را دوباره بفرست.",
+        "inline_main_title": "منوی شیشه‌ای — گزینه را انتخاب کن:",
+        "inline_world_menu": "🌍 جهان",
+        "inline_world_title": "ابزارهای جهان و زمان",
+        "btn_world_weather": "🌤 آب‌وهوا",
+        "btn_world_calendar": "📅 تقویم",
+        "btn_world_currency": "💱 ارز",
+        "btn_world_earthquake": "🌋 زلزله",
+        "btn_world_rss": "➕ RSS",
+        "btn_world_rss_list": "📋 فیدها",
+        "weather_ask_city": "نام شهر را بفرست (مثلاً Tehran):",
+        "currency_ask_amount": "مبلغ را بفرست (عدد):",
+        "currency_ask_pair": "از و به را بفرست، مثلاً: `USD IRR`",
+        "currency_bad_amount": "مبلغ نامعتبر است.",
+        "rss_ask_url": "آدرس فید RSS/Atom را بفرست:",
+        "rss_bad_url": "آدرس http/https معتبر بفرست.",
+        "rss_added": "فید #{feed_id} ذخیره شد.",
+        "rss_push_ask": "اعلان خودکار برای فید جدید؟",
+        "rss_push_on": "🔔 اعلان روشن",
+        "rss_push_off": "🔕 اعلان خاموش",
+        "rss_view_now": "👁 مشاهده",
+        "rss_push_enabled": "اعلان فعال شد.",
+        "rss_push_disabled": "اعلان غیرفعال شد.",
+        "rss_not_found": "فید پیدا نشد.",
+        "rss_list_empty": "فیدی ثبت نشده. از «➕ RSS» استفاده کن.",
+        "rss_list_title": "فیدهای شما:",
+        "rss_push_new": "📰 به‌روزرسانی: {label}",
+        "world_error": "خطا: {detail}",
         "quota_parallel_msg": "سقف کارهای همزمان در صف پر است (`{cur}` / `{maxp}`). بعد از اتمام یکی دوباره تلاش کن.",
         "quota_day_msg": "سقف حجم روزانه پر است. این کار ~{need} MB است؛ حدود `{left}` MB امروز باقی مانده.",
         "quota_month_msg": "سقف حجم ماهانه پر است. این کار ~{need} MB است؛ حدود `{left}` MB این ماه باقی مانده.",
@@ -980,6 +1057,10 @@ I18N = {
         "direct_on_rubika": "Direct send to Rubika enabled.",
         "direct_on_bale": "Direct send to Bale enabled.",
         "direct_on_drive": "Direct send to Google Drive enabled.",
+        "direct_on_explain": (
+            "Direct send is enabled.\n"
+            "From now on, any file/text you send will be delivered directly to the selected destination."
+        ),
         "direct_switched_off": "Direct send to {old} disabled. Enabling the new target…",
         "net_reason_ok": "OK",
         "direct_off": "Direct send disabled.",
@@ -999,11 +1080,18 @@ I18N = {
         "link_type_youtube": "YouTube",
         "link_type_magnet": "torrent",
         "link_pick_dest": "Choose destination:",
+        "link_pick_quality": "Choose quality:",
         "link_dest_rubika": "Rubika",
         "link_dest_bale": "Bale",
         "link_dest_drive": "Google Drive",
         "link_dest_cancel": "Cancel",
         "link_dest_invalid": "Invalid destination.",
+        "link_quality_best": "Best",
+        "link_quality_1080": "1080p",
+        "link_quality_720": "720p",
+        "link_quality_480": "480p",
+        "link_quality_audio_only": "Audio only",
+        "link_quality_best_set": "Best quality selected. Now pick a destination.",
         "link_need_rubika": "Rubika not connected. `/rubika_connect`",
         "link_probe_unsupported": "Cannot download this link. ({detail})",
         "link_ytdlp_missing": "YouTube needs `yt-dlp` on the server.",
@@ -1320,9 +1408,11 @@ I18N = {
         "toolkit_ping_result": "TCP `{host}:{port}` ~ `{ms}` ms",
         "toolkit_ping_error": "`{host}:{port}` — {error}",
         "toolkit_ipinfo_usage": "Usage: `/ipinfo <ip>`",
+        "toolkit_ipinfo_send_only": "Send an IP/host (or use `/ipinfo <ip>`).",
         "toolkit_ipinfo_result": "{data}",
         "toolkit_ipinfo_error": "IP info failed: {error}",
         "toolkit_whois_usage": "Usage: `/whois <domain-or-ip>`",
+        "toolkit_whois_send_only": "Send a domain/IP (or use `/whois <domain-or-ip>`).",
         "toolkit_whois_result": "{data}",
         "toolkit_whois_error": "whois/RDAP failed: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
@@ -1339,6 +1429,45 @@ I18N = {
         "toolkit_b64d_result": "{data}",
         "toolkit_b64d_error": "Decode failed: {error}",
         "toolkit_input_truncated": "(Input truncated to 12000 characters.)",
+        "toolkit_dns_send_only": "Send a hostname or IP (or use `/dns <host>`).",
+        "toolkit_ping_send_only": "Send host; optional: `host port` (e.g. `example.com 443`).",
+        "toolkit_md5_send_only": "Send text to hash with MD5.",
+        "toolkit_sha256_send_only": "Send text to hash with SHA256.",
+        "toolkit_b64e_send_only": "Send text to Base64-encode.",
+        "toolkit_b64d_send_only": "Send a Base64 string to decode.",
+        "toolkit_myip_server_fallback": "Server egress IP: `{ip}`\n\nFor your real IP, set `MINIAPP_BASE_URL` on the server and open «My IP» again.",
+        "miniapp_myip_open": "Open the button below to see your IP and ping in your browser:",
+        "btn_open_myip_app": "📍 Open My IP",
+        "miniapp_setup_hint": "Mini App is not configured. Set `MINIAPP_BASE_URL` (HTTPS) in `.env`.",
+        "media_pick_dest": "Choose where to send this file:",
+        "media_dest_session_expired": "Selection expired — send the file again.",
+        "inline_main_title": "Glass menu — pick a section:",
+        "inline_world_menu": "🌍 World",
+        "inline_world_title": "World & time tools",
+        "btn_world_weather": "🌤 Weather",
+        "btn_world_calendar": "📅 Calendar",
+        "btn_world_currency": "💱 Currency",
+        "btn_world_earthquake": "🌋 Earthquakes",
+        "btn_world_rss": "➕ RSS",
+        "btn_world_rss_list": "📋 Feeds",
+        "weather_ask_city": "Send a city name (e.g. London):",
+        "currency_ask_amount": "Send an amount (number):",
+        "currency_ask_pair": "Send from/to, e.g. `USD EUR`",
+        "currency_bad_amount": "Invalid amount.",
+        "rss_ask_url": "Send an RSS/Atom feed URL:",
+        "rss_bad_url": "Send a valid http(s) URL.",
+        "rss_added": "Feed #{feed_id} saved.",
+        "rss_push_ask": "Enable push notifications for this feed?",
+        "rss_push_on": "🔔 Push on",
+        "rss_push_off": "🔕 Push off",
+        "rss_view_now": "👁 View now",
+        "rss_push_enabled": "Push enabled.",
+        "rss_push_disabled": "Push disabled.",
+        "rss_not_found": "Feed not found.",
+        "rss_list_empty": "No feeds yet. Use «➕ RSS».",
+        "rss_list_title": "Your feeds:",
+        "rss_push_new": "📰 Update: {label}",
+        "world_error": "Error: {detail}",
         "quota_parallel_msg": "Too many jobs at once for your plan (`{cur}` / `{maxp}`). Wait for one to finish.",
         "quota_day_msg": "Daily data limit reached. This job ~{need} MB; ~{left} MB left today.",
         "quota_month_msg": "Monthly data limit reached. This job ~{need} MB; ~{left} MB left this month.",
@@ -2506,6 +2635,19 @@ async def payment_reconcile_loop():
             log_event("billing_reconcile_error", error=str(e))
 
 
+async def rss_poll_loop():
+    """Notify users when push-enabled RSS feeds change."""
+    await asyncio.sleep(120)
+    while True:
+        await asyncio.sleep(RSS_POLL_INTERVAL_SEC)
+        if not RSS_POLL_ENABLE:
+            continue
+        try:
+            await poll_rss_pushes(app, queue, tr)
+        except Exception as e:
+            log_event("rss_poll_error", error=str(e))
+
+
 def _create_stub_purchase_checkout(user_id: int) -> tuple[int, str]:
     from v2.billing import StubPaymentGateway
 
@@ -2523,6 +2665,8 @@ BASIC_COMMAND_DEPS = BasicCommandDeps(
     tr=tr,
     remember_chat=remember_chat,
     set_menu_section=set_menu_section,
+    get_direct_mode_target=get_direct_mode_target,
+    set_direct_mode_target=set_direct_mode_target,
     build_main_menu=build_main_menu,
     app_version=APP_VERSION,
 )
@@ -2593,10 +2737,22 @@ def _toolkit_quota_commit(uid: int) -> None:
 TOOLKIT_COMMAND_DEPS = ToolkitCommandDeps(
     tr=tr,
     set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
     toolkit_network_light_enabled=TOOLKIT_NETWORK_LIGHT,
     toolkit_utility_light_enabled=TOOLKIT_UTILITY_LIGHT,
     toolkit_quota_try=_toolkit_quota_try,
     toolkit_quota_commit=_toolkit_quota_commit,
+    miniapp_base_url=MINIAPP_BASE_URL,
+)
+
+WORLD_COMMAND_DEPS = WorldCommandDeps(
+    tr=tr,
+    queue=queue,
+    get_state=get_state,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    extract_first_url=extract_first_url,
 )
 
 TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
@@ -3277,6 +3433,11 @@ async def done_batch_handler(client: Client, message: Message):
     await handle_done_batch(BATCH_COMMAND_DEPS, client, message)
 
 
+async def imenu_handler(client: Client, message: Message):
+    uid = message.from_user.id
+    await show_inline_menu(INLINE_MENU_DEPS, client, message, uid, "main", edit=False)
+
+
 async def callback_handler(client: Client, callback_query):
     uid = callback_query.from_user.id if callback_query.from_user else 0
     log_interaction(
@@ -3484,6 +3645,60 @@ async def _link_dest_callback_route(client: Client, callback_query, dest: str) -
     return await handle_link_dest_callback(LINK_DIRECT_HANDLER_DEPS, client, callback_query, dest)
 
 
+INLINE_MENU_DEPS = InlineMenuDeps(
+    tr=tr,
+    admin_ids=frozenset(ADMIN_IDS),
+    miniapp_base_url=MINIAPP_BASE_URL,
+    get_direct_mode_target=get_direct_mode_target,
+    set_direct_mode_target=set_direct_mode_target,
+    set_state_preserving_menu=set_state_preserving_menu,
+    direct_mode_handler=direct_mode_handler,
+    netstatus_handler=netstatus_handler,
+    plan_handler=plan_handler,
+    usage_handler=usage_handler,
+    purchase_handler=purchase_handler,
+    help_handler=help_handler,
+    my_id_handler=my_id_handler,
+    world_deps=WORLD_COMMAND_DEPS,
+    show_rubika_menu_handler=show_rubika_menu_handler,
+    show_bale_menu_handler=show_bale_menu_handler,
+    show_drive_menu_handler=show_drive_menu_handler,
+    show_files_menu_handler=show_files_menu_handler,
+    show_link_direct_menu_handler=show_link_direct_menu_handler,
+    admin_handler=admin_handler,
+)
+
+
+async def _media_dest_callback_route(client: Client, callback_query, dest: str) -> bool:
+    from v2.handlers.media_handler import _download_and_queue
+
+    user_id = callback_query.from_user.id
+
+    async def _queue_after_dest_pick(client, message, user_id, **kwargs):
+        await _download_and_queue(client, message, user_id, deps=MEDIA_HANDLER_DEPS, **kwargs)
+
+    mdest = MediaDestHandlerDeps(
+        tr=tr,
+        base_dir=BASE_DIR,
+        queue=queue,
+        get_user_session=get_user_session,
+        get_direct_mode_target=get_direct_mode_target,
+        get_menu_section=get_effective_menu_section,
+        download_and_queue_media=_queue_after_dest_pick,
+    )
+    return await handle_media_dest_callback(mdest, client, callback_query, dest)
+
+
+async def _imenu_callback_route(client: Client, callback_query, key: str) -> bool:
+    return await dispatch_inline_menu_callback(INLINE_MENU_DEPS, client, callback_query, key)
+
+
+async def _rss_push_callback_route(
+    client: Client, callback_query, action: str, feed_id: int
+) -> bool:
+    return await handle_rss_push_callback(WORLD_COMMAND_DEPS, client, callback_query, action, feed_id)
+
+
 CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     tr=tr,
     get_state=get_state,
@@ -3504,6 +3719,9 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     log_event=log_event,
     handle_link_dest_callback=_link_dest_callback_route,
     handle_link_quality_callback=lambda c, cq, q: handle_link_quality_callback(LINK_DIRECT_HANDLER_DEPS, c, cq, q),
+    handle_media_dest_callback=_media_dest_callback_route,
+    dispatch_inline_menu_callback=_imenu_callback_route,
+    handle_rss_push_callback=_rss_push_callback_route,
 )
 
 
@@ -3536,6 +3754,9 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     dispatch_reply_keyboard_route=dispatch_reply_keyboard_route,
     reply_route_deps=REPLY_ROUTE_DEPS,
     clear_state=clear_state,
+    toolkit_network_light_enabled=TOOLKIT_NETWORK_LIGHT,
+    toolkit_quota_try=_toolkit_quota_try,
+    toolkit_quota_commit=_toolkit_quota_commit,
     enqueue_rubika_text_message=enqueue_rubika_text_message,
     dispatch_rubika_connect_wizard=dispatch_rubika_connect_wizard,
     rubika_wizard_deps=RUBIKA_WIZARD_DEPS,
@@ -3557,6 +3778,11 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     handle_link_direct_text=handle_link_direct_text,
     link_direct_deps=LINK_DIRECT_HANDLER_DEPS,
     build_main_menu=build_main_menu,
+    dispatch_world_wizard=dispatch_world_wizard,
+    world_command_deps=WORLD_COMMAND_DEPS,
+    toolkit_utility_light_enabled=TOOLKIT_UTILITY_LIGHT,
+    get_direct_mode_target=get_direct_mode_target,
+    set_direct_mode_target=set_direct_mode_target,
 )
 
 MEDIA_HANDLER_DEPS = MediaHandlerDeps(

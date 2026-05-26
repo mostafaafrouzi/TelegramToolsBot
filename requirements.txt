@@ -8,3 +8,5 @@ google-api-python-client>=2.100.0
 google-auth>=2.23.0
 paramiko>=3.3.0
 yt-dlp>=2024.1.0
+feedparser>=6.0.0
+jdatetime>=4.1.0

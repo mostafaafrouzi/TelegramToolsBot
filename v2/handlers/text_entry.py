@@ -8,6 +8,18 @@ from typing import Any, Awaitable, Callable, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
+from v2.core.nav import maybe_disable_direct_mode
+from v2.toolkit.dns_light import resolve_hostname
+from v2.toolkit.ipinfo_light import get_ip_info
+from v2.toolkit.ping_light import tcp_ping
+from v2.toolkit.text_utils_light import (
+    b64_decode_str,
+    b64_encode_str,
+    clip_input,
+    md5_hex,
+    sha256_hex,
+)
+from v2.toolkit.whois_light import rdap_lookup
 
 TranslateFn = Callable[..., str]
 ResolveRouteFn = Callable[[str], Optional[str]]
@@ -35,6 +47,10 @@ class TextEntryDeps:
     dispatch_admin_wizard: AsyncWizardFn
     admin_command_deps: Any
     set_state_preserving_menu: Callable[..., None]
+    toolkit_network_light_enabled: bool
+    toolkit_utility_light_enabled: bool
+    toolkit_quota_try: Callable[[int], tuple[bool, str]]
+    toolkit_quota_commit: Callable[[int], None]
     dispatch_zip_batch_wizard: AsyncWizardFn
     zip_batch_wizard_deps: Any
     handle_zip_password_text: AsyncWizardFn
@@ -46,6 +62,10 @@ class TextEntryDeps:
     handle_link_direct_text: AsyncWizardFn
     link_direct_deps: Any
     build_main_menu: Callable[[int], Any]
+    dispatch_world_wizard: AsyncWizardFn
+    world_command_deps: Any
+    get_direct_mode_target: Callable[[int], Optional[str]]
+    set_direct_mode_target: Callable[[int, Optional[str]], None]
 
 
 async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) -> None:
@@ -59,6 +79,10 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     except Exception:
         section = None
     mapped = deps.resolve_reply_button_route(text, user_id, deps.tr, menu_section=section)
+    if mapped and mapped not in ("/directmode",):
+        maybe_disable_direct_mode(
+            user_id, deps.get_direct_mode_target, deps.set_direct_mode_target
+        )
     if await deps.dispatch_reply_keyboard_route(client, message, user_id, mapped, deps.reply_route_deps):
         return
 
@@ -102,6 +126,175 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         text,
         deps.zip_batch_wizard_deps,
     ):
+        return
+
+    # Toolkit "send only" input steps (after clicking menu buttons).
+    if state.get("step") == "await_toolkit_ipinfo":
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        ip = (text or "").strip()
+        if not ip:
+            await message.reply_text(deps.tr(user_id, "toolkit_ipinfo_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        ok, body = get_ip_info(ip)
+        if not ok:
+            await message.reply_text(deps.tr(user_id, "toolkit_ipinfo_error", error=body), parse_mode=None)
+            deps.clear_state(user_id)
+            return
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(deps.tr(user_id, "toolkit_ipinfo_result", data=body), parse_mode=None)
+        return
+
+    if state.get("step") == "await_toolkit_whois":
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        target = (text or "").strip()
+        if not target:
+            await message.reply_text(deps.tr(user_id, "toolkit_whois_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        ok, body = rdap_lookup(target)
+        if not ok:
+            await message.reply_text(deps.tr(user_id, "toolkit_whois_error", error=body), parse_mode=None)
+            deps.clear_state(user_id)
+            return
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(deps.tr(user_id, "toolkit_whois_result", data=body), parse_mode=None)
+        return
+
+    if state.get("step") == "await_toolkit_dns":
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        host = (text or "").strip()
+        if not host:
+            await message.reply_text(deps.tr(user_id, "toolkit_dns_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        ok, body = resolve_hostname(host)
+        if not ok:
+            await message.reply_text(deps.tr(user_id, "toolkit_dns_error", host=host, error=body), parse_mode=None)
+            deps.clear_state(user_id)
+            return
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(deps.tr(user_id, "toolkit_dns_result", host=host, ips=body), parse_mode=None)
+        return
+
+    if state.get("step") == "await_toolkit_ping":
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        host = (text or "").strip().split()[0]
+        port = 443
+        parts = (text or "").strip().split()
+        if len(parts) >= 2:
+            try:
+                port = int(parts[1])
+            except ValueError:
+                port = 443
+        if not host:
+            await message.reply_text(deps.tr(user_id, "toolkit_ping_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        ok, ms = tcp_ping(host, port)
+        if not ok:
+            await message.reply_text(
+                deps.tr(user_id, "toolkit_ping_error", host=host, port=port, error=ms),
+                parse_mode=None,
+            )
+            deps.clear_state(user_id)
+            return
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(
+            deps.tr(user_id, "toolkit_ping_result", host=host, port=port, ms=ms),
+            parse_mode=None,
+        )
+        return
+
+    if state.get("step") in (
+        "await_toolkit_md5",
+        "await_toolkit_sha256",
+        "await_toolkit_b64e",
+        "await_toolkit_b64d",
+    ):
+        if not deps.toolkit_utility_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_utility_disabled"), parse_mode=None)
+            return
+        raw = (text or "").strip()
+        step = state.get("step")
+        hint = {
+            "await_toolkit_md5": "toolkit_md5_send_only",
+            "await_toolkit_sha256": "toolkit_sha256_send_only",
+            "await_toolkit_b64e": "toolkit_b64e_send_only",
+            "await_toolkit_b64d": "toolkit_b64d_send_only",
+        }.get(step, "text_unhandled_hint")
+        if not raw:
+            await message.reply_text(deps.tr(user_id, hint), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        inp, trunc = clip_input(raw)
+        extra = "\n" + deps.tr(user_id, "toolkit_input_truncated") if trunc else ""
+        if step == "await_toolkit_md5":
+            out = md5_hex(inp)
+            deps.toolkit_quota_commit(user_id)
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_md5_result", digest=out) + extra, parse_mode=None)
+            return
+        if step == "await_toolkit_sha256":
+            out = sha256_hex(inp)
+            deps.toolkit_quota_commit(user_id)
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_sha256_result", digest=out) + extra, parse_mode=None)
+            return
+        if step == "await_toolkit_b64e":
+            out = b64_encode_str(inp)
+            deps.toolkit_quota_commit(user_id)
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_b64e_result", data=out) + extra, parse_mode=None)
+            return
+        ok, out = b64_decode_str(inp)
+        if not ok:
+            await message.reply_text(deps.tr(user_id, "toolkit_b64d_error", error=out), parse_mode=None)
+            deps.clear_state(user_id)
+            return
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(deps.tr(user_id, "toolkit_b64d_result", data=out) + extra, parse_mode=None)
+        return
+
+    if await deps.dispatch_world_wizard(message, user_id, text, deps.world_command_deps):
         return
 
     if await deps.handle_zip_password_text(message, user_id, text, deps.zip_password_deps):

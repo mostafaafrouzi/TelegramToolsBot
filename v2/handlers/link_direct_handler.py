@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -51,6 +52,23 @@ def _dest_keyboard(user_id: int, tr: TranslateFn) -> InlineKeyboardMarkup:
     )
 
 
+def _quality_keyboard(user_id: int, tr: TranslateFn) -> InlineKeyboardMarkup:
+    """Inline quality picker for YouTube (best / 1080p / 720p / 480p / audio-only)."""
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(tr(user_id, "link_quality_best"), callback_data="linkquality:best"),
+                InlineKeyboardButton(tr(user_id, "link_quality_1080"), callback_data="linkquality:1080"),
+            ],
+            [
+                InlineKeyboardButton(tr(user_id, "link_quality_720"), callback_data="linkquality:720"),
+                InlineKeyboardButton(tr(user_id, "link_quality_480"), callback_data="linkquality:480"),
+            ],
+            [InlineKeyboardButton(tr(user_id, "link_quality_audio_only"), callback_data="linkquality:audio")],
+        ]
+    )
+
+
 _LINK_TYPE_KEYS = {
     "direct": "link_type_direct",
     "youtube": "link_type_youtube",
@@ -68,6 +86,14 @@ def _format_probe_summary(deps: LinkDirectHandlerDeps, user_id: int, meta: LinkM
         link_type=type_txt,
         size=size_txt,
     )
+
+
+#
+# Pending user selections (between probe -> quality pick -> destination pick).
+#
+_pending_link_meta: dict[int, LinkMetadata] = {}
+_pending_link_quality: dict[int, str] = {}
+_pending_link_audio_only: dict[int, bool] = {}
 
 
 def verify_destination(
@@ -242,17 +268,64 @@ async def handle_link_direct_text(
 
     summary = _format_probe_summary(deps, user_id, meta)
     try:
-        await status.edit_text(
-            f"{summary}\n\n{deps.tr(user_id, 'link_pick_dest')}",
-            reply_markup=_dest_keyboard(user_id, deps.tr),
-            parse_mode=None,
-        )
+        if meta.link_type == "youtube":
+            await status.edit_text(
+                f"{summary}\n\n{deps.tr(user_id, 'link_pick_quality')}",
+                reply_markup=_quality_keyboard(user_id, deps.tr),
+                parse_mode=None,
+            )
+        else:
+            await status.edit_text(
+                f"{summary}\n\n{deps.tr(user_id, 'link_pick_dest')}",
+                reply_markup=_dest_keyboard(user_id, deps.tr),
+                parse_mode=None,
+            )
     except MessageNotModified:
         pass
 
     # Stash URL metadata in reply_to message id — callback uses inline data only (url in callback too long).
     # Store pending in a module-level cache keyed by user_id (simple; cleared on pick/cancel).
     _pending_link_meta[user_id] = meta
+    return True
+
+
+async def handle_link_quality_callback(
+    deps: LinkDirectHandlerDeps,
+    client: Any,
+    callback_query: Any,
+    quality: str,
+) -> bool:
+    user_id = callback_query.from_user.id
+    anchor = callback_query.message
+
+    # Quality selection doesn't depend on meta existence (dest callback will validate meta).
+    q = (quality or "").strip().lower()
+    if q in ("audio", "audio_only", "onlyaudio"):
+        _pending_link_quality[user_id] = "best"
+        _pending_link_audio_only[user_id] = True
+        reply_text = deps.tr(user_id, "link_quality_audio_set")
+    else:
+        _pending_link_audio_only[user_id] = False
+        if not q or q == "best":
+            _pending_link_quality[user_id] = "best"
+            reply_text = deps.tr(user_id, "link_quality_best_set")
+        else:
+            # e.g. "1080", "720", "480"
+            _pending_link_quality[user_id] = q
+            reply_text = deps.tr(user_id, "link_quality_set", quality=q)
+
+    await callback_query.answer()
+    if not anchor:
+        return True
+
+    try:
+        await anchor.edit_text(
+            reply_text,
+            reply_markup=_dest_keyboard(user_id, deps.tr),
+            parse_mode=None,
+        )
+    except MessageNotModified:
+        pass
     return True
 
 
@@ -298,12 +371,31 @@ async def handle_link_dest_callback(
     audio_only = _pending_link_audio_only.pop(user_id, False)
 
     try:
+        loop = asyncio.get_running_loop()
+        last_update_ts = 0.0
+
+        def _progress_cb(m: str) -> None:
+            nonlocal last_update_ts
+            now = time.time()
+            # throttle edits (and avoid chatty updates while ytdlp downloads)
+            if now - last_update_ts < 2.0:
+                return
+            last_update_ts = now
+
+            # schedule async edit on the event loop (thread-safe)
+            try:
+                loop.call_soon_threadsafe(
+                    lambda: asyncio.create_task(_progress(m))
+                )
+            except Exception:
+                pass
+
         local_path = await asyncio.to_thread(
             download_to_path,
             meta.url,
             deps.download_dir,
             metadata=meta,
-            progress_cb=lambda m: None,
+            progress_cb=_progress_cb,
             quality=quality,
             audio_only=audio_only,
         )
@@ -320,10 +412,6 @@ async def handle_link_dest_callback(
 
     await enqueue_downloaded_file(deps, anchor, user_id, dest=dest, local_path=local_path, meta=meta, extra=extra)
     return True
-
-
-# Per-user pending metadata between probe and destination pick (cleared on use).
-_pending_link_meta: dict[int, LinkMetadata] = {}
 
 
 async def handle_link_direct_for_direct_mode(

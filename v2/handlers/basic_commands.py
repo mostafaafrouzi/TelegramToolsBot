@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
@@ -17,12 +17,17 @@ class BasicCommandDeps:
     tr: TranslateFn
     remember_chat: Callable[[int], None]
     set_menu_section: Callable[[int, MenuSection], None]
+    get_direct_mode_target: Callable[[int], Optional[str]]
+    set_direct_mode_target: Callable[[int, Optional[str]], None]
     build_main_menu: Callable[[int], Any]
     app_version: str
 
 
 async def handle_start(deps: BasicCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
+    # Exiting the "direct menu" or typing /start should disable direct mode first.
+    if deps.get_direct_mode_target(uid):
+        deps.set_direct_mode_target(uid, None)
     deps.remember_chat(message.chat.id)
     deps.set_menu_section(uid, MenuSection.MAIN)
     await message.reply_text(
@@ -33,6 +38,9 @@ async def handle_start(deps: BasicCommandDeps, client: Any, message: Message) ->
 
 async def handle_menu(deps: BasicCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
+    # Leaving any direct-menu flow back to main should disable direct mode first.
+    if deps.get_direct_mode_target(uid):
+        deps.set_direct_mode_target(uid, None)
     deps.set_menu_section(uid, MenuSection.MAIN)
     await message.reply_text(
         deps.tr(uid, "menu_intro"),

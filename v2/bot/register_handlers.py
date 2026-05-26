@@ -79,6 +79,7 @@ _TEXT_EXCLUDED_COMMANDS = [
     "admin_payment_status",
     "admin_reconcile_billing",
     "cleanup_downloads",
+    "imenu",
 ]
 
 _MEDIA_FILTER = filters.private & (
@@ -108,6 +109,7 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.help_handler, priv & cmd("help"))
     mh(tb.log_help_handler, priv & cmd("loghelp"))
     mh(tb.version_handler, priv & cmd("version"))
+    mh(tb.imenu_handler, priv & cmd("imenu"))
     mh(tb.rubika_status_handler, priv & cmd("rubika_status"))
     mh(tb.rubika_connect_handler, priv & cmd("rubika_connect"))
     mh(tb.direct_mode_handler, priv & cmd("directmode"))

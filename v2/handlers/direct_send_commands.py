@@ -100,6 +100,9 @@ async def handle_direct_mode(deps: DirectSendCommandDeps, client: Any, message: 
 
     deps.set_direct_mode_target(uid, target)
     await message.reply_text(
-        deps.tr(uid, f"direct_on_{target}"),
+        deps.tr(uid, f"direct_on_{target}")
+        + "\n\n"
+        + deps.tr(uid, "direct_on_explain"),
         reply_markup=deps.build_settings_menu(uid),
+        parse_mode=None,
     )

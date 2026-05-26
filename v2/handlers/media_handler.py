@@ -11,6 +11,7 @@ from typing import Any, Callable, Optional
 from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
+from v2.handlers.media_dest_handler import MediaDestHandlerDeps, prompt_media_destination
 from v2.transfer.bale_client import BALE_MAX_BYTES
 from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
@@ -100,10 +101,10 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
             await message.reply_text(deps.tr(user_id, "ssh_auth_missing"), parse_mode=None)
             return
         await _download_and_queue(
-            deps,
             client,
             message,
             user_id,
+            deps=deps,
             task_type="ssh_put",
             extra={
                 "ssh_server": {
@@ -152,11 +153,26 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
         await message.reply_text(deps.tr(user_id, "media_need_rubika"), parse_mode=None)
         return
 
+    async def _queue_after_dest_pick(client, message, user_id, **kwargs):
+        await _download_and_queue(client, message, user_id, deps=deps, **kwargs)
+
+    mdest = MediaDestHandlerDeps(
+        tr=deps.tr,
+        base_dir=deps.base_dir,
+        queue=deps.queue,
+        get_user_session=deps.get_user_session,
+        get_direct_mode_target=deps.get_direct_mode_target,
+        get_menu_section=deps.get_menu_section,
+        download_and_queue_media=_queue_after_dest_pick,
+    )
+    if await prompt_media_destination(mdest, message, user_id):
+        return
+
     await _download_and_queue(
-        deps,
         client,
         message,
         user_id,
+        deps=deps,
         task_type=task_type,
         extra=extra,
         require_rubika=require_rubika,
@@ -166,16 +182,17 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
 
 
 async def _download_and_queue(
-    deps: MediaHandlerDeps,
     client: Any,
     message: Message,
     user_id: int,
     *,
+    deps: MediaHandlerDeps,
     task_type: str,
     extra: dict,
     require_rubika: bool,
     session_name: Optional[str] = None,
     batch_allowed: bool = True,
+    status_message: Optional[Message] = None,
 ) -> None:
     media_type, media = deps.get_media(message)
     if not media:
@@ -184,7 +201,9 @@ async def _download_and_queue(
 
     download_name = deps.build_download_filename(message, media_type, media)
     download_path = deps.download_dir / download_name
-    status = await message.reply_text(deps.tr(user_id, "media_download_status"), parse_mode=None)
+    status = status_message
+    if not status:
+        status = await message.reply_text(deps.tr(user_id, "media_download_status"), parse_mode=None)
 
     try:
         started_at = time.time()

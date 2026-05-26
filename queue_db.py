@@ -257,6 +257,23 @@ class QueueDB:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_v2_ssh_servers_user ON v2_ssh_servers(telegram_user_id)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS v2_feeds (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    telegram_user_id INTEGER NOT NULL,
+                    feed_url TEXT NOT NULL,
+                    label TEXT,
+                    push_enabled INTEGER NOT NULL DEFAULT 0,
+                    last_content_hash TEXT,
+                    created_at INTEGER NOT NULL,
+                    updated_at INTEGER NOT NULL
+                )
+                """
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_v2_feeds_user ON v2_feeds(telegram_user_id)"
+            )
             self._migrate_v2_ssh_servers_secret(conn)
             conn.commit()
 
@@ -1308,4 +1325,92 @@ class QueueDB:
                     (int(telegram_user_id), day, newc),
                 )
                 conn.commit()
+
+    def add_feed(
+        self,
+        telegram_user_id: int,
+        feed_url: str,
+        *,
+        label: str = "",
+        push_enabled: bool = False,
+    ) -> int:
+        now = int(time.time())
+        url = (feed_url or "").strip()
+        with self._lock:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    """
+                    INSERT INTO v2_feeds (
+                        telegram_user_id, feed_url, label, push_enabled,
+                        last_content_hash, created_at, updated_at
+                    )
+                    VALUES (?, ?, ?, ?, NULL, ?, ?)
+                    """,
+                    (
+                        int(telegram_user_id),
+                        url,
+                        (label or url)[:200],
+                        1 if push_enabled else 0,
+                        now,
+                        now,
+                    ),
+                )
+                conn.commit()
+                return int(cur.lastrowid)
+
+    def list_feeds(self, telegram_user_id: int) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, feed_url, label, push_enabled, last_content_hash, created_at
+                FROM v2_feeds WHERE telegram_user_id = ?
+                ORDER BY id DESC
+                """,
+                (int(telegram_user_id),),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_feed(self, feed_id: int, telegram_user_id: int) -> bool:
+        with self._lock:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    "DELETE FROM v2_feeds WHERE id = ? AND telegram_user_id = ?",
+                    (int(feed_id), int(telegram_user_id)),
+                )
+                conn.commit()
+                return cur.rowcount > 0
+
+    def set_feed_push(self, feed_id: int, telegram_user_id: int, enabled: bool) -> bool:
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    """
+                    UPDATE v2_feeds SET push_enabled = ?, updated_at = ?
+                    WHERE id = ? AND telegram_user_id = ?
+                    """,
+                    (1 if enabled else 0, now, int(feed_id), int(telegram_user_id)),
+                )
+                conn.commit()
+                return cur.rowcount > 0
+
+    def update_feed_hash(self, feed_id: int, content_hash: str) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    "UPDATE v2_feeds SET last_content_hash = ?, updated_at = ? WHERE id = ?",
+                    (content_hash, now, int(feed_id)),
+                )
+                conn.commit()
+
+    def list_push_feeds(self) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, telegram_user_id, feed_url, label, last_content_hash
+                FROM v2_feeds WHERE push_enabled = 1
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]
 

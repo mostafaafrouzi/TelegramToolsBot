@@ -21,5 +21,11 @@ def run_bot() -> None:
     tb.app.loop.create_task(tb.status_watcher())
     tb.app.loop.create_task(tb.maybe_broadcast_update())
     tb.app.loop.create_task(tb.payment_reconcile_loop())
+    tb.app.loop.create_task(tb.rss_poll_loop())
+    if getattr(tb, "MINIAPP_SERVE_LOCAL", False):
+        from v2.web.miniapp_http import start_miniapp_server
+
+        web_root = tb.BASE_DIR / "web"
+        start_miniapp_server(web_root, port=tb.MINIAPP_PORT)
     idle()
     tb.app.stop()

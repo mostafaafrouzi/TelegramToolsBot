@@ -212,6 +212,8 @@ def download_to_path(
     *,
     metadata: Optional[LinkMetadata] = None,
     progress_cb: Optional[Callable[[str], None]] = None,
+    quality: str = "best",
+    audio_only: bool = False,
 ) -> Path:
     """Download link to dest_dir; raises RuntimeError on failure."""
     meta = metadata or probe_metadata(url)
@@ -220,7 +222,14 @@ def download_to_path(
 
     dest_dir.mkdir(parents=True, exist_ok=True)
     if meta.link_type == "youtube":
-        return _download_youtube(url, dest_dir, meta, progress_cb=progress_cb)
+        return _download_youtube(
+            url,
+            dest_dir,
+            meta,
+            progress_cb=progress_cb,
+            quality=quality,
+            audio_only=audio_only,
+        )
     return _download_direct(url, dest_dir, meta, progress_cb=progress_cb)
 
 
