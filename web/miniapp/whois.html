@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Whois</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="card">
+    <input id="q" type="text" placeholder="8.8.8.8 or example.com" autocomplete="off" />
+    <button type="button" class="btn" id="btn-run"></button>
+    <pre id="out" class="mono" style="margin-top:10px">—</pre>
+    <div id="copy-wrap"></div>
+  </div>
+  <script src="common.js"></script>
+  <script>
+    T2R.initApp();
+    const en = T2R.lang() === "en";
+    document.getElementById("hdr").appendChild(T2R.header(en ? "Whois / RDAP" : "Whois", "index.html"));
+    document.getElementById("btn-run").textContent = en ? "Lookup" : "جستجو";
+    const out = document.getElementById("out");
+    const qEl = document.getElementById("q");
+
+    document.getElementById("btn-run").onclick = async () => {
+      const q = qEl.value.trim();
+      if (!q) {
+        out.textContent = en ? "Enter IP or domain." : "IP یا دامنه را وارد کنید.";
+        return;
+      }
+      out.textContent = T2R.t("loading");
+      try {
+        const j = await T2R.miniappApi("whois", { q });
+        out.textContent = j.ok ? j.text : (en ? "Error: " : "خطا: ") + (j.error || "?");
+        document.getElementById("copy-wrap").innerHTML = "";
+        if (j.ok) T2R.addCopyButton(document.getElementById("copy-wrap"), () => out.textContent);
+      } catch (e) {
+        out.textContent = (en ? "API unavailable: " : "API در دسترس نیست: ") + e;
+      }
+    };
+  </script>
+</body>
+</html>

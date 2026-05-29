@@ -1,0 +1,38 @@
+# Example nginx fragment for Tele2Rub Mini App + Google Drive OAuth callback.
+# Replace YOUR_DOMAIN and /opt/tele2rub with your install path.
+#
+# Option A — static files only (bot does NOT serve HTTP; set MINIAPP_SERVE_LOCAL=0):
+#   root = repo web/ directory; MINIAPP_BASE_URL=https://YOUR_DOMAIN/tele2rub
+#
+# Option B — reverse proxy to built-in server (MINIAPP_SERVE_LOCAL=1, MINIAPP_PORT=8788):
+#   proxy_pass to 127.0.0.1:8788
+
+# --- Option A: alias (recommended for production) ---
+# location /tele2rub/ {
+#     alias /opt/tele2rub/web/;
+#     try_files $uri $uri/ =404;
+# }
+# location = /tele2rub/miniapp {
+#     return 302 /tele2rub/miniapp/index.html;
+# }
+# Mini App JSON API (whois, HTTP headers) — required for headers.html / whois.html:
+# location /tele2rub/miniapp/api/ {
+#     proxy_pass http://127.0.0.1:8788/miniapp/api/;
+#     proxy_set_header Host $host;
+#     proxy_set_header X-Real-IP $remote_addr;
+# }
+# OAuth callback must hit the bot HTTP handler if using MINIAPP_SERVE_LOCAL=1:
+# location /tele2rub/oauth/ {
+#     proxy_pass http://127.0.0.1:8788/oauth/;
+#     proxy_set_header Host $host;
+#     proxy_set_header X-Real-IP $remote_addr;
+# }
+
+# --- Option B: full proxy to miniapp thread ---
+# location /tele2rub/ {
+#     proxy_pass http://127.0.0.1:8788/;
+#     proxy_set_header Host $host;
+#     proxy_set_header X-Forwarded-Proto $scheme;
+# }
+
+# TLS: use certbot (Let's Encrypt). Telegram WebApp requires HTTPS.

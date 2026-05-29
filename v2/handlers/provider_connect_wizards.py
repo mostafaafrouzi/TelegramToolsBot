@@ -12,7 +12,12 @@ from pyrogram.types import Message
 
 from v2.core.menu_sections import MenuSection
 from v2.transfer.bale_client import validate_bot_token, validate_chat
-from v2.transfer.user_credentials import default_drive_sa_path
+from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+from v2.handlers.drive_oauth_flow import connect_drive_with_auth_code
+from v2.toolkit.drive_light import extract_folder_id, service_account_email
+from v2.toolkit.drive_oauth_light import oauth_configured
+from v2.transfer.user_credentials import default_drive_oauth_path, default_drive_sa_path
 
 TranslateFn = Callable[..., str]
 
@@ -30,6 +35,7 @@ class ProviderConnectWizardDeps:
     clear_bale_credentials: Callable[[int], None]
     upsert_drive_folder_id: Callable[[int, str], None]
     upsert_drive_sa_path: Callable[[int, str], None]
+    upsert_drive_oauth_path: Callable[[int, str], None]
     clear_drive_credentials: Callable[[int], None]
     log_event: Callable[..., None]
 
@@ -76,13 +82,33 @@ async def dispatch_provider_connect_wizard(
         deps.log_event("bale_connect_ok", user_id=user_id)
         return True
 
+    if step == "await_drive_oauth_code":
+        code = text.strip()
+        if not code:
+            await message.reply_text(tr(user_id, "drive_oauth_code_empty"), parse_mode=None)
+            return True
+        ok, err = connect_drive_with_auth_code(
+            deps.base_dir,
+            user_id,
+            code,
+            deps.upsert_drive_oauth_path,
+        )
+        if not ok:
+            await message.reply_text(tr(user_id, "drive_oauth_failed", detail=err), parse_mode=None)
+            return True
+        deps.set_state_preserving_menu(user_id, {"step": "await_drive_folder_id"})
+        await message.reply_text(tr(user_id, "drive_oauth_ok_ask_folder"), parse_mode=None)
+        deps.log_event("drive_oauth_code_ok", user_id=user_id)
+        return True
+
     if step == "await_drive_folder_id":
-        folder_id = text.strip()
+        folder_id = extract_folder_id(text)
         if not folder_id:
             await message.reply_text(tr(user_id, "drive_folder_empty"), parse_mode=None)
             return True
         sa = default_drive_sa_path(deps.base_dir, user_id)
-        if not sa.is_file():
+        oauth = default_drive_oauth_path(deps.base_dir, user_id)
+        if not sa.is_file() and not oauth.is_file():
             await message.reply_text(tr(user_id, "drive_sa_missing_retry"), parse_mode=None)
             deps.clear_state(user_id)
             return True
@@ -117,6 +143,38 @@ async def handle_bale_disconnect(deps: ProviderConnectWizardDeps, client: Any, m
 async def handle_drive_connect(deps: ProviderConnectWizardDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.DRIVE)
+    sa = default_drive_sa_path(deps.base_dir, uid)
+    oauth = default_drive_oauth_path(deps.base_dir, uid)
+    if sa.is_file() and not oauth.is_file():
+        email = service_account_email(sa)
+        deps.set_state_preserving_menu(uid, {"step": "await_drive_folder_id"})
+        hint = deps.tr(uid, "drive_sa_already_uploaded", email=email or "—")
+        await message.reply_text(hint, parse_mode=None)
+        return
+    if oauth.is_file() and not sa.is_file():
+        deps.set_state_preserving_menu(uid, {"step": "await_drive_folder_id"})
+        await message.reply_text(deps.tr(uid, "drive_oauth_ok_ask_folder"), parse_mode=None)
+        return
+    if oauth_configured():
+        kb = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        deps.tr(uid, "btn_drive_auth_sa"),
+                        callback_data="driveauth:sa",
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        deps.tr(uid, "btn_drive_auth_oauth"),
+                        callback_data="driveauth:oauth",
+                    )
+                ],
+            ]
+        )
+        deps.log_event("drive_connect_started", user_id=uid)
+        await message.reply_text(deps.tr(uid, "drive_connect_choose"), reply_markup=kb, parse_mode=None)
+        return
     deps.set_state_preserving_menu(uid, {"step": "await_drive_sa_json"})
     deps.log_event("drive_connect_started", user_id=uid)
     await message.reply_text(deps.tr(uid, "drive_ask_sa_json"), parse_mode=None)
@@ -128,12 +186,15 @@ async def handle_drive_disconnect(
     message: Message,
 ) -> None:
     uid = message.from_user.id
-    sa = default_drive_sa_path(deps.base_dir, uid)
-    try:
-        if sa.is_file():
-            sa.unlink()
-    except OSError:
-        pass
+    for path in (
+        default_drive_sa_path(deps.base_dir, uid),
+        default_drive_oauth_path(deps.base_dir, uid),
+    ):
+        try:
+            if path.is_file():
+                path.unlink()
+        except OSError:
+            pass
     deps.clear_drive_credentials(uid)
     deps.clear_state(uid)
     deps.log_event("drive_disconnect", user_id=uid)

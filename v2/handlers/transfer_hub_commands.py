@@ -136,8 +136,14 @@ async def handle_drive_status(deps: TransferHubDeps, client: Any, message: Messa
         await message.reply_text(deps.tr(uid, "drive_not_connected"), parse_mode=None)
         return
     ok, detail = GoogleDriveTransferAdapter().healthcheck(
-        service_account_path=str(dc.service_account_path),
+        service_account_path=str(dc.service_account_path) if dc.service_account_path else None,
+        oauth_token_path=str(dc.oauth_token_path) if dc.oauth_token_path else None,
         folder_id=dc.folder_id,
+    )
+    mode = dc.auth_mode
+    await message.reply_text(
+        deps.tr(uid, "drive_status_line", ok="✅" if ok else "❌", detail=detail, mode=mode),
+        parse_mode=None,
     )
 
 
@@ -151,7 +157,8 @@ async def handle_drive_ls(deps: TransferHubDeps, client: Any, message: Message) 
     parts = (message.text or "").split(maxsplit=1)
     folder_id = parts[1].strip() if len(parts) > 1 and parts[1].strip() else dc.folder_id
     ok, detail = drive_list_files(
-        service_account_path=str(dc.service_account_path),
+        service_account_path=str(dc.service_account_path) if dc.service_account_path else None,
+        oauth_token_path=str(dc.oauth_token_path) if dc.oauth_token_path else None,
         folder_id=folder_id,
     )
     await message.reply_text(
@@ -198,13 +205,21 @@ async def handle_ssh_add(deps: TransferHubDeps, client: Any, message: Message) -
         await message.reply_text(deps.tr(uid, "ssh_add_usage"), parse_mode=None)
         return
     label, host, port_s, ssh_user = parts[1], parts[2], parts[3], parts[4]
-    ssh_secret = parts[5] if len(parts) >= 6 else ""
+    cred = parts[5] if len(parts) >= 6 else ""
+    ssh_secret = ""
+    ssh_key_path = ""
+    if cred.lower().startswith("key:"):
+        ssh_key_path = cred.split(":", 1)[1].strip()
+    else:
+        ssh_secret = cred
     try:
         port = int(port_s)
     except ValueError:
         await message.reply_text(deps.tr(uid, "ssh_add_usage"), parse_mode=None)
         return
-    ok, msg = deps.ssh_add_server(uid, label, host, port, ssh_user, ssh_secret=ssh_secret)
+    ok, msg = deps.ssh_add_server(
+        uid, label, host, port, ssh_user, ssh_secret=ssh_secret, ssh_key_path=ssh_key_path
+    )
     if not ok:
         await message.reply_text(msg, parse_mode=None)
         return
@@ -313,7 +328,8 @@ async def handle_drive_download_command(
         "drive_file_id": file_id,
         "telegram_user_id": uid,
         "chat_id": message.chat.id,
-        "drive_sa_path": str(dc.service_account_path),
+        "drive_sa_path": str(dc.service_account_path) if dc.service_account_path else "",
+        "drive_oauth_path": str(dc.oauth_token_path) if dc.oauth_token_path else "",
     }
     await push_task_direct(message, task)
 

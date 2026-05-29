@@ -17,6 +17,11 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_main_settings": "/show_settings_menu",
     "btn_main_link_direct": "/show_link_direct_menu",
     "btn_main_cloudflare": "/show_cloudflare_menu",
+    "btn_main_ssh": "/show_ssh_menu",
+    "btn_main_world": "/show_world_menu",
+    "btn_main_feed": "/show_feed_menu",
+    "btn_main_miniapp": "/miniapp",
+    "btn_feed_reader": "/show_feed_menu",
     "btn_main_help": "/help",
     "btn_main_admin": "/show_admin_menu",
     "btn_back_main": "/menu",
@@ -65,6 +70,25 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_tool_whois": "/whois",
     "btn_tool_myid": "/myid",
     "btn_tool_google": "/gsearch",
+    "btn_tool_http_headers": "/httpheaders",
+    "btn_tool_website_status": "/webstatus",
+    "btn_tool_port_check": "/portcheck",
+    "btn_tool_subnet": "/subnet",
+    "btn_tool_blacklist": "/blacklist",
+    "btn_tool_ssl": "/sslcheck",
+    "btn_tool_password": "/password",
+    "btn_tool_rev_dns": "/revdns",
+    "btn_tool_mac": "/maclookup",
+    "btn_tool_email": "/emailcheck",
+    "btn_tool_url_expand": "/urlexpand",
+    "btn_tool_timestamp": "/timestamp",
+    "btn_tool_lorem": "/lorem",
+    "btn_world_weather": "/world_weather",
+    "btn_world_calendar": "/world_calendar",
+    "btn_world_currency": "/world_currency",
+    "btn_world_earthquake": "/world_quake",
+    "btn_world_rss": "/world_rss",
+    "btn_world_rss_list": "/world_rss_list",
     "btn_tool_md5": "/md5",
     "btn_tool_sha256": "/sha256",
     "btn_tool_b64e": "/b64e",
@@ -114,6 +138,7 @@ _STATIC_BUTTON_ROUTES: Dict[str, str] = {
     "/queue": "/queue",
     "/dns": "/dns",
     "/myip": "/myip",
+    "/miniapp": "/miniapp",
     "/ping": "/ping",
     "/ipinfo": "/ipinfo",
     "/whois": "/whois",
@@ -248,6 +273,10 @@ def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboa
         tr(user_id, "btn_main_transfer"),
         tr(user_id, "btn_main_link_direct"),
         tr(user_id, "btn_main_toolkit"),
+        tr(user_id, "btn_main_miniapp"),
+        tr(user_id, "btn_main_world"),
+        tr(user_id, "btn_main_feed"),
+        tr(user_id, "btn_main_ssh"),
         tr(user_id, "btn_main_cloudflare"),
         tr(user_id, "btn_main_plan_section"),
         tr(user_id, "btn_main_settings"),
@@ -280,8 +309,25 @@ def build_transfer_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_transfer_rubika"),
                 tr(user_id, "btn_transfer_bale"),
                 tr(user_id, "btn_transfer_drive"),
-                tr(user_id, "btn_transfer_ssh"),
                 tr(user_id, "btn_transfer_files"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_main")]]
+    )
+
+
+def build_world_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        _grid(
+            [
+                tr(user_id, "btn_world_weather"),
+                tr(user_id, "btn_world_calendar"),
+                tr(user_id, "btn_world_currency"),
+                tr(user_id, "btn_world_earthquake"),
+                tr(user_id, "btn_feed_reader"),
+                tr(user_id, "btn_world_rss"),
+                tr(user_id, "btn_world_rss_list"),
             ],
             3,
         )
@@ -343,7 +389,7 @@ def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
             ],
             3,
         )
-        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_main")]]
     )
 
 
@@ -359,23 +405,47 @@ def build_toolkit_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 
 def build_toolkit_network_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_tool_dns"), tr(user_id, "btn_tool_myip")],
-            [tr(user_id, "btn_tool_ping"), tr(user_id, "btn_tool_ipinfo")],
-            [tr(user_id, "btn_tool_whois"), tr(user_id, "btn_tool_myid")],
-            [tr(user_id, "btn_tool_google")],
-            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_tool_dns"),
+                tr(user_id, "btn_tool_myip"),
+                tr(user_id, "btn_tool_ping"),
+                tr(user_id, "btn_tool_ipinfo"),
+                tr(user_id, "btn_tool_whois"),
+                tr(user_id, "btn_tool_myid"),
+                tr(user_id, "btn_tool_http_headers"),
+                tr(user_id, "btn_tool_website_status"),
+                tr(user_id, "btn_tool_port_check"),
+                tr(user_id, "btn_tool_subnet"),
+                tr(user_id, "btn_tool_blacklist"),
+                tr(user_id, "btn_tool_ssl"),
+                tr(user_id, "btn_tool_rev_dns"),
+                tr(user_id, "btn_tool_url_expand"),
+                tr(user_id, "btn_tool_mac"),
+                tr(user_id, "btn_tool_email"),
+                tr(user_id, "btn_tool_google"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")]]
     )
 
 
 def build_toolkit_crypto_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
-        [
-            [tr(user_id, "btn_tool_md5"), tr(user_id, "btn_tool_sha256")],
-            [tr(user_id, "btn_tool_b64e"), tr(user_id, "btn_tool_b64d")],
-            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
-        ]
+        _grid(
+            [
+                tr(user_id, "btn_tool_md5"),
+                tr(user_id, "btn_tool_sha256"),
+                tr(user_id, "btn_tool_b64e"),
+                tr(user_id, "btn_tool_b64d"),
+                tr(user_id, "btn_tool_password"),
+                tr(user_id, "btn_tool_timestamp"),
+                tr(user_id, "btn_tool_lorem"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")]]
     )
 
 

@@ -117,7 +117,8 @@ def verify_destination(
         if not drive.ready:
             return False, "drive_not_connected", {}
         return True, "", {
-            "drive_sa_path": str(drive.service_account_path),
+            "drive_sa_path": str(drive.service_account_path) if drive.service_account_path else "",
+            "drive_oauth_path": str(drive.oauth_token_path) if drive.oauth_token_path else "",
             "drive_folder_id": drive.folder_id,
         }
     return False, "link_dest_invalid", {}

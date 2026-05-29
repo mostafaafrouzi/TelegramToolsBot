@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Tele2Rub Tools</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <header class="app-header">
+    <h1 id="title">Tele2Rub</h1>
+  </header>
+  <p class="muted" id="subtitle"></p>
+  <nav class="grid" id="nav"></nav>
+  <div class="card muted" id="note"></div>
+  <script src="common.js"></script>
+  <script>
+    T2R.initApp();
+    const isEn = T2R.lang() === "en";
+    document.getElementById("title").textContent = isEn ? "Tele2Rub Tools" : "ابزارهای Tele2Rub";
+    document.getElementById("subtitle").textContent = T2R.t("home_sub");
+    document.getElementById("note").textContent = isEn
+      ? "Tip: set MINIAPP_BASE_URL on your server and open this hub from /myip or /imenu."
+      : "نکته: MINIAPP_BASE_URL را روی سرور تنظیم کنید و از /myip یا منوی شیشه‌ای باز کنید.";
+
+    const pages = [
+      { href: "myip.html", icon: "📍", fa: "IP من", en: "My IP" },
+      { href: "dns.html", icon: "🌐", fa: "DNS", en: "DNS lookup" },
+      { href: "whois.html", icon: "🔍", fa: "Whois", en: "Whois" },
+      { href: "headers.html", icon: "📬", fa: "HTTP / وضعیت", en: "HTTP / Status" },
+      { href: "network.html", icon: "📡", fa: "تأخیر شبکه", en: "Latency" },
+      { href: "utils.html", icon: "🧰", fa: "ابزارها", en: "Utilities" },
+    ];
+    const nav = document.getElementById("nav");
+    pages.forEach((p) => {
+      const a = document.createElement("a");
+      a.className = "tile";
+      a.href = p.href;
+      a.innerHTML = '<span class="icon">' + p.icon + '</span><span class="label">' + (isEn ? p.en : p.fa) + "</span>";
+      nav.appendChild(a);
+    });
+  </script>
+</body>
+</html>

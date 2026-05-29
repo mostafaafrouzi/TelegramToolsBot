@@ -1,240 +1,313 @@
-# telegramtorubika
+# telegramtorubika (Tele2Rub)
 
-Telegram to Rubika transfer bot with queueing, batch zip/split, per-user Rubika sessions, and server installer.
+Telegram bot to transfer files to **Rubika**, plus optional **Bale**, **Google Drive**, **SSH**, a **toolkit** (DNS, ping, hashes, …), **world tools** (weather, RSS feeds), and a **Telegram Mini App** (browser tools using the user’s real IP).
 
-Repository: [github.com/mostafaafrouzi/telegramtorubika](http://github.com/mostafaafrouzi/telegramtorubika)
+Repository: [github.com/mostafaafrouzi/telegramtorubika](https://github.com/mostafaafrouzi/telegramtorubika)
+
+---
 
 ## Features
 
-- Per-user Rubika connection from Telegram bot (`/rubika_connect`)
-- Queue-based processing (SQLite)
-- Batch mode: collect many files, zip, split parts
-- Direct URL download
-- Safe mode (zip with password)
-- Direct mode (send everything immediately to queue)
-- Interactive server installer (install/update/uninstall/backup/restore)
-- Per-user **plans & quotas** (default tiers guest/free/pro in SQLite; `/usage` for users; `/admin_tier`, `/admin_bonus` for admins; optional `DISABLE_USAGE_LIMITS=1` for private hosts)
-- Optional **`ENABLE_UPLOAD_CHECKSUM`** on worker (MD5 logged before Rubika upload); optional **`tools/payment_webhook_stub.py`** to activate paid tiers via HTTP
+| Area | What you get |
+|------|----------------|
+| **Transfer** | Per-user Rubika (`/rubika_connect`), Bale bot, Google Drive (service account or Google OAuth), SSH upload/download |
+| **Queue** | SQLite queue, batch ZIP/split, direct URL download, confirm/cancel before send |
+| **Toolkit** | DNS, ping, whois, IP info, HTTP headers, port check, subnet, SSL, blacklist, MAC vendor, email check, MD5/SHA256/Base64, password, … |
+| **Mini App** | WebApp hub: My IP + geo, DNS (Cloudflare DoH), latency test, password/timestamp/subnet/Base64/SHA-256 — runs in **the user’s browser**, not the server |
+| **World** | Weather, calendar, currency, earthquakes, RSS/feed reader with push poll |
+| **Admin** | Plans/quotas, `/admin`, logs, billing stub |
+| **Installer** | `installer.sh` install/update/backup on Linux (systemd) |
 
-## Fast server install (curl)
+---
+
+## Quick server install
 
 ```bash
-curl -fsSL http://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh -o installer.sh
+curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh -o installer.sh
 sudo bash installer.sh
 ```
 
-Quick one-line update (recommended for servers: auto-picks the first detected install, **no backup**, full pull + `venv` + health check + restart):
+Quick update (no backup):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --update-quick
 ```
 
-Interactive update (menu or `--update`; may prompt for instance and optional backup):
+Default install path: `/opt/tele2rub`, service: `tele2rub.service`.
+
+---
+
+## Manual development setup
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --update
-```
-
-Sync only missing environment variables (no code update):
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh | sudo bash -s -- --env-sync
-```
-
-`--update-quick` and other non-interactive flags auto-select the first detected systemd instance (`/opt/tele2rub` / `tele2rub` by default).
-
-After install/update, the installer prints a checklist (Transfer hub: Rubika/Bale/Drive/SSH, toolkit commands, optional `BALE_BOT_TOKEN` and Google Drive service-account paths under `secrets/`).
-
-## Required environment values
-
-The installer asks for these values:
-
-- `API_ID`
-- `API_HASH`
-- `BOT_TOKEN`
-- `ADMIN_IDS` (comma-separated Telegram user IDs)
-- `RUBIKA_SESSION` (default session name)
-- `DEFAULT_PART_SIZE_MB` (default split size)
-
-## How to get each field
-
-### Telegram API_ID and API_HASH
-
-1. Open [my.telegram.org](https://my.telegram.org)
-2. Login with your Telegram number
-3. Open **API development tools**
-4. Create an app (title + short name)
-5. Copy:
-   - `api_id` -> `API_ID`
-   - `api_hash` -> `API_HASH`
-
-### Telegram BOT_TOKEN
-
-1. Open `@BotFather` in Telegram
-2. Run `/newbot`
-3. Create bot username
-4. Copy token -> `BOT_TOKEN`
-
-### Telegram user ID (for ADMIN_IDS)
-
-Use one of:
-
-- `@userinfobot`
-- `@RawDataBot`
-
-Send `/start` and copy your numeric Telegram ID.
-
-### RUBIKA_SESSION
-
-Any unique string, for example:
-
-```env
-RUBIKA_SESSION=rubika_session
-```
-
-### DEFAULT_PART_SIZE_MB
-
-Recommended:
-
-```env
-DEFAULT_PART_SIZE_MB=1900
-```
-
-## Manual run (development)
-
-```bash
+git clone https://github.com/mostafaafrouzi/telegramtorubika.git
+cd telegramtorubika
 python3 -m venv venv
+# Windows: venv\Scripts\activate
 source venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env
+# Edit .env — at minimum API_ID, API_HASH, BOT_TOKEN, ADMIN_IDS
 python main.py
 ```
 
-### Split bot and worker (optional, less RAM per process)
+Split processes (optional, less RAM per process): run `python telebot.py` and `python rub.py` separately — see `deploy/systemd/*.example`.
 
-By default `main.py` runs **both** `telebot.py` and `rub.py` in one parent process (two children). On small VPS instances, large Telegram downloads can compete with the Rubika worker and trigger OOM. You can run them as **two systemd services** instead (same repo dir and `.env`):
+---
 
-- **Installer:** during **Install**, answer *yes* when asked for separate units — or copy the examples below manually.
-- Example units: `deploy/systemd/tele2rub-bot.service.example` and `deploy/systemd/tele2rub-worker.service.example`
-- Use either **one** combined `main.py` service **or** the `*-bot` + `*-worker` pair for the same install dir — not both.
+## Required environment (minimum)
 
-Live logs on a split install:
+| Variable | Description |
+|----------|-------------|
+| `API_ID` | From [my.telegram.org](https://my.telegram.org) → API development tools |
+| `API_HASH` | Same page |
+| `BOT_TOKEN` | From [@BotFather](https://t.me/BotFather) `/newbot` |
+| `ADMIN_IDS` | Comma-separated Telegram user IDs (`@userinfobot`) |
+| `RUBIKA_SESSION` | Legacy default session name, e.g. `rubika_session` |
+| `DEFAULT_PART_SIZE_MB` | ZIP split size, e.g. `1900` |
+
+Copy `.env.example` → `.env` and fill values. The installer can create `.env` for you.
+
+---
+
+## Optional environment (enable extra features)
+
+### Transfer & providers
+
+| Variable | Enables |
+|----------|---------|
+| `BALE_BOT_TOKEN` | Legacy global Bale token (prefer per-user `/bale_connect`) |
+| `BALE_API_BASE` | Bale API base (default `https://tapi.bale.ai`) |
+| `GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON` | Legacy global Drive SA path |
+| `GOOGLE_DRIVE_FOLDER_ID` | Legacy global Drive folder |
+| `GOOGLE_DRIVE_OAUTH_CLIENT_ID` | Per-user Google sign-in for Drive |
+| `GOOGLE_DRIVE_OAUTH_CLIENT_SECRET` | OAuth client secret |
+| `GOOGLE_DRIVE_OAUTH_REDIRECT_URI` | Optional; default `{MINIAPP_BASE_URL}/oauth/google/callback` |
+| `TRANSFER_V2_VALIDATE` | Worker pre-validates Rubika session |
+| `MAX_FILE_MB` | Reject uploads over N MB (`0` = no limit) |
+| `UPLOAD_TIMEOUT_SECONDS` | Worker timeout per job (default 6h) |
+
+### Toolkit
+
+| Variable | Enables |
+|----------|---------|
+| `TOOLKIT_NETWORK_LIGHT=1` | `/dns`, `/myip`, `/ping`, network extras, Mini App network tools |
+| `TOOLKIT_UTILITY_LIGHT=1` | `/md5`, `/sha256`, `/b64e`, `/b64d`, password, lorem, … |
+| `TOOLKIT_DAILY_LIMIT_PER_USER` | Hard daily cap on toolkit commands (`0` = tier only) |
+| `GOOGLE_CSE_API_KEYS` + `GOOGLE_CSE_ID` | `/gsearch`, `/gisearch` |
+
+### Mini App (WebApp)
+
+| Variable | Enables |
+|----------|---------|
+| `MINIAPP_BASE_URL` | Public **HTTPS** URL prefix for static files under `web/` (see below) |
+| `MINIAPP_SERVE_LOCAL=1` | Bot serves `web/` on `MINIAPP_PORT` (dev/small VPS) |
+| `MINIAPP_PORT` | Default `8788` |
+
+**Important:** `/myip` in the bot opens the Mini App so users see **their** public IP. Without `MINIAPP_BASE_URL`, only a setup hint is shown (no server IP leak).
+
+### RSS / feeds
+
+| Variable | Enables |
+|----------|---------|
+| `RSS_POLL_ENABLE=1` | Background feed push |
+| `RSS_POLL_INTERVAL_SEC` | Poll interval (default 900) |
+| `RSSHUB_BASE_URL` | X/Twitter → RSS via RSSHub (default `https://rsshub.app`) |
+
+### Billing / admin
+
+| Variable | Enables |
+|----------|---------|
+| `DISABLE_USAGE_LIMITS=1` | Disable quotas (private hosts) |
+| `BILLING_STUB_CHECKOUT=1` | Stub `/purchase` flow |
+| `PAYMENT_WEBHOOK_SECRET` + `WEBHOOK_PORT` | `tools/payment_webhook_stub.py` |
+| `ENABLE_UPLOAD_CHECKSUM=1` | MD5 log before Rubika upload |
+
+### Other
+
+| Variable | Enables |
+|----------|---------|
+| `APP_BUILD_VERSION` | Shown on `/version` |
+| `V2_EPHEMERAL_READ_PRIMARY_SQLITE` | Prefer SQLite for wizard state reads |
+| `DISABLE_UPDATE_BROADCAST=1` | Skip post-update broadcast |
+
+Cloudflare uses **per-user** `/cf_connect` tokens in SQLite (no global token).
+
+---
+
+## Telegram Mini App — setup guide
+
+The Mini App lives in `web/miniapp/`:
+
+| Page | Purpose |
+|------|---------|
+| `index.html` | Hub / launcher |
+| `myip.html` | Public IP, geo/ISP, latency |
+| `dns.html` | DNS A / AAAA / MX (Cloudflare DoH) |
+| `whois.html` | IP/domain WHOIS (via bot API) |
+| `headers.html` | HTTP headers & site status (via bot API) |
+| `network.html` | Multi-host latency from the user’s browser |
+| `utils.html` | Password, timestamp, subnet, Base64, SHA-256 |
+
+**Server API** (`/miniapp/api/headers`, `/whois`, `/status`): runs in the bot HTTP thread when `MINIAPP_SERVE_LOCAL=1`, or proxy that path to `MINIAPP_PORT` in nginx (see `deploy/nginx/miniapp-location.conf.example`). Pure-static nginx **without** this proxy will not power whois/headers pages.
+
+Bot commands: `/myip`, `/miniapp` (opens WebApp buttons). Main menu button: **Mini App** (when `MINIAPP_BASE_URL` is set, opens hub). Glass menu: **Toolkit** → **Mini App hub** (when configured).
+
+### 1) Choose how to host static files
+
+**Production (recommended):** nginx (or Caddy) serves `web/` over HTTPS. Set:
+
+```env
+MINIAPP_BASE_URL=https://YOUR_DOMAIN/tele2rub
+MINIAPP_SERVE_LOCAL=0
+```
+
+Example URL for the hub: `https://YOUR_DOMAIN/tele2rub/miniapp/index.html`
+
+See `deploy/nginx/miniapp-location.conf.example`.
+
+**Development / single VPS:** let the bot serve files:
+
+```env
+MINIAPP_BASE_URL=https://YOUR_DOMAIN:8788
+MINIAPP_SERVE_LOCAL=1
+MINIAPP_PORT=8788
+```
+
+Use a tunnel (ngrok, cloudflared) or reverse proxy so Telegram sees **HTTPS**.
+
+### 2) TLS (required)
+
+Telegram WebApp only works with **HTTPS**. Use Let’s Encrypt:
+
+```bash
+sudo apt install certbot python3-certbot-nginx
+sudo certbot --nginx -d YOUR_DOMAIN
+```
+
+### 3) BotFather (optional but nice)
+
+1. Open [@BotFather](https://t.me/BotFather) → your bot → **Bot Settings** → **Menu Button** or **Configure Mini App**.
+2. Set the URL to: `{MINIAPP_BASE_URL}/miniapp/index.html`
+
+### 4) Google Drive OAuth (optional)
+
+If you use **Sign in with Google** for Drive:
+
+1. [Google Cloud Console](https://console.cloud.google.com/) → APIs → Drive API → OAuth client (Web).
+2. Authorized redirect URI: `{MINIAPP_BASE_URL}/oauth/google/callback`
+3. `.env`:
+
+```env
+GOOGLE_DRIVE_OAUTH_CLIENT_ID=...
+GOOGLE_DRIVE_OAUTH_CLIENT_SECRET=...
+```
+
+With `MINIAPP_SERVE_LOCAL=1`, the bot handles the callback on the same port. With nginx-only static hosting, proxy `/tele2rub/oauth/` to the bot port (see nginx example).
+
+Users: `/drive_connect` → **Sign in with Google** → folder ID.
+
+### 5) Verify
+
+1. Restart bot: `sudo systemctl restart tele2rub`
+2. In Telegram: `/miniapp` or `/myip` → open **Mini App hub**
+3. Confirm IP/country match **your** connection, not the VPS
+
+---
+
+## Per-user connections (transfer hub)
+
+| Service | Command | Notes |
+|---------|---------|--------|
+| Rubika | `/rubika_connect` | Phone + code; session per Telegram user |
+| Bale | `/bale_connect` | User’s Bale bot token + chat id |
+| Google Drive | `/drive_connect` | Service-account JSON **or** Google OAuth + folder id |
+| SSH | `/ssh_add` | Password or `key:/path/to/id_rsa` |
+| Cloudflare | `/cf_connect` | Per-user API token |
+
+Then use menus: **Transfer** → Rubika / Bale / Drive / SSH, or `/directmode rubika|bale|drive on`.
+
+---
+
+## Bot usage basics
+
+1. `/start` or `/menu`
+2. `/rubika_connect` (and optionally Bale/Drive/SSH)
+3. Send files or links; confirm send to Rubika (or direct mode)
+4. `/usage` — quotas · `/plan` — tiers
+
+**Glass menu:** `/imenu` — inline navigation.
+
+**Toolkit:** main menu → Toolkit → Network / Crypto, or commands like `/dns example.com`, `/ping host:443`.
+
+**Feeds:** `/feeds` or world menu → add RSS/YouTube/X (with `RSSHUB_BASE_URL` for X).
+
+---
+
+## Split bot + worker (low RAM)
+
+Use **either** `main.py` **or** `tele2rub-bot` + `tele2rub-worker` units — not both for the same directory.
 
 ```bash
 journalctl -u tele2rub-bot -u tele2rub-worker -f -n 120
 ```
 
-### Upload size cap (`MAX_FILE_MB`)
-
-Set `MAX_FILE_MB` in `.env` to reject files (and batch ZIPs) over that size in megabytes before queueing. Use `0` or leave empty for no limit. Shown on `/admin`.
-
-## Bot usage basics
-
-1. `/start`
-2. `/rubika_connect` and complete phone/code flow
-3. Send files or links
-4. Confirm before sending to Rubika
-5. Use `/directmode on` for immediate queueing mode
-
-## Installer menu
-
-- Install
-- Update
-- Uninstall
-- Backup
-- Restore
-- Service logs (live)
-- Installer logs
-- Installer JSON logs
-- Bot logs
-- Worker logs
-- Export + show all logs (copy-friendly bundle)
+---
 
 ## Troubleshooting
 
-- Service logs (combined `main.py` unit):
-  ```bash
-  journalctl -u tele2rub -f -n 120
-  ```
-  If you use split bot/worker units instead, follow both: `journalctl -u tele2rub-bot -u tele2rub-worker -f -n 120`.
-- Installer logs:
-  ```bash
-  tail -n 200 /tmp/tele2rub-installer.log
-  ```
-- Installer JSON logs (machine-readable for deeper debugging):
-  ```bash
-  tail -n 200 /tmp/tele2rub-installer.jsonl
-  ```
-- Bot event logs:
-  ```bash
-  tail -n 200 /opt/tele2rub/queue/bot_events.jsonl
-  ```
-- Worker event logs:
-  ```bash
-  tail -n 200 /opt/tele2rub/queue/worker_events.jsonl
-  ```
-- Analyze one specific job by id:
-  ```bash
-  JOB_ID=YOUR_JOB_ID
-  rg "$JOB_ID|task_queued|task_started|task_done|task_failed|task_requeued" /opt/tele2rub/queue/bot_events.jsonl /opt/tele2rub/queue/worker_events.jsonl
-  ```
-- Human-readable analyzer (from project root):
-  ```bash
-  python3 log_analyzer.py --job-id YOUR_JOB_ID --queue-dir /opt/tele2rub/queue
-  ```
-- JSON analyzer output (for automation or sharing):
-  ```bash
-  python3 log_analyzer.py --job-id YOUR_JOB_ID --queue-dir /opt/tele2rub/queue --json
-  ```
-- Brief one-line summary:
-  ```bash
-  python3 log_analyzer.py --job-id YOUR_JOB_ID --queue-dir /opt/tele2rub/queue --brief
-  ```
-- Live follow mode (waits for new worker events of one job):
-  ```bash
-  python3 log_analyzer.py --job-id YOUR_JOB_ID --queue-dir /opt/tele2rub/queue --follow
-  ```
-- Quick installer flags:
-  ```bash
-  sudo bash installer.sh --install
-  sudo bash installer.sh --update
-  sudo bash installer.sh --update-quick
-  sudo bash installer.sh --uninstall
-  sudo bash installer.sh --backup
-  sudo bash installer.sh --restore
-  sudo bash installer.sh --logs
-  sudo bash installer.sh --installer-logs
-  sudo bash installer.sh --installer-json-logs
-  sudo bash installer.sh --bot-logs
-  sudo bash installer.sh --worker-logs
-  sudo bash installer.sh --all-logs
-  ```
+| Issue | Check |
+|-------|--------|
+| Mini App “not configured” | `MINIAPP_BASE_URL` set, HTTPS works, `web/miniapp/index.html` reachable in browser |
+| WebApp blank / SSL error | Certificate, mixed content, correct path alias |
+| Drive OAuth fails | Redirect URI exact match; `MINIAPP_SERVE_LOCAL` or nginx proxy to `/oauth/` |
+| Rubika upload OOM | Add RAM/swap, lower `MAX_FILE_MB`, split ZIPs |
+| Job stuck | `python3 log_analyzer.py --job-id ID --queue-dir /opt/tele2rub/queue` |
 
-Export **all** logs to `/tmp/tele2rub-all-logs-*.txt` (service journal + bot/worker JSONL + installer logs). Requires `bash` (not plain `sh`). Only the **first** CLI argument is used as the mode flag.
+**Logs:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/mostafaafrouzi/telegramtorubika/main/installer.sh -o /tmp/tele2rub-installer.sh
-sudo bash /tmp/tele2rub-installer.sh --all-logs
+journalctl -u tele2rub -f -n 120
+tail -n 200 /opt/tele2rub/queue/bot_events.jsonl
+tail -n 200 /opt/tele2rub/queue/worker_events.jsonl
 ```
 
-### Large ZIP / heavy uploads (why Rubika may “do nothing”)
+Installer log bundle:
 
-Typical causes seen in production logs:
+```bash
+sudo bash installer.sh --all-logs
+```
+
+### Large ZIP / Rubika errors
 
 | Symptom | Likely cause | Mitigation |
 |--------|----------------|------------|
-| `502` / `Bad Gateway` on `*.iranlms.ir` | Rubika edge/API instability or routing | Retry later; try another egress/VPS region |
-| `Error uploading chunk` | Unstable upload session to Rubika | Already retried in worker; check network |
-| `tele2rub.service: ... killed by the OOM killer` during Telegram upload | **Low RAM** while Pyrogram uploads large files (`SaveBigFilePart`) | Add **swap**, increase VPS RAM, avoid multi‑GB single uploads off tiny instances, or split archives |
+| `502` on `*.iranlms.ir` | Rubika API instability | Retry; different VPS region |
+| OOM during Telegram download | Low RAM | Swap, smaller files, split archives |
 
-Admin helpers on the bot (see `/admin`): disk summary is shown there; `/cleanup_downloads` removes files under `downloads/` (admin only).
+---
 
-### Log interpretation checklist
+## Installer menu
 
-- Successful flow: `task_queued` -> `task_started` -> `task_done`
-- Failed flow: `task_queued` -> `task_started` -> `task_failed`
-- Requeue flow (network degradation): `task_failed` + `task_requeued` with a `new_job_id`
-- Rubika auth issues: check `rubika_connect_failed` in bot log before re-testing queue jobs
-- Performance timing: check `duration_ms` in `task_done` and phase events like `bundle_zip_done`, `split_done`, `upload_part_done`
+Install · Update · Uninstall · Backup · Restore · Service logs · Export all logs
+
+Flags: `--install`, `--update`, `--update-quick`, `--env-sync`, `--all-logs`, …
+
+---
+
+## Project layout (short)
+
+| Path | Role |
+|------|------|
+| `telebot.py` | Telegram bot, menus, handlers |
+| `rub.py` | Queue worker (Rubika/Bale/Drive/SSH) |
+| `main.py` | Spawns both |
+| `queue/` | SQLite DB + JSON logs |
+| `web/miniapp/` | Telegram Mini App static files |
+| `v2/` | Modular handlers, toolkit, transfer adapters |
+| `secrets/<telegram_id>/` | Per-user Drive SA / OAuth tokens |
+
+---
 
 ## Credits
 

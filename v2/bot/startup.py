@@ -22,10 +22,14 @@ def run_bot() -> None:
     tb.app.loop.create_task(tb.maybe_broadcast_update())
     tb.app.loop.create_task(tb.payment_reconcile_loop())
     tb.app.loop.create_task(tb.rss_poll_loop())
-    if getattr(tb, "MINIAPP_SERVE_LOCAL", False):
+    serve_local = getattr(tb, "MINIAPP_SERVE_LOCAL", False)
+    miniapp_url = (getattr(tb, "MINIAPP_BASE_URL", None) or "").strip()
+    if serve_local or miniapp_url:
+        from v2.toolkit.drive_oauth_light import oauth_configured
         from v2.web.miniapp_http import start_miniapp_server
 
         web_root = tb.BASE_DIR / "web"
-        start_miniapp_server(web_root, port=tb.MINIAPP_PORT)
+        oauth_cb = tb.google_oauth_http_callback if oauth_configured() else None
+        start_miniapp_server(web_root, port=tb.MINIAPP_PORT, google_oauth_callback=oauth_cb)
     idle()
     tb.app.stop()

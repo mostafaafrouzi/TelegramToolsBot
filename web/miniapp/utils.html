@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Utilities</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="tabs" id="tabs"></div>
+
+  <div class="card panel active" id="panel-pwd">
+    <h2 id="t-pwd"></h2>
+    <label><input type="range" id="pwd-len" min="8" max="64" value="20" /> <span id="pwd-len-val">20</span></label>
+    <label><input type="checkbox" id="pwd-upper" checked /> <span id="l-upper"></span></label>
+    <label><input type="checkbox" id="pwd-sym" checked /> <span id="l-sym"></span></label>
+    <button type="button" class="btn" id="btn-pwd"></button>
+    <pre id="pwd-out" class="mono"></pre>
+    <div id="pwd-copy"></div>
+  </div>
+
+  <div class="card panel" id="panel-ts">
+    <h2 id="t-ts"></h2>
+    <input id="ts-in" type="text" placeholder="1710000000" />
+    <button type="button" class="btn" id="btn-ts"></button>
+    <pre id="ts-out" class="mono"></pre>
+  </div>
+
+  <div class="card panel" id="panel-subnet">
+    <h2 id="t-sub"></h2>
+    <input id="cidr-in" type="text" placeholder="192.168.1.0/24" />
+    <button type="button" class="btn" id="btn-sub"></button>
+    <pre id="sub-out" class="mono"></pre>
+  </div>
+
+  <div class="card panel" id="panel-b64">
+    <h2 id="t-b64"></h2>
+    <textarea id="b64-in"></textarea>
+    <div class="btn-row">
+      <button type="button" class="btn" id="btn-enc"></button>
+      <button type="button" class="btn secondary" id="btn-dec"></button>
+    </div>
+    <pre id="b64-out" class="mono"></pre>
+  </div>
+
+  <div class="card panel" id="panel-hash">
+    <h2 id="t-hash"></h2>
+    <textarea id="hash-in"></textarea>
+    <button type="button" class="btn" id="btn-hash"></button>
+    <pre id="hash-out" class="mono"></pre>
+  </div>
+
+  <script src="common.js"></script>
+  <script>
+    T2R.initApp();
+    const en = T2R.lang() === "en";
+    document.getElementById("hdr").appendChild(T2R.header(en ? "Utilities" : "ابزارها", "index.html"));
+
+    const tabDefs = [
+      { id: "pwd", fa: "رمز", en: "Password" },
+      { id: "ts", fa: "زمان", en: "Time" },
+      { id: "subnet", fa: "Subnet", en: "Subnet" },
+      { id: "b64", fa: "Base64", en: "Base64" },
+      { id: "hash", fa: "SHA-256", en: "SHA-256" },
+    ];
+    const tabsEl = document.getElementById("tabs");
+    tabDefs.forEach((td, i) => {
+      const b = document.createElement("button");
+      b.type = "button";
+      b.className = "tab" + (i === 0 ? " active" : "");
+      b.textContent = en ? td.en : td.fa;
+      b.onclick = () => {
+        tabsEl.querySelectorAll(".tab").forEach((x, j) => x.classList.toggle("active", j === i));
+        document.querySelectorAll(".panel").forEach((p, j) => p.classList.toggle("active", j === i));
+      };
+      tabsEl.appendChild(b);
+    });
+
+    document.getElementById("t-pwd").textContent = en ? "Password generator" : "ساخت رمز";
+    document.getElementById("l-upper").textContent = en ? "Uppercase" : "حروف بزرگ";
+    document.getElementById("l-sym").textContent = en ? "Symbols" : "نمادها";
+    document.getElementById("btn-pwd").textContent = en ? "Generate" : "تولید";
+    document.getElementById("t-ts").textContent = en ? "Timestamp" : "تبدیل زمان";
+    document.getElementById("btn-ts").textContent = en ? "Convert" : "تبدیل";
+    document.getElementById("t-sub").textContent = en ? "Subnet calculator" : "محاسبه Subnet";
+    document.getElementById("btn-sub").textContent = en ? "Calculate" : "محاسبه";
+    document.getElementById("t-b64").textContent = "Base64";
+    document.getElementById("btn-enc").textContent = en ? "Encode" : "Encode";
+    document.getElementById("btn-dec").textContent = en ? "Decode" : "Decode";
+    document.getElementById("t-hash").textContent = "SHA-256";
+    document.getElementById("btn-hash").textContent = en ? "Hash" : "هش";
+
+    const pwdLen = document.getElementById("pwd-len");
+    const pwdLenVal = document.getElementById("pwd-len-val");
+    pwdLen.oninput = () => (pwdLenVal.textContent = pwdLen.value);
+
+    document.getElementById("btn-pwd").onclick = () => {
+      const p = T2R.randomPassword(parseInt(pwdLen.value, 10), {
+        upper: document.getElementById("pwd-upper").checked,
+        symbols: document.getElementById("pwd-sym").checked,
+      });
+      document.getElementById("pwd-out").textContent = p;
+      const w = document.getElementById("pwd-copy");
+      w.innerHTML = "";
+      T2R.addCopyButton(w, () => p);
+    };
+
+    document.getElementById("btn-ts").onclick = () => {
+      const raw = document.getElementById("ts-in").value;
+      const d = T2R.parseTimestampInput(raw);
+      const out = document.getElementById("ts-out");
+      if (!d) {
+        out.textContent = en ? "Invalid input." : "ورودی نامعتبر.";
+        return;
+      }
+      out.textContent =
+        "Unix: " + Math.floor(d.getTime() / 1000) + "\nISO: " + d.toISOString() + "\nLocal: " + d.toString();
+    };
+
+    document.getElementById("btn-sub").onclick = () => {
+      const r = T2R.parseSubnet(document.getElementById("cidr-in").value);
+      const out = document.getElementById("sub-out");
+      if (!r) {
+        out.textContent = en ? "Use format 192.168.0.0/24" : "فرمت: 192.168.0.0/24";
+        return;
+      }
+      out.textContent = [
+        "Network: " + r.network,
+        "Mask: " + r.mask,
+        "Broadcast: " + r.broadcast,
+        "Hosts: " + r.firstHost + " – " + r.lastHost + " (" + r.hosts + ")",
+      ].join("\n");
+    };
+
+    document.getElementById("btn-enc").onclick = () => {
+      try {
+        const t = document.getElementById("b64-in").value;
+        document.getElementById("b64-out").textContent = btoa(unescape(encodeURIComponent(t)));
+      } catch (e) {
+        document.getElementById("b64-out").textContent = String(e);
+      }
+    };
+    document.getElementById("btn-dec").onclick = () => {
+      try {
+        const t = document.getElementById("b64-in").value.trim();
+        document.getElementById("b64-out").textContent = decodeURIComponent(escape(atob(t)));
+      } catch (e) {
+        document.getElementById("b64-out").textContent = String(e);
+      }
+    };
+
+    document.getElementById("btn-hash").onclick = async () => {
+      const out = document.getElementById("hash-out");
+      out.textContent = T2R.t("loading");
+      try {
+        out.textContent = await T2R.sha256Hex(document.getElementById("hash-in").value);
+      } catch (e) {
+        out.textContent = String(e);
+      }
+    };
+  </script>
+</body>
+</html>

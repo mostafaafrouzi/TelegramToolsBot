@@ -12,7 +12,7 @@ from v2.toolkit.dns_light import resolve_hostname
 from v2.toolkit.google_search_light import google_search
 from v2.toolkit.ipinfo_light import get_ip_info
 from v2.toolkit.myip_light import get_public_ip
-from v2.toolkit.ping_light import tcp_ping
+from v2.toolkit.ping_light import smart_tcp_ping, tcp_ping
 from v2.toolkit.text_utils_light import (
     b64_decode_str,
     b64_encode_str,
@@ -83,25 +83,21 @@ async def handle_my_ip(deps: ToolkitCommandDeps, client: Any, message: Message) 
     if not deps.toolkit_network_light_enabled:
         await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
         return
+    from v2.core.miniapp_urls import miniapp_page_url
+
     base = (getattr(deps, "miniapp_base_url", None) or "").strip()
-    if base:
-        url = f"{base.rstrip('/')}/miniapp/myip.html"
+    hub = miniapp_page_url(base, "index.html")
+    myip = miniapp_page_url(base, "myip.html")
+    if hub and myip:
         kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(deps.tr(uid, "btn_open_myip_app"), web_app=WebAppInfo(url=url))]]
+            [
+                [InlineKeyboardButton(deps.tr(uid, "btn_open_miniapp_hub"), web_app=WebAppInfo(url=hub))],
+                [InlineKeyboardButton(deps.tr(uid, "btn_open_myip_app"), web_app=WebAppInfo(url=myip))],
+            ]
         )
         await message.reply_text(deps.tr(uid, "miniapp_myip_open"), reply_markup=kb, parse_mode=None)
         return
-    if not await _guard_toolkit_quota_try(deps, message, uid):
-        return
-    ok, body = get_public_ip()
-    if not ok:
-        await message.reply_text(deps.tr(uid, "toolkit_myip_error", error=body), parse_mode=None)
-        return
-    deps.toolkit_quota_commit(uid)
-    await message.reply_text(
-        deps.tr(uid, "toolkit_myip_server_fallback", ip=body),
-        parse_mode=None,
-    )
+    await message.reply_text(deps.tr(uid, "miniapp_setup_hint"), parse_mode=None)
 
 
 async def handle_tcp_ping(deps: ToolkitCommandDeps, client: Any, message: Message) -> None:
@@ -116,25 +112,24 @@ async def handle_tcp_ping(deps: ToolkitCommandDeps, client: Any, message: Messag
         await message.reply_text(deps.tr(uid, "toolkit_ping_send_only"), parse_mode=None)
         return
     host = parts[1].strip()
-    port = 443
+    port: int | None = None
     if len(parts) >= 3:
         try:
             port = int(parts[2].strip())
         except ValueError:
-            await message.reply_text(deps.tr(uid, "toolkit_ping_usage"), parse_mode=None)
-            return
+            port = None
     if not await _guard_toolkit_quota_try(deps, message, uid):
         return
-    ok, body = tcp_ping(host, port=port)
+    ok, body, used_port = smart_tcp_ping(host, port=port)
     if not ok:
         await message.reply_text(
-            deps.tr(uid, "toolkit_ping_error", host=host, port=port, error=body),
+            deps.tr(uid, "toolkit_ping_error", host=host, port=used_port or 443, error=body),
             parse_mode=None,
         )
         return
     deps.toolkit_quota_commit(uid)
     await message.reply_text(
-        deps.tr(uid, "toolkit_ping_result", host=host, port=port, ms=body),
+        deps.tr(uid, "toolkit_ping_result", host=host, port=used_port, ms=body),
         parse_mode=None,
     )
 

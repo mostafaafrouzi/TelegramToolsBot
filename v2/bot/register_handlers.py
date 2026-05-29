@@ -80,6 +80,24 @@ _TEXT_EXCLUDED_COMMANDS = [
     "admin_reconcile_billing",
     "cleanup_downloads",
     "imenu",
+    "httpheaders",
+    "webstatus",
+    "portcheck",
+    "subnet",
+    "blacklist",
+    "sslcheck",
+    "world_weather",
+    "world_calendar",
+    "world_currency",
+    "world_quake",
+    "world_rss",
+    "world_rss_list",
+    "feeds",
+    "password",
+    "revdns",
+    "urlexpand",
+    "timestamp",
+    "lorem",
 ]
 
 _MEDIA_FILTER = filters.private & (
@@ -110,6 +128,24 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.log_help_handler, priv & cmd("loghelp"))
     mh(tb.version_handler, priv & cmd("version"))
     mh(tb.imenu_handler, priv & cmd("imenu"))
+    mh(tb.http_headers_handler, priv & cmd("httpheaders"))
+    mh(tb.website_status_handler, priv & cmd("webstatus"))
+    mh(tb.port_check_handler, priv & cmd("portcheck"))
+    mh(tb.subnet_calc_handler, priv & cmd("subnet"))
+    mh(tb.blacklist_check_handler, priv & cmd("blacklist"))
+    mh(tb.ssl_check_handler, priv & cmd("sslcheck"))
+    mh(tb.world_weather_handler, priv & cmd("world_weather"))
+    mh(tb.world_calendar_handler, priv & cmd("world_calendar"))
+    mh(tb.world_currency_handler, priv & cmd("world_currency"))
+    mh(tb.world_quake_handler, priv & cmd("world_quake"))
+    mh(tb.world_rss_handler, priv & cmd("world_rss"))
+    mh(tb.world_rss_list_handler, priv & cmd("world_rss_list"))
+    mh(tb.show_feed_menu_handler, priv & cmd("feeds"))
+    mh(tb.password_handler, priv & cmd("password"))
+    mh(tb.reverse_dns_handler, priv & cmd("revdns"))
+    mh(tb.url_expand_handler, priv & cmd("urlexpand"))
+    mh(tb.timestamp_handler, priv & cmd("timestamp"))
+    mh(tb.lorem_handler, priv & cmd("lorem"))
     mh(tb.rubika_status_handler, priv & cmd("rubika_status"))
     mh(tb.rubika_connect_handler, priv & cmd("rubika_connect"))
     mh(tb.direct_mode_handler, priv & cmd("directmode"))
@@ -120,6 +156,7 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.purchase_handler, priv & cmd("purchase"))
     mh(tb.dns_lookup_handler, priv & cmd("dns"))
     mh(tb.my_ip_handler, priv & cmd("myip"))
+    mh(tb.my_ip_handler, priv & cmd("miniapp"))
     mh(tb.tcp_ping_handler, priv & cmd("ping"))
     mh(tb.ipinfo_handler, priv & cmd("ipinfo"))
     mh(tb.whois_handler, priv & cmd("whois"))

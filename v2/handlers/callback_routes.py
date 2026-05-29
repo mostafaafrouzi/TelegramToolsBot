@@ -35,7 +35,9 @@ class CallbackRouteDeps:
     handle_link_quality_callback: Callable[..., Awaitable[bool]]
     handle_media_dest_callback: Callable[..., Awaitable[bool]]
     dispatch_inline_menu_callback: Callable[..., Awaitable[bool]]
-    handle_rss_push_callback: Callable[..., Awaitable[bool]]
+    handle_feed_callback: Callable[..., Awaitable[bool]]
+    dispatch_cf_menu_callback: Callable[..., Awaitable[bool]]
+    dispatch_drive_auth_callback: Callable[..., Awaitable[bool]]
 
 
 async def dispatch_callback_route(client: Any, callback_query: Any, deps: CallbackRouteDeps) -> bool:
@@ -99,8 +101,12 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
             return True
         return False
 
-    if data == "confirm_send" and state.get("step") == "await_send_confirm":
-        task = state.get("pending_task")
+    if data == "confirm_send":
+        from v2.handlers.confirm_state import get_pending_confirm, pop_pending_confirm
+
+        task = state.get("pending_task") or get_pending_confirm(user_id)
+        if not task:
+            return False
         if not task:
             await callback_query.answer("Pending task not found", show_alert=True)
             return True
@@ -112,6 +118,7 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
         task["status_message_id"] = anchor.id
         task = deps.queue_push_task(task)
         qpos = deps.queue_count_by_session(task.get("rubika_session") or "")
+        pop_pending_confirm(user_id)
         deps.clear_state(user_id)
         deps.log_event(
             "task_queued",
@@ -147,24 +154,65 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
         key = data.split(":", 1)[1]
         return await deps.dispatch_inline_menu_callback(client, callback_query, key)
 
-    if data.startswith("rsspush:"):
+    if data.startswith("feedview:"):
+        try:
+            feed_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return False
+        return await deps.handle_feed_callback(client, callback_query, "view", feed_id)
+
+    if data.startswith("feeddel:"):
+        try:
+            feed_id = int(data.split(":", 1)[1])
+        except ValueError:
+            return False
+        return await deps.handle_feed_callback(client, callback_query, "del", feed_id)
+
+    if data.startswith("feedpush:"):
         parts = data.split(":")
-        if len(parts) >= 3:
-            action = parts[1]
+        if len(parts) >= 3 and parts[1] == "toggle":
             try:
                 feed_id = int(parts[2])
             except ValueError:
                 return False
-            return await deps.handle_rss_push_callback(client, callback_query, action, feed_id)
+            return await deps.handle_feed_callback(client, callback_query, "toggle", feed_id)
+
+    if data.startswith("feedmenu:"):
+        action = data.split(":", 1)[1]
+        return await deps.handle_feed_callback(client, callback_query, action, 0)
+
+    if data.startswith("rsspush:"):
+        parts = data.split(":")
+        if len(parts) >= 3:
+            leg = parts[1]
+            try:
+                feed_id = int(parts[2])
+            except ValueError:
+                return False
+            if leg in ("on", "off"):
+                return await deps.handle_feed_callback(client, callback_query, leg, feed_id)
 
     if data.startswith("rssview:"):
         try:
             feed_id = int(data.split(":", 1)[1])
         except ValueError:
             return False
-        return await deps.handle_rss_push_callback(client, callback_query, "view", feed_id)
+        return await deps.handle_feed_callback(client, callback_query, "view", feed_id)
 
-    if data == "cancel_send" and state.get("step") == "await_send_confirm":
+    if data.startswith("cfmenu:"):
+        action = data.split(":", 1)[1]
+        return await deps.dispatch_cf_menu_callback(client, callback_query, action)
+
+    if data.startswith("driveauth:"):
+        action = data.split(":", 1)[1]
+        return await deps.dispatch_drive_auth_callback(client, callback_query, action)
+
+    if data == "cancel_send":
+        from v2.handlers.confirm_state import get_pending_confirm, pop_pending_confirm
+
+        if not (state.get("step") == "await_send_confirm" or state.get("pending_task") or get_pending_confirm(user_id)):
+            return False
+        pop_pending_confirm(user_id)
         deps.clear_state(user_id)
         deps.log_event("task_confirm_cancelled", user_id=user_id)
         try:

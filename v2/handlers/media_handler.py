@@ -83,8 +83,15 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
                     parse_mode=None,
                 )
                 return
+            from v2.toolkit.drive_light import service_account_email
+            from v2.transfer.user_credentials import default_drive_sa_path
+
             deps.set_state_preserving_menu(user_id, {"step": "await_drive_folder_id"})
-            await message.reply_text(deps.tr(user_id, "drive_ask_folder_id"), parse_mode=None)
+            email = service_account_email(default_drive_sa_path(deps.base_dir, user_id))
+            body = deps.tr(user_id, "drive_ask_folder_id")
+            if email:
+                body = deps.tr(user_id, "drive_share_email_hint", email=email) + "\n\n" + body
+            await message.reply_text(body, parse_mode=None)
         except Exception as e:
             await message.reply_text(deps.tr(user_id, "media_error", error=str(e)), parse_mode=None)
         return
@@ -145,7 +152,10 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
         if not drive.ready:
             await message.reply_text(deps.tr(user_id, "drive_not_connected"), parse_mode=None)
             return
-        extra["drive_sa_path"] = str(drive.service_account_path)
+        if drive.service_account_path:
+            extra["drive_sa_path"] = str(drive.service_account_path)
+        if drive.oauth_token_path:
+            extra["drive_oauth_path"] = str(drive.oauth_token_path)
         extra["drive_folder_id"] = drive.folder_id
 
     session_name = deps.get_user_session(user_id) if require_rubika else None

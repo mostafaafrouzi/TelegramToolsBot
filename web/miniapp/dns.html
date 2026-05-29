@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>DNS</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <div id="hdr"></div>
+  <div class="card">
+    <label id="lbl-host" for="host"></label>
+    <input id="host" type="text" placeholder="example.com" autocomplete="off" />
+    <div class="btn-row">
+      <button type="button" class="btn" id="btn-a">A</button>
+      <button type="button" class="btn secondary" id="btn-aaaa">AAAA</button>
+      <button type="button" class="btn secondary" id="btn-mx">MX</button>
+    </div>
+    <pre id="out" class="mono" style="margin-top:10px"></pre>
+    <div id="copy-wrap"></div>
+  </div>
+  <script src="common.js"></script>
+  <script>
+    T2R.initApp();
+    const en = T2R.lang() === "en";
+    document.getElementById("hdr").appendChild(T2R.header(en ? "DNS lookup" : "جستجوی DNS", "index.html"));
+    document.getElementById("lbl-host").textContent = en ? "Hostname" : "نام میزبان";
+    const out = document.getElementById("out");
+    const hostEl = document.getElementById("host");
+
+    async function run(type) {
+      const name = hostEl.value.trim();
+      if (!name) {
+        out.textContent = en ? "Enter a hostname." : "نام میزبان را وارد کنید.";
+        return;
+      }
+      out.textContent = T2R.t("loading");
+      try {
+        const j = await T2R.dnsQuery(name, type);
+        const answers = j.Answer || [];
+        if (!answers.length) {
+          out.textContent = (en ? "No " : "بدون ") + type + (en ? " records." : ".");
+          return;
+        }
+        out.textContent = answers
+          .map((a) => type + "  TTL=" + a.TTL + "  " + (a.data || a.name || ""))
+          .join("\n");
+        document.getElementById("copy-wrap").innerHTML = "";
+        T2R.addCopyButton(document.getElementById("copy-wrap"), () => out.textContent);
+      } catch (e) {
+        out.textContent = T2R.t("error") + ": " + e;
+      }
+    }
+
+    document.getElementById("btn-a").onclick = () => run("A");
+    document.getElementById("btn-aaaa").onclick = () => run("AAAA");
+    document.getElementById("btn-mx").onclick = () => run("MX");
+  </script>
+</body>
+</html>

@@ -85,8 +85,13 @@ from v2.handlers.inline_menu_handler import (
 from v2.handlers.world_commands import (
     WorldCommandDeps,
     dispatch_world_wizard,
-    handle_rss_push_callback,
+    handle_calendar,
+    handle_earthquakes,
+    list_rss_feeds,
     poll_rss_pushes,
+    start_currency_wizard,
+    start_rss_wizard,
+    start_weather_wizard,
 )
 from v2.handlers.batch_commands import BatchCommandDeps, handle_done_batch, handle_new_batch
 from v2.handlers.text_entry import TextEntryDeps, handle_text_entry
@@ -120,6 +125,37 @@ from v2.handlers.toolkit_commands import (
     handle_sha256,
     handle_tcp_ping,
     handle_whois,
+)
+from v2.handlers.feed_reader_commands import (
+    FeedReaderDeps,
+    dispatch_feed_wizard,
+    handle_feed_callback,
+    handle_show_feed_menu,
+    list_feeds_inline,
+    start_add_feed_wizard,
+)
+from v2.handlers.cloudflare_menu_callbacks import dispatch_cf_menu_callback
+from v2.handlers.drive_auth_callbacks import dispatch_drive_auth_callback
+from v2.handlers.drive_oauth_flow import connect_drive_with_auth_code, notify_oauth_success
+from v2.handlers.toolkit_extra_commands import (
+    ToolkitExtraDeps,
+    handle_email_check,
+    handle_lorem,
+    handle_mac_lookup,
+    handle_password,
+    handle_reverse_dns,
+    handle_timestamp,
+    handle_url_expand,
+)
+from v2.toolkit.drive_oauth_light import oauth_configured
+from v2.handlers.toolkit_net_extra_commands import (
+    ToolkitNetExtraDeps,
+    handle_blacklist_check,
+    handle_http_headers,
+    handle_port_check,
+    handle_ssl_check,
+    handle_subnet_calc,
+    handle_website_status,
 )
 from v2.handlers.cloudflare_commands import (
     CloudflareCommandDeps,
@@ -372,6 +408,7 @@ I18N = {
         "recent_jobs_title": "آخرین کارها (worker):",
         "btn_main_transfer": "📁 انتقال فایل",
         "btn_main_toolkit": "🧰 ابزارها",
+        "btn_main_miniapp": "📱 Mini App",
         "btn_main_settings": "📤 ارسال مستقیم",
         "btn_main_link_direct": "🔗 لینک / ویدیو",
         "btn_main_cloudflare": "☁️ Cloudflare",
@@ -579,18 +616,29 @@ I18N = {
         "bale_set_chat_usage": "استفاده: `/bale_set_chat <bale_chat_id>` (بعد از `/bale_connect`)",
         "bale_set_chat_saved": "مقصد بله ذخیره شد: `{chat_id}`",
         "drive_not_connected": (
-            "گوگل درایو متصل نیست. `/drive_connect` — فایل JSON سرویس‌اکانت خودت را آپلود کن."
+            "گوگل درایو متصل نیست. `/drive_connect` — ورود با Google یا آپلود JSON سرویس‌اکانت."
         ),
+        "drive_connect_choose": "روش اتصال Google Drive را انتخاب کن:",
+        "btn_drive_auth_sa": "📄 سرویس‌اکانت (JSON)",
+        "btn_drive_auth_oauth": "🔐 ورود با Google",
+        "btn_drive_oauth_open": "باز کردن صفحه ورود Google",
+        "drive_oauth_start": (
+            "۱) دکمه زیر را بزن و با حساب Google خودت وارد شو.\n"
+            "۲) بعد از تأیید، اگر به ربات برنگشتی، کد authorization را اینجا paste کن."
+        ),
+        "drive_oauth_ok_ask_folder": "ورود Google موفق ✅\nلینک یا ID پوشه Drive را بفرست:",
+        "drive_oauth_failed": "ورود Google ناموفق: {detail}",
+        "drive_oauth_code_empty": "کد authorization خالی است.",
+        "drive_oauth_not_configured": "ورود Google روی سرور فعال نیست (OAuth env).",
         "drive_ask_sa_json": (
-            "📖 راهنمای اتصال گوگل درایو:\n\n"
-            "1️⃣ به console.cloud.google.com بروید\n"
-            "2️⃣ پروژه جدید بسازید و Google Drive API را فعال کنید\n"
-            "3️⃣ از بخش IAM > Service Accounts یک سرویس‌اکانت بسازید\n"
-            "4️⃣ کلید JSON آن را دانلود کنید\n"
-            "5️⃣ پوشه Drive خود را با ایمیل سرویس‌اکانت Share کنید\n"
-            "6️⃣ فایل JSON را به‌صورت **سند** (document) همینجا بفرستید"
+            "📖 اتصال Google Drive (۲ مرحله)\n\n"
+            "مرحله ۱ — فایل JSON سرویس‌اکانت را به‌صورت **سند** بفرست.\n"
+            "(راهنمای کامل: console.cloud.google.com → Drive API → Service Account → Keys)\n\n"
+            "مرحله ۲ — بعد از آپلود، لینک یا ID پوشه Drive را می‌فرسی."
         ),
-        "drive_ask_folder_id": "شناسه پوشه Drive (folder ID از URL) را بفرست:",
+        "drive_sa_already_uploaded": "فایل JSON قبلاً ذخیره شده ✅\nپوشه را با این ایمیل Share کن:\n`{email}`\n\nحالا لینک پوشه یا folder ID را بفرست.",
+        "drive_share_email_hint": "✅ JSON دریافت شد.\nپوشه Drive را با این ایمیل **Editor** کن:\n`{email}`",
+        "drive_ask_folder_id": "لینک پوشه Drive یا folder ID را بفرست (مثلاً `https://drive.google.com/drive/folders/XXXX`):",
         "drive_folder_empty": "folder_id خالی است.",
         "drive_sa_missing_retry": "فایل سرویس‌اکانت پیدا نشد. دوباره `/drive_connect`.",
         "drive_connected_ok": "درایو متصل شد ✅ folder=`{folder_id}`",
@@ -601,13 +649,13 @@ I18N = {
         "drive_sa_need_document": "JSON را به‌صورت فایل (document) بفرست، نه متن.",
         "drive_sa_need_json": "نام فایل باید `.json` باشد.",
         "drive_sa_invalid": "JSON نامعتبر: {error}",
-        "drive_status_line": "Drive configured: {ok}\n{detail}",
+        "drive_status_line": "درایو ({mode}): {ok}\n{detail}",
         "drive_ls_result": "فایل‌های Drive:\n{detail}",
         "drive_ls_error": "لیست Drive ناموفق: {error}",
         "ssh_list_empty": "هیچ سرور SSH ثبت نشده. `/ssh_add label host port user`",
         "ssh_list_title": "سرورهای SSH:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
-        "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`",
+        "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`\nیا با کلید: `/ssh_add <label> <host> <port> <user> key:/path/to/id_rsa`",
         "ssh_add_ok": "سرور `{label}` ({host}:{port}) ذخیره شد.",
         "ssh_put_usage": "استفاده: `/ssh_put <server_id> <remote_path>` سپس فایل را بفرست",
         "ssh_ls_usage": "استفاده: `/ssh_ls <server_id> [remote_path]`",
@@ -780,6 +828,9 @@ I18N = {
         "file_prepared_summary": "فایل آماده شد: `{name}`",
         "queued_processing": "Queued for processing...",
         "confirm_send_suffix": "به روبیکا همین حالا ارسال شود؟",
+        "btn_confirm_send": "✅ تأیید ارسال",
+        "btn_cancel_send": "❌ لغو",
+        "btn_main_world": "🌍 جهان و زمان",
         "failed_detail_title": "آخرین خطاهای ثبت‌شده برای نشست شما:",
         "confirm_cancelled": "ارسال لغو شد.",
         "cleanup_done": "پاکسازی `downloads/`: {n} فایل، حدود {mb} MB آزاد شد.",
@@ -852,15 +903,35 @@ I18N = {
         "toolkit_b64d_error": "decode ناموفق: {error}",
         "toolkit_input_truncated": "(ورودی به سقف ۱۲۰۰۰ نویسه بریده شد.)",
         "toolkit_dns_send_only": "نام دامنه یا IP را بفرست (یا `/dns <host>`).",
-        "toolkit_ping_send_only": "هاست را بفرست؛ اختیاری: `host port` (مثلاً `example.com 443`).",
+        "toolkit_ping_send_only": "هاست را بفرست (پورت اختیاری است؛ پیش‌فرض 443 و 80).",
+        "btn_tool_http_headers": "📬 HTTP Headers",
+        "btn_tool_website_status": "🌐 وضعیت سایت",
+        "btn_tool_port_check": "🔌 Port Check",
+        "btn_tool_subnet": "📡 Subnet Calc",
+        "btn_tool_blacklist": "🛡 Blacklist",
+        "btn_tool_ssl": "🔒 SSL Check",
+        "toolkit_http_headers_send_only": "آدرس URL را بفرست (مثلاً example.com)",
+        "toolkit_website_status_send_only": "آدرس سایت را بفرست",
+        "toolkit_port_check_send_only": "هاست و پورت را بفرست: `google.com 443`",
+        "toolkit_subnet_send_only": "شبکه CIDR بفرست: `192.168.1.0/24`",
+        "toolkit_blacklist_send_only": "IP را برای بررسی بلک‌لیست بفرست",
+        "toolkit_ssl_send_only": "دامنه را برای بررسی SSL بفرست",
+        "toolkit_net_error": "خطا: {error}",
+        "cf_menu_connected": "☁️ Cloudflare متصل است ✅\nاز دکمه‌های زیر استفاده کنید.",
+        "cf_quick_help": "راهنما:\n• «وضعیت CF» — اعتبار توکن\n• «دامنه‌ها» — لیست zone\n• «DNS رکوردها» — `/cf_dns <zone_id>`\n• قطع: «قطع Cloudflare»",
         "toolkit_md5_send_only": "متن را برای MD5 بفرست.",
         "toolkit_sha256_send_only": "متن را برای SHA256 بفرست.",
         "toolkit_b64e_send_only": "متن را برای Base64 encode بفرست.",
         "toolkit_b64d_send_only": "رشته Base64 را برای decode بفرست.",
         "toolkit_myip_server_fallback": "IP خروجی سرور: `{ip}`\n\nبرای IP واقعی خودت، `MINIAPP_BASE_URL` را روی سرور تنظیم کن و دوباره «📍 IP من» را بزن.",
-        "miniapp_myip_open": "برای دیدن IP و پینگ از مرورگر خودت، دکمه زیر را بزن:",
-        "btn_open_myip_app": "📍 باز کردن IP من",
-        "miniapp_setup_hint": "Mini App فعال نیست. در `.env` مقدار `MINIAPP_BASE_URL` (HTTPS) را تنظیم کنید.",
+        "miniapp_myip_open": "ابزارهای مرورگر (IP واقعی شما، DNS، تأخیر شبکه، رمز و …) — دکمه‌ها را بزن:",
+        "btn_open_myip_app": "📍 IP من",
+        "btn_open_miniapp_hub": "🧰 مرکز ابزار Mini App",
+        "miniapp_setup_hint": (
+            "Mini App فعال نیست.\n"
+            "در `.env` مقدار `MINIAPP_BASE_URL` (آدرس HTTPS عمومی تا پوشه `web/`) را تنظیم کنید.\n"
+            "راهنما: README → بخش Telegram Mini App."
+        ),
         "media_pick_dest": "مقصد ارسال فایل را انتخاب کن:",
         "media_dest_session_expired": "انتخاب منقضی شد — فایل را دوباره بفرست.",
         "inline_main_title": "منوی شیشه‌ای — گزینه را انتخاب کن:",
@@ -890,6 +961,33 @@ I18N = {
         "rss_list_title": "فیدهای شما:",
         "rss_push_new": "📰 به‌روزرسانی: {label}",
         "world_error": "خطا: {detail}",
+        "btn_main_feed": "📰 Feed Reader",
+        "btn_feed_reader": "📰 مدیریت فیدها",
+        "feed_menu_title": "📰 Feed Reader\nRSS · YouTube · X/Twitter\nافزودن فید، اعلان push، یا مشاهده دستی.",
+        "feed_ask_url": (
+            "آدرس فید یا صفحه را بفرست:\n"
+            "• RSS/Atom مستقیم\n"
+            "• `youtube.com/channel/UC…` یا پلی‌لیست\n"
+            "• `x.com/username` یا `twitter.com/username`"
+        ),
+        "feed_added": "فید #{feed_id} ({kind}) ذخیره شد.",
+        "feed_fetch_failed": "فید باز نشد: {detail}\nURL: {url}",
+        "feed_delete": "🗑 حذف فید",
+        "feed_deleted": "فید حذف شد.",
+        "feed_add_btn": "➕ افزودن فید",
+        "btn_tool_password": "🔑 پسورد",
+        "btn_tool_rev_dns": "↩️ Reverse DNS",
+        "btn_tool_mac": "🔌 MAC Vendor",
+        "btn_tool_email": "✉️ Email Check",
+        "btn_tool_url_expand": "🔗 باز کردن URL",
+        "btn_tool_timestamp": "🕐 Timestamp",
+        "btn_tool_lorem": "📝 Lorem",
+        "toolkit_password_result": "رمز پیشنهادی:\n`{password}`",
+        "toolkit_rev_dns_send_only": "IP را برای Reverse DNS بفرست.",
+        "toolkit_mac_send_only": "آدرس MAC را بفرست (مثلاً `AA:BB:CC:DD:EE:FF`):",
+        "toolkit_email_send_only": "آدرس ایمیل را بفرست:",
+        "toolkit_url_expand_send_only": "URL کوتاه‌شده را بفرست.",
+        "toolkit_timestamp_send_only": "عدد Unix یا تاریخ `YYYY-MM-DD HH:MM:SS` بفرست.",
         "quota_parallel_msg": "سقف کارهای همزمان در صف پر است (`{cur}` / `{maxp}`). بعد از اتمام یکی دوباره تلاش کن.",
         "quota_day_msg": "سقف حجم روزانه پر است. این کار ~{need} MB است؛ حدود `{left}` MB امروز باقی مانده.",
         "quota_month_msg": "سقف حجم ماهانه پر است. این کار ~{need} MB است؛ حدود `{left}` MB این ماه باقی مانده.",
@@ -966,6 +1064,7 @@ I18N = {
         "recent_jobs_title": "Recent jobs (worker):",
         "btn_main_transfer": "📁 File transfer",
         "btn_main_toolkit": "🧰 Tools",
+        "btn_main_miniapp": "📱 Mini App",
         "btn_main_settings": "📤 Direct send",
         "btn_main_link_direct": "🔗 Link / video",
         "btn_main_cloudflare": "☁️ Cloudflare",
@@ -1160,17 +1259,27 @@ I18N = {
         "bale_status_ok": "Bale: chat_id=`{chat_id}` — {detail}",
         "bale_set_chat_usage": "Usage: `/bale_set_chat <bale_chat_id>` (after `/bale_connect`)",
         "bale_set_chat_saved": "Bale destination saved: `{chat_id}`",
-        "drive_not_connected": "Google Drive not linked. Use `/drive_connect` and upload your service-account JSON.",
-        "drive_ask_sa_json": (
-            "📖 How to connect Google Drive:\n\n"
-            "1️⃣ Go to console.cloud.google.com\n"
-            "2️⃣ Create a project and enable Google Drive API\n"
-            "3️⃣ Go to IAM > Service Accounts, create one\n"
-            "4️⃣ Download its JSON key\n"
-            "5️⃣ Share your Drive folder with the service account email\n"
-            "6️⃣ Send the JSON file as a **document** here"
+        "drive_not_connected": "Google Drive not linked. Use `/drive_connect` — Google sign-in or service-account JSON.",
+        "drive_connect_choose": "Choose how to connect Google Drive:",
+        "btn_drive_auth_sa": "📄 Service account (JSON)",
+        "btn_drive_auth_oauth": "🔐 Sign in with Google",
+        "btn_drive_oauth_open": "Open Google sign-in",
+        "drive_oauth_start": (
+            "1) Tap the button below and sign in with your Google account.\n"
+            "2) If you are not redirected to the bot, paste the authorization code here."
         ),
-        "drive_ask_folder_id": "Send the Drive folder ID (from the folder URL):",
+        "drive_oauth_ok_ask_folder": "Google sign-in OK ✅\nSend your Drive folder link or folder ID:",
+        "drive_oauth_failed": "Google sign-in failed: {detail}",
+        "drive_oauth_code_empty": "Authorization code is empty.",
+        "drive_oauth_not_configured": "Google sign-in is not enabled on this server (OAuth env).",
+        "drive_ask_sa_json": (
+            "📖 Google Drive (2 steps)\n\n"
+            "Step 1 — Send the service-account **JSON** as a document.\n"
+            "Step 2 — After upload, send your folder link or folder ID."
+        ),
+        "drive_sa_already_uploaded": "JSON already saved ✅\nShare your folder with:\n`{email}`\n\nNow send the folder link or ID.",
+        "drive_share_email_hint": "✅ JSON received.\nShare the Drive folder with (Editor):\n`{email}`",
+        "drive_ask_folder_id": "Send the Drive folder URL or folder ID:",
         "drive_folder_empty": "folder_id is empty.",
         "drive_sa_missing_retry": "Service account file missing. Run `/drive_connect` again.",
         "drive_connected_ok": "Drive linked ✅ folder=`{folder_id}`",
@@ -1181,13 +1290,13 @@ I18N = {
         "drive_sa_need_document": "Send the JSON as a document file, not plain text.",
         "drive_sa_need_json": "File name must end with `.json`.",
         "drive_sa_invalid": "Invalid JSON: {error}",
-        "drive_status_line": "Drive configured: {ok}\n{detail}",
+        "drive_status_line": "Drive ({mode}): {ok}\n{detail}",
         "drive_ls_result": "Drive files:\n{detail}",
         "drive_ls_error": "Drive list failed: {error}",
         "ssh_list_empty": "No SSH servers. Use `/ssh_add label host port user`",
         "ssh_list_title": "SSH servers:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
-        "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`",
+        "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`\nOr with key: `/ssh_add <label> <host> <port> <user> key:/path/to/id_rsa`",
         "ssh_add_ok": "Saved server `{label}` ({host}:{port}).",
         "ssh_put_usage": "Usage: `/ssh_put <server_id> <remote_path>` then send the file",
         "ssh_ls_usage": "Usage: `/ssh_ls <server_id> [remote_path]`",
@@ -1360,6 +1469,9 @@ I18N = {
         "file_prepared_summary": "File prepared: `{name}`",
         "queued_processing": "Queued for processing...",
         "confirm_send_suffix": "Send to Rubika now?",
+        "btn_confirm_send": "✅ Confirm send",
+        "btn_cancel_send": "❌ Cancel",
+        "btn_main_world": "🌍 World & time",
         "failed_detail_title": "Recent failures for your Rubika session:",
         "confirm_cancelled": "Send cancelled.",
         "cleanup_done": "Cleaned `downloads/`: {n} files, ~{mb} MB freed.",
@@ -1430,15 +1542,35 @@ I18N = {
         "toolkit_b64d_error": "Decode failed: {error}",
         "toolkit_input_truncated": "(Input truncated to 12000 characters.)",
         "toolkit_dns_send_only": "Send a hostname or IP (or use `/dns <host>`).",
-        "toolkit_ping_send_only": "Send host; optional: `host port` (e.g. `example.com 443`).",
+        "toolkit_ping_send_only": "Send host (port optional; tries 443 then 80).",
+        "btn_tool_http_headers": "📬 HTTP Headers",
+        "btn_tool_website_status": "🌐 Website status",
+        "btn_tool_port_check": "🔌 Port check",
+        "btn_tool_subnet": "📡 Subnet calc",
+        "btn_tool_blacklist": "🛡 Blacklist",
+        "btn_tool_ssl": "🔒 SSL check",
+        "toolkit_http_headers_send_only": "Send a URL (e.g. example.com)",
+        "toolkit_website_status_send_only": "Send a website URL",
+        "toolkit_port_check_send_only": "Send host and port: `google.com 443`",
+        "toolkit_subnet_send_only": "Send CIDR: `192.168.1.0/24`",
+        "toolkit_blacklist_send_only": "Send an IP to check blacklists",
+        "toolkit_ssl_send_only": "Send a domain for SSL check",
+        "toolkit_net_error": "Error: {error}",
+        "cf_menu_connected": "☁️ Cloudflare connected ✅\nUse the buttons below.",
+        "cf_quick_help": "Tips:\n• «CF status» — token check\n• «Domains» — zone list\n• «DNS records» — `/cf_dns <zone_id>`\n• Disconnect — «Disconnect Cloudflare»",
         "toolkit_md5_send_only": "Send text to hash with MD5.",
         "toolkit_sha256_send_only": "Send text to hash with SHA256.",
         "toolkit_b64e_send_only": "Send text to Base64-encode.",
         "toolkit_b64d_send_only": "Send a Base64 string to decode.",
         "toolkit_myip_server_fallback": "Server egress IP: `{ip}`\n\nFor your real IP, set `MINIAPP_BASE_URL` on the server and open «My IP» again.",
-        "miniapp_myip_open": "Open the button below to see your IP and ping in your browser:",
-        "btn_open_myip_app": "📍 Open My IP",
-        "miniapp_setup_hint": "Mini App is not configured. Set `MINIAPP_BASE_URL` (HTTPS) in `.env`.",
+        "miniapp_myip_open": "Browser tools (your real IP, DNS, latency, password, …) — tap a button:",
+        "btn_open_myip_app": "📍 My IP",
+        "btn_open_miniapp_hub": "🧰 Mini App hub",
+        "miniapp_setup_hint": (
+            "Mini App is not configured.\n"
+            "Set `MINIAPP_BASE_URL` (public HTTPS URL to `web/`) in `.env`.\n"
+            "See README → Telegram Mini App."
+        ),
         "media_pick_dest": "Choose where to send this file:",
         "media_dest_session_expired": "Selection expired — send the file again.",
         "inline_main_title": "Glass menu — pick a section:",
@@ -1468,6 +1600,33 @@ I18N = {
         "rss_list_title": "Your feeds:",
         "rss_push_new": "📰 Update: {label}",
         "world_error": "Error: {detail}",
+        "btn_main_feed": "📰 Feed Reader",
+        "btn_feed_reader": "📰 Manage feeds",
+        "feed_menu_title": "📰 Feed Reader\nRSS · YouTube · X/Twitter\nAdd feeds, push alerts, or view on demand.",
+        "feed_ask_url": (
+            "Send a feed URL or profile page:\n"
+            "• Direct RSS/Atom\n"
+            "• `youtube.com/channel/UC…` or playlist\n"
+            "• `x.com/username`"
+        ),
+        "feed_added": "Feed #{feed_id} ({kind}) saved.",
+        "feed_fetch_failed": "Could not load feed: {detail}\nURL: {url}",
+        "feed_delete": "🗑 Delete feed",
+        "feed_deleted": "Feed deleted.",
+        "feed_add_btn": "➕ Add feed",
+        "btn_tool_password": "🔑 Password",
+        "btn_tool_rev_dns": "↩️ Reverse DNS",
+        "btn_tool_mac": "🔌 MAC Vendor",
+        "btn_tool_email": "✉️ Email Check",
+        "btn_tool_url_expand": "🔗 Expand URL",
+        "btn_tool_timestamp": "🕐 Timestamp",
+        "btn_tool_lorem": "📝 Lorem",
+        "toolkit_password_result": "Suggested password:\n`{password}`",
+        "toolkit_rev_dns_send_only": "Send an IP for reverse DNS.",
+        "toolkit_mac_send_only": "Send a MAC address (e.g. `AA:BB:CC:DD:EE:FF`):",
+        "toolkit_email_send_only": "Send an email address:",
+        "toolkit_url_expand_send_only": "Send a short URL to expand.",
+        "toolkit_timestamp_send_only": "Send a Unix timestamp or `YYYY-MM-DD HH:MM:SS`.",
         "quota_parallel_msg": "Too many jobs at once for your plan (`{cur}` / `{maxp}`). Wait for one to finish.",
         "quota_day_msg": "Daily data limit reached. This job ~{need} MB; ~{left} MB left today.",
         "quota_month_msg": "Monthly data limit reached. This job ~{need} MB; ~{left} MB left this month.",
@@ -1668,6 +1827,10 @@ def build_transfer_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_toolkit_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_toolkit_menu(user_id, tr)
+
+
+def build_world_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_world_menu(user_id, tr)
 
 
 def build_toolkit_network_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -1935,33 +2098,23 @@ def save_batch_sessions(data: dict):
 
 def get_state(user_id: int) -> dict:
     key = get_user_key(user_id)
-    s: dict = {}
-    if V2_EPHEMERAL_READ_PRIMARY_SQLITE:
-        try:
-            mirrored = queue.get_user_state_mirror(user_id)
-            if mirrored:
-                s = dict(mirrored)
-        except Exception as e:
-            log_event("v2_user_state_mirror_read_failed", user_id=user_id, error=str(e))
-        if not s:
-            states = load_user_states()
-            if key in states:
-                raw = states[key]
-                s = dict(raw) if isinstance(raw, dict) else {}
-    else:
-        states = load_user_states()
-        if key in states:
-            raw = states[key]
-            s = dict(raw) if isinstance(raw, dict) else {}
-        else:
-            try:
-                mirrored = queue.get_user_state_mirror(user_id)
-                if mirrored:
-                    s = dict(mirrored)
-            except Exception as e:
-                log_event("v2_user_state_mirror_read_failed", user_id=user_id, error=str(e))
+    file_s: dict = {}
+    states = load_user_states()
+    if key in states and isinstance(states[key], dict):
+        file_s = dict(states[key])
+    mirror_s: dict = {}
+    try:
+        mirrored = queue.get_user_state_mirror(user_id)
+        if mirrored:
+            mirror_s = dict(mirrored)
+    except Exception as e:
+        log_event("v2_user_state_mirror_read_failed", user_id=user_id, error=str(e))
+    # Merge: JSON file wins on conflicts (wizard keys often missing from stale mirror).
+    s = {**mirror_s, **file_s}
     if MENU_SECTION_KEY in s:
-        return s
+        pass
+    elif MENU_SECTION_KEY in mirror_s:
+        s[MENU_SECTION_KEY] = mirror_s[MENU_SECTION_KEY]
     try:
         sec = queue.get_menu_section(user_id)
     except Exception as e:
@@ -1989,6 +2142,9 @@ def clear_state(user_id: int):
 
     Does **not** delete ``v2_user_prefs`` so mirrors for menu/lang/direct_mode/rubika_session stay intact.
     """
+    from v2.handlers.confirm_state import pop_pending_confirm
+
+    pop_pending_confirm(user_id)
     states = load_user_states()
     states.pop(get_user_key(user_id), None)
     save_user_states(states)
@@ -2746,6 +2902,15 @@ TOOLKIT_COMMAND_DEPS = ToolkitCommandDeps(
     miniapp_base_url=MINIAPP_BASE_URL,
 )
 
+TOOLKIT_NET_EXTRA_DEPS = ToolkitNetExtraDeps(
+    tr=tr,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    toolkit_network_light_enabled=TOOLKIT_NETWORK_LIGHT,
+    toolkit_quota_try=_toolkit_quota_try,
+    toolkit_quota_commit=_toolkit_quota_commit,
+)
+
 WORLD_COMMAND_DEPS = WorldCommandDeps(
     tr=tr,
     queue=queue,
@@ -2753,6 +2918,25 @@ WORLD_COMMAND_DEPS = WorldCommandDeps(
     set_state_preserving_menu=set_state_preserving_menu,
     clear_state=clear_state,
     extract_first_url=extract_first_url,
+)
+
+FEED_READER_DEPS = FeedReaderDeps(
+    tr=tr,
+    queue=queue,
+    get_state=get_state,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    extract_first_url=extract_first_url,
+)
+
+TOOLKIT_EXTRA_DEPS = ToolkitExtraDeps(
+    tr=tr,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    toolkit_utility_light_enabled=TOOLKIT_UTILITY_LIGHT,
+    toolkit_network_light_enabled=TOOLKIT_NETWORK_LIGHT,
+    toolkit_quota_try=_toolkit_quota_try,
+    toolkit_quota_commit=_toolkit_quota_commit,
 )
 
 TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
@@ -2806,6 +2990,7 @@ PROVIDER_CONNECT_DEPS = ProviderConnectWizardDeps(
     clear_bale_credentials=_clear_bale_credentials_persist,
     upsert_drive_folder_id=queue.upsert_drive_folder_id,
     upsert_drive_sa_path=queue.upsert_drive_sa_path,
+    upsert_drive_oauth_path=queue.upsert_drive_oauth_path,
     clear_drive_credentials=queue.clear_drive_credentials,
     log_event=log_event,
 )
@@ -3185,6 +3370,9 @@ async def queue_or_confirm(
             pass
         return True
 
+    from v2.handlers.confirm_state import set_pending_confirm
+
+    set_pending_confirm(user_id, task)
     set_state_preserving_menu(
         user_id,
         {
@@ -3197,8 +3385,8 @@ async def queue_or_confirm(
     suffix = tr(user_id, "confirm_send_suffix")
     kb = InlineKeyboardMarkup(
         [
-            [InlineKeyboardButton("Confirm Send", callback_data="confirm_send")],
-            [InlineKeyboardButton("Cancel", callback_data="cancel_send")],
+            [InlineKeyboardButton(tr(user_id, "btn_confirm_send"), callback_data="confirm_send")],
+            [InlineKeyboardButton(tr(user_id, "btn_cancel_send"), callback_data="cancel_send")],
         ]
     )
     body = f"{summary}\n\n{suffix}"
@@ -3330,6 +3518,100 @@ async def b64_encode_handler(client: Client, message: Message):
 
 async def b64_decode_handler(client: Client, message: Message):
     await handle_b64_decode(TOOLKIT_COMMAND_DEPS, client, message)
+
+
+async def http_headers_handler(client: Client, message: Message):
+    await handle_http_headers(TOOLKIT_NET_EXTRA_DEPS, client, message)
+
+
+async def website_status_handler(client: Client, message: Message):
+    await handle_website_status(TOOLKIT_NET_EXTRA_DEPS, client, message)
+
+
+async def port_check_handler(client: Client, message: Message):
+    await handle_port_check(TOOLKIT_NET_EXTRA_DEPS, client, message)
+
+
+async def subnet_calc_handler(client: Client, message: Message):
+    await handle_subnet_calc(TOOLKIT_NET_EXTRA_DEPS, client, message)
+
+
+async def blacklist_check_handler(client: Client, message: Message):
+    await handle_blacklist_check(TOOLKIT_NET_EXTRA_DEPS, client, message)
+
+
+async def ssl_check_handler(client: Client, message: Message):
+    await handle_ssl_check(TOOLKIT_NET_EXTRA_DEPS, client, message)
+
+
+async def show_world_menu_handler(client: Client, message: Message):
+    uid = message.from_user.id
+    set_menu_section(uid, MenuSection.MAIN)
+    await message.reply_text(
+        tr(uid, "inline_world_title"),
+        reply_markup=build_world_menu(uid),
+        parse_mode=None,
+    )
+
+
+async def world_weather_handler(client: Client, message: Message):
+    await start_weather_wizard(WORLD_COMMAND_DEPS, message)
+
+
+async def world_calendar_handler(client: Client, message: Message):
+    await handle_calendar(WORLD_COMMAND_DEPS, client, message)
+
+
+async def world_currency_handler(client: Client, message: Message):
+    await start_currency_wizard(WORLD_COMMAND_DEPS, message)
+
+
+async def world_quake_handler(client: Client, message: Message):
+    await handle_earthquakes(WORLD_COMMAND_DEPS, client, message)
+
+
+async def world_rss_handler(client: Client, message: Message):
+    await start_rss_wizard(WORLD_COMMAND_DEPS, message)
+
+
+async def world_rss_list_handler(client: Client, message: Message):
+    await list_feeds_inline(FEED_READER_DEPS, message)
+
+
+async def show_feed_menu_handler(client: Client, message: Message):
+    await handle_show_feed_menu(FEED_READER_DEPS, client, message)
+
+
+async def feed_add_handler(client: Client, message: Message):
+    await start_add_feed_wizard(FEED_READER_DEPS, message)
+
+
+async def password_handler(client: Client, message: Message):
+    await handle_password(TOOLKIT_EXTRA_DEPS, client, message)
+
+
+async def reverse_dns_handler(client: Client, message: Message):
+    await handle_reverse_dns(TOOLKIT_EXTRA_DEPS, client, message)
+
+
+async def url_expand_handler(client: Client, message: Message):
+    await handle_url_expand(TOOLKIT_EXTRA_DEPS, client, message)
+
+
+async def timestamp_handler(client: Client, message: Message):
+    await handle_timestamp(TOOLKIT_EXTRA_DEPS, client, message)
+
+
+async def lorem_handler(client: Client, message: Message):
+    await handle_lorem(TOOLKIT_EXTRA_DEPS, client, message)
+
+
+async def mac_lookup_handler(client: Client, message: Message):
+    await handle_mac_lookup(TOOLKIT_EXTRA_DEPS, client, message)
+
+
+async def email_check_handler(client: Client, message: Message):
+    await handle_email_check(TOOLKIT_EXTRA_DEPS, client, message)
 
 
 async def admin_tier_handler(client: Client, message: Message):
@@ -3566,6 +3848,31 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     build_admin_billing_menu=build_admin_billing_menu,
     build_toolkit_zip_menu=build_toolkit_zip_menu,
     build_admin_maintenance_menu=build_admin_maintenance_menu,
+    build_world_menu=build_world_menu,
+    show_world_menu_handler=show_world_menu_handler,
+    extra_slash_handlers={
+        "/httpheaders": http_headers_handler,
+        "/webstatus": website_status_handler,
+        "/portcheck": port_check_handler,
+        "/subnet": subnet_calc_handler,
+        "/blacklist": blacklist_check_handler,
+        "/sslcheck": ssl_check_handler,
+        "/world_weather": world_weather_handler,
+        "/world_calendar": world_calendar_handler,
+        "/world_currency": world_currency_handler,
+        "/world_quake": world_quake_handler,
+        "/world_rss": world_rss_handler,
+        "/world_rss_list": world_rss_list_handler,
+        "/show_feed_menu": show_feed_menu_handler,
+        "/password": password_handler,
+        "/revdns": reverse_dns_handler,
+        "/urlexpand": url_expand_handler,
+        "/timestamp": timestamp_handler,
+        "/lorem": lorem_handler,
+        "/maclookup": mac_lookup_handler,
+        "/emailcheck": email_check_handler,
+    },
+    show_feed_menu_handler=show_feed_menu_handler,
 )
 
 async def _save_drive_sa_file(user_id: int, local_path: Path) -> tuple[bool, str]:
@@ -3660,6 +3967,7 @@ INLINE_MENU_DEPS = InlineMenuDeps(
     help_handler=help_handler,
     my_id_handler=my_id_handler,
     world_deps=WORLD_COMMAND_DEPS,
+    feed_reader_deps=FEED_READER_DEPS,
     show_rubika_menu_handler=show_rubika_menu_handler,
     show_bale_menu_handler=show_bale_menu_handler,
     show_drive_menu_handler=show_drive_menu_handler,
@@ -3693,10 +4001,47 @@ async def _imenu_callback_route(client: Client, callback_query, key: str) -> boo
     return await dispatch_inline_menu_callback(INLINE_MENU_DEPS, client, callback_query, key)
 
 
-async def _rss_push_callback_route(
+async def _feed_callback_route(
     client: Client, callback_query, action: str, feed_id: int
 ) -> bool:
-    return await handle_rss_push_callback(WORLD_COMMAND_DEPS, client, callback_query, action, feed_id)
+    return await handle_feed_callback(FEED_READER_DEPS, client, callback_query, action, feed_id)
+
+
+async def _cf_menu_callback_route(client: Client, callback_query, action: str) -> bool:
+    return await dispatch_cf_menu_callback(CLOUDFLARE_COMMAND_DEPS, client, callback_query, action)
+
+
+async def _drive_auth_callback_route(client: Client, callback_query, action: str) -> bool:
+    return await dispatch_drive_auth_callback(PROVIDER_CONNECT_DEPS, client, callback_query, action)
+
+
+def google_oauth_http_callback(telegram_user_id: int, code: str) -> tuple[bool, str]:
+    """Called from mini-app HTTP thread after Google redirects with ?code=&state=."""
+    ok, err = connect_drive_with_auth_code(
+        BASE_DIR,
+        telegram_user_id,
+        code,
+        queue.upsert_drive_oauth_path,
+    )
+    if not ok:
+        return False, err
+
+    async def _notify() -> None:
+        await notify_oauth_success(
+            app,
+            telegram_user_id,
+            tr,
+            set_state_preserving_menu=set_state_preserving_menu,
+            clear_state=clear_state,
+        )
+
+    try:
+        import asyncio
+
+        asyncio.run_coroutine_threadsafe(_notify(), app.loop)
+    except Exception:
+        pass
+    return True, ""
 
 
 CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
@@ -3721,7 +4066,9 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     handle_link_quality_callback=lambda c, cq, q: handle_link_quality_callback(LINK_DIRECT_HANDLER_DEPS, c, cq, q),
     handle_media_dest_callback=_media_dest_callback_route,
     dispatch_inline_menu_callback=_imenu_callback_route,
-    handle_rss_push_callback=_rss_push_callback_route,
+    handle_feed_callback=_feed_callback_route,
+    dispatch_cf_menu_callback=_cf_menu_callback_route,
+    dispatch_drive_auth_callback=_drive_auth_callback_route,
 )
 
 
@@ -3779,6 +4126,8 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     link_direct_deps=LINK_DIRECT_HANDLER_DEPS,
     build_main_menu=build_main_menu,
     dispatch_world_wizard=dispatch_world_wizard,
+    dispatch_feed_wizard=dispatch_feed_wizard,
+    feed_reader_deps=FEED_READER_DEPS,
     world_command_deps=WORLD_COMMAND_DEPS,
     toolkit_utility_light_enabled=TOOLKIT_UTILITY_LIGHT,
     get_direct_mode_target=get_direct_mode_target,

@@ -299,15 +299,22 @@ update_build_version_in_env(){
   fi
 }
 
-# Normalize empty toolkit flags (legacy installs had KEY= with no value).
-env_normalize_toolkit_flags(){
+# Normalize empty feature flags (legacy installs had KEY= with no value).
+env_normalize_feature_flags(){
   local env_file="${1:-}"
   [[ -f "$env_file" ]] || return 0
-  local key
-  for key in TOOLKIT_NETWORK_LIGHT TOOLKIT_UTILITY_LIGHT; do
+  local key val
+  local -a defaults=(
+    "TOOLKIT_NETWORK_LIGHT=1"
+    "TOOLKIT_UTILITY_LIGHT=1"
+    "RSS_POLL_ENABLE=1"
+  )
+  for pair in "${defaults[@]}"; do
+    key="${pair%%=*}"
+    val="${pair#*=}"
     if grep -q "^${key}=$" "$env_file" 2>/dev/null; then
-      sed -i "s/^${key}=$/${key}=1/" "$env_file"
-      info "Normalized ${key}=1 (was empty)"
+      sed -i "s/^${key}=$/${key}=${val}/" "$env_file"
+      info "Normalized ${key}=${val} (was empty)"
     fi
   done
 }
@@ -343,9 +350,20 @@ merge_env_defaults(){
       "TRANSFER_V2_VALIDATE="
       "BALE_BOT_TOKEN="
       "BALE_API_BASE=https://tapi.bale.ai"
-      "BALE_MAX_FILE_MB=20"
+      "BALE_MAX_FILE_MB=50"
       "GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON="
       "GOOGLE_DRIVE_FOLDER_ID="
+      "GOOGLE_DRIVE_OAUTH_CLIENT_ID="
+      "GOOGLE_DRIVE_OAUTH_CLIENT_SECRET="
+      "GOOGLE_DRIVE_OAUTH_REDIRECT_URI="
+      "GOOGLE_CSE_API_KEYS="
+      "GOOGLE_CSE_ID="
+      "MINIAPP_BASE_URL="
+      "MINIAPP_SERVE_LOCAL="
+      "MINIAPP_PORT=8788"
+      "RSS_POLL_ENABLE=1"
+      "RSS_POLL_INTERVAL_SEC=900"
+      "RSSHUB_BASE_URL=https://rsshub.app"
       "BILLING_STUB_CHECKOUT="
       "BILLING_RECONCILE_ENABLE="
       "BILLING_RECONCILE_INTERVAL_SEC=600"
@@ -353,6 +371,8 @@ merge_env_defaults(){
       "V2_EPHEMERAL_READ_PRIMARY_SQLITE="
       "PAYMENT_WEBHOOK_SECRET="
       "WEBHOOK_PORT=8787"
+      "ENABLE_UPLOAD_CHECKSUM="
+      "DISABLE_UPDATE_BROADCAST="
     )
     local pair key
     for pair in "${pairs[@]}"; do
@@ -364,8 +384,9 @@ merge_env_defaults(){
       fi
     done
   fi
-  env_normalize_toolkit_flags "$env_file"
+  env_normalize_feature_flags "$env_file"
   ok "Env merge complete ($added new keys, existing values kept)"
+  log_event "OK" "env_merge" "dir=$dir added_keys=$added"
 }
 
 ensure_install_layout(){
@@ -401,6 +422,8 @@ import requests
 import pyzipper
 import paramiko
 import yt_dlp
+import feedparser
+import jdatetime
 print('core-imports-ok')
 " || return 1
   command -v ffmpeg >/dev/null 2>&1 || { err "ffmpeg missing from PATH"; return 1; }
@@ -419,8 +442,16 @@ print('rub-import-ok')
   if "$dir/venv/bin/python" -c "import google.oauth2; import googleapiclient" 2>/dev/null; then
     ok "Google Drive Python libraries available"
   else
-    warn "Google Drive libraries not importable (optional until GOOGLE_DRIVE_* configured)"
+    warn "Google Drive libraries not importable (optional until /drive_connect or OAuth)"
   fi
+  run_cmd "miniapp api smoke test" "$dir/venv/bin/python" -c "
+import os
+os.chdir('$dir')
+from v2.web.miniapp_api import dispatch_miniapp_api
+st, ct, body = dispatch_miniapp_api('/miniapp/api/whois', 'q=127.0.0.1')
+assert st == 200 and b'\"ok\"' in body, (st, body[:200])
+print('miniapp-api-ok')
+" || warn "Mini App API smoke test failed (check v2/web/miniapp_api.py)"
   return 0
 }
 
@@ -437,32 +468,83 @@ check_recent_journal_errors(){
   return 0
 }
 
+env_set_key(){
+  local env_file="$1" key="$2" value="$3"
+  [[ -f "$env_file" ]] || return 1
+  if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+    sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+  else
+    echo "${key}=${value}" >> "$env_file"
+  fi
+}
+
+# Optional interactive .env tuning after install/update (does not overwrite unless user confirms).
+prompt_optional_features(){
+  local dir="$1" env_file="$dir/.env"
+  [[ -f "$env_file" ]] || return 0
+  [[ -t 0 ]] || return 0
+  echo
+  info "Optional features (press Enter on prompts to keep current / skip)"
+  if ask_yn "Set Telegram Mini App base URL (MINIAPP_BASE_URL)?" "n"; then
+    local mini_url serve_local
+    mini_url="$(ask "MINIAPP_BASE_URL (HTTPS, e.g. https://your.domain/tele2rub)")"
+    mini_url="${mini_url%/}"
+    env_set_key "$env_file" "MINIAPP_BASE_URL" "$mini_url"
+    if ask_yn "Serve Mini App + API from bot on MINIAPP_PORT? (MINIAPP_SERVE_LOCAL=1; else use nginx)" "y"; then
+      env_set_key "$env_file" "MINIAPP_SERVE_LOCAL" "1"
+    fi
+    ok "Mini App configured: ${mini_url}/miniapp/index.html — also set BotFather menu URL if desired"
+    log_event "OK" "miniapp_configured" "base_url=$mini_url"
+  fi
+  if ask_yn "Enable Google Drive OAuth env keys now? (users still use /drive_connect)" "n"; then
+    local cid sec
+    cid="$(ask "GOOGLE_DRIVE_OAUTH_CLIENT_ID")"
+    sec="$(ask "GOOGLE_DRIVE_OAUTH_CLIENT_SECRET")"
+    env_set_key "$env_file" "GOOGLE_DRIVE_OAUTH_CLIENT_ID" "$cid"
+    env_set_key "$env_file" "GOOGLE_DRIVE_OAUTH_CLIENT_SECRET" "$sec"
+    ok "Drive OAuth keys saved (redirect: MINIAPP_BASE_URL/oauth/google/callback)"
+  fi
+}
+
 show_post_deploy_summary(){
   local dir="$1" split="${2:-0}"
-  local ver
-  ver="$(read_app_version "$dir/.env" 2>/dev/null || echo unknown)"
+  local ver env_file="$dir/.env"
+  ver="$(read_app_version "$env_file" 2>/dev/null || echo unknown)"
   echo
   echo "=============================================="
-  echo " ${DISPLAY_NAME} deploy summary (v2 menus + transfers)"
+  echo " ${DISPLAY_NAME} deploy summary"
   echo "=============================================="
   echo "Install dir : $dir"
   echo "Version     : $ver"
-  echo "Systemd     : $([[ "$split" == "1" ]] && echo "split (bot + worker)" || echo "combined (main.py)")"
+  echo "Systemd     : $([[ "$split" == "1" ]] && echo "split (${DEFAULT_SERVICE_NAME}-bot + worker)" || echo "combined (main.py)")"
+  echo "Config      : $env_file"
+  echo "Secrets     : $dir/secrets  (per-user Drive JSON / OAuth tokens)"
+  echo "Mini App    : $dir/web/miniapp/  (needs MINIAPP_BASE_URL in .env)"
   echo
-  echo "Telegram bot quick test:"
-  echo "  /start  /menu  — main menus (Transfer, Tools, Plan)"
-  echo "  /dns google.com  — toolkit"
+  echo "Bot menus: /start  /menu  /imenu (glass)  — Transfer | Tools | World | Feed | SSH"
   echo
-  echo "Transfer hub (reply menu):"
-  echo "  Rubika — connect then send files (default FILES section)"
-  echo "  Bale   — each user runs /bale_connect with their own Bale bot token"
-  echo "  Drive  — each user runs /drive_connect with their own service-account JSON + folder"
-  echo "  SSH    — /ssh_add label host port user password  then  /ssh_put id /remote/path"
+  echo "Transfer (per-user in bot):"
+  echo "  Rubika  /rubika_connect"
+  echo "  Bale    /bale_connect"
+  echo "  Drive   /drive_connect  (service-account JSON or Google OAuth)"
+  echo "  SSH     /ssh_add  (password or key:/path/to/id_rsa)"
+  echo "  Link    menu «لینک / ویدیو» or /directmode"
   echo
-  echo "Config file : $dir/.env"
-  echo "Secrets dir : $dir/secrets  (place Drive service-account JSON here)"
-  echo "Logs        : journalctl -u SERVICE -f"
+  echo "Toolkit (TOOLKIT_*_LIGHT=1 by default): /dns /ping /whois /myip /miniapp …"
+  echo "World: weather, calendar, currency, earthquakes"
+  echo "Feeds: /feeds  (RSS_POLL_ENABLE=1 by default; RSSHUB_BASE_URL for X/Twitter)"
+  echo "Cloudflare: /cf_connect (per-user token)"
+  echo
+  if [[ -f "$env_file" ]]; then
+    grep -q '^MINIAPP_BASE_URL=.\+' "$env_file" 2>/dev/null && \
+      echo "Mini App URL: $(grep '^MINIAPP_BASE_URL=' "$env_file" | sed 's/^MINIAPP_BASE_URL=//')/miniapp/index.html" || \
+      echo "Mini App: set MINIAPP_BASE_URL in .env (see README → Telegram Mini App)"
+  fi
+  echo
+  echo "Logs: journalctl -u SERVICE -f  |  installer: $LOG_FILE"
+  echo "Env repair only: bash installer.sh --env-sync"
   echo "=============================================="
+  log_event "OK" "post_deploy_summary" "dir=$dir version=$ver split=$split"
 }
 
 read_app_version(){
@@ -609,13 +691,11 @@ post_deploy_health_check(){
     run_cmd "service is-active check" systemctl is-active --quiet "$base"
     run_cmd "service is-enabled check" systemctl is-enabled --quiet "$base"
   fi
-  run_cmd "python syntax smoke check" "$dir/venv/bin/python" -m py_compile \
-    "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py" \
-    "$dir/v2/core/menu_engine.py" "$dir/v2/core/menu_sections.py" \
-    "$dir/v2/handlers/transfer_hub_commands.py" "$dir/v2/handlers/toolkit_menu_commands.py" \
-    "$dir/v2/handlers/media_handler.py" "$dir/v2/handlers/admin_commands.py" \
-    "$dir/v2/handlers/cloudflare_commands.py" \
-    "$dir/v2/transfer/bale_client.py" "$dir/v2/transfer/drive_client.py" "$dir/v2/transfer/ssh_client.py"
+  run_cmd "python syntax smoke check (core)" "$dir/venv/bin/python" -m py_compile \
+    "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py"
+  run_cmd "python syntax smoke check (v2 package)" "$dir/venv/bin/python" -m compileall -q "$dir/v2" \
+    || { err "v2 compileall failed"; return 1; }
+  [[ -d "$dir/web/miniapp" ]] || warn "Missing $dir/web/miniapp (Mini App static files)"
   verify_python_imports "$dir" || return 1
   # Ensure SQLite schema (e.g. v2_user_activity) exists before service handles messages.
   run_cmd "sqlite schema migration smoke" "$dir/venv/bin/python" -c "
@@ -642,15 +722,21 @@ print('schema-ok')
 
 show_requirements_reminder(){
   echo "Before installation, prepare these values:"
-  echo "- Telegram API_ID / API_HASH (my.telegram.org)"
-  echo "- Telegram BOT_TOKEN (BotFather)"
+  echo "- Telegram API_ID / API_HASH (https://my.telegram.org)"
+  echo "- Telegram BOT_TOKEN (@BotFather)"
   echo "- ADMIN_IDS (comma-separated Telegram user IDs)"
   echo "- Optional: RUBIKA_SESSION, DEFAULT_PART_SIZE_MB, MAX_FILE_MB"
   echo
-  echo "Optional v2 features (can add to .env after install):"
-  echo "- BALE_BOT_TOKEN — Telegram→Bale file bridge"
-  echo "- GOOGLE_DRIVE_SERVICE_ACCOUNT_JSON + GOOGLE_DRIVE_FOLDER_ID"
-  echo "- Toolkit is ON by default (TOOLKIT_NETWORK_LIGHT=1, TOOLKIT_UTILITY_LIGHT=1)"
+  echo "Enabled by default after install (merge from .env.example):"
+  echo "- Toolkit: TOOLKIT_NETWORK_LIGHT=1, TOOLKIT_UTILITY_LIGHT=1"
+  echo "- RSS push: RSS_POLL_ENABLE=1, RSSHUB_BASE_URL=https://rsshub.app"
+  echo
+  echo "Optional (configure in .env or during install prompts):"
+  echo "- MINIAPP_BASE_URL + MINIAPP_SERVE_LOCAL — Telegram Mini App (/myip, /miniapp)"
+  echo "- GOOGLE_DRIVE_OAUTH_* — per-user Google sign-in for Drive"
+  echo "- GOOGLE_CSE_* — /gsearch /gisearch"
+  echo "- Per-user: /bale_connect, /drive_connect, /cf_connect (no global secrets required)"
+  echo "- See README.md for full variable list and nginx Mini App proxy"
 }
 
 install_flow(){
@@ -674,13 +760,14 @@ install_flow(){
   setup_venv "$dir" || return 1
   write_env "$dir" "$api_id" "$api_hash" "$bot_token" "$rub_sess" "$admin_ids" "$part_size" || return 1
   merge_env_defaults "$dir"
+  prompt_optional_features "$dir"
   chown_install_dir "$dir" "$user"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
   post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
   local ver
   ver="$(read_app_version "$dir/.env")"
   notify_admin "$bot_token" "$admin_ids" \
-    "${DISPLAY_NAME} installed on $(hostname) v=${ver}. Use /start — menus: Transfer, Tools, Plan. See server log for Bale/Drive/SSH .env hints."
+    "${DISPLAY_NAME} installed v=${ver} on $(hostname). /start /menu — Transfer, Tools, Mini App (/miniapp), Feeds (/feeds). README on server: $dir/README.md"
   show_post_deploy_summary "$dir" "$split_flag"
   ok "Install completed."
 }
@@ -724,6 +811,9 @@ update_flow(){
   setup_venv "$dir" || return 1
   update_build_version_in_env "$dir"
   merge_env_defaults "$dir"
+  if [[ -t 0 ]] && ask_yn "Configure optional Mini App / Drive OAuth in .env now?" "n"; then
+    prompt_optional_features "$dir"
+  fi
   chown_install_dir "$dir" "$user"
   create_service "$svc" "$dir" "$user" "$split_flag" || return 1
   post_deploy_health_check "$svc" "$dir" "$split_flag" || return 1
@@ -733,7 +823,7 @@ update_flow(){
     local ver
     ver="$(read_app_version "$dir/.env")"
     [[ -n "$bot_token" && -n "$admin_ids" ]] && notify_admin "$bot_token" "$admin_ids" \
-      "${DISPLAY_NAME} updated on $(hostname) v=${ver}. Send /start to refresh menus (Transfer/Tools). Toolkit defaults merged if missing."
+      "${DISPLAY_NAME} updated v=${ver} on $(hostname). /start — new env keys merged. Mini App: /miniapp — see README."
   fi
   show_post_deploy_summary "$dir" "$split_flag"
   ok "Update completed."
@@ -765,7 +855,8 @@ env_sync_flow(){
   [[ -d "$dir" ]] || { err "Install directory not found: $dir"; return 1; }
   [[ -f "$dir/.env" ]] || { err "Missing $dir/.env"; return 1; }
   merge_env_defaults "$dir"
-  ok "Env sync done. Restart the service to apply new flags."
+  ok "Env sync done (.env.example keys merged; existing values kept). Restart the service to apply."
+  log_event "OK" "env_sync_flow" "dir=$dir"
   if ask_yn "Restart service now?" "y"; then
     local svc split_flag=0
     if [[ -n "${SELECTED_BASE:-}" ]]; then
@@ -962,7 +1053,16 @@ all_logs_flow(){
     else
       echo "(no git metadata in $dir)"
     fi
-    grep -E '^APP_VERSION=' "$dir/.env" 2>/dev/null || echo "APP_VERSION=(unset)"
+    grep -E '^APP_BUILD_VERSION=' "$dir/.env" 2>/dev/null || echo "APP_BUILD_VERSION=(unset)"
+    echo
+    echo "===== FEATURE FLAGS (.env, values redacted) ====="
+    grep -E '^(TOOLKIT_|RSS_|MINIAPP_|GOOGLE_DRIVE|GOOGLE_CSE|BALE_|TRANSFER_|DISABLE_|MAX_FILE)' "$dir/.env" 2>/dev/null \
+      | sed 's/=.*$/=***/' || echo "(no feature flags in .env)"
+    if [[ -d "$dir/web/miniapp" ]]; then
+      echo "miniapp_pages=$(find "$dir/web/miniapp" -maxdepth 1 -name '*.html' 2>/dev/null | wc -l | tr -d ' ') html files"
+    else
+      echo "miniapp_pages=(missing web/miniapp)"
+    fi
     echo
 
     echo "===== SYSTEMD STATUS ====="

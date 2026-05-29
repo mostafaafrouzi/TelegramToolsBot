@@ -10,6 +10,7 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.toolkit.calendar_light import calendar_report
 from v2.toolkit.rss_light import fetch_feed
+from v2.toolkit.rss_resolve import resolve_feed_url
 from v2.toolkit.weather_light import (
     air_quality_report,
     currency_convert,
@@ -102,20 +103,28 @@ async def dispatch_world_wizard(
         return True
 
     if step == "await_rss_url":
-        url = deps.extract_first_url(text) or text.strip()
-        if not url.startswith(("http://", "https://")):
+        raw = deps.extract_first_url(text) or text.strip()
+        if not raw.startswith(("http://", "https://")) and "." not in raw:
+            await message.reply_text(deps.tr(user_id, "rss_bad_url"), parse_mode=None)
+            return True
+        url, kind, hint = resolve_feed_url(raw)
+        if not url:
             await message.reply_text(deps.tr(user_id, "rss_bad_url"), parse_mode=None)
             return True
         ok, body, h = await asyncio.to_thread(fetch_feed, url, 5)
         if not ok:
             await message.reply_text(deps.tr(user_id, "world_error", detail=body), parse_mode=None)
             return True
-        feed_id = deps.queue.add_feed(user_id, url, label=url[:80])
+        label = raw[:80] if kind == "rss" else f"[{kind}] {raw[:70]}"
+        feed_id = deps.queue.add_feed(user_id, url, label=label)
         if h:
             deps.queue.update_feed_hash(feed_id, h)
         deps.clear_state(user_id)
+        intro = deps.tr(user_id, "rss_added", feed_id=feed_id)
+        if hint:
+            intro += f"\n\n{hint}"
         await message.reply_text(
-            deps.tr(user_id, "rss_added", feed_id=feed_id)
+            intro
             + "\n\n"
             + body[:3500]
             + "\n\n"
@@ -142,8 +151,8 @@ async def start_currency_wizard(deps: WorldCommandDeps, message: Message) -> Non
 
 async def start_rss_wizard(deps: WorldCommandDeps, message: Message) -> None:
     uid = message.from_user.id
-    deps.set_state_preserving_menu(uid, {"step": "await_rss_url"})
-    await message.reply_text(deps.tr(uid, "rss_ask_url"), parse_mode=None)
+    deps.set_state_preserving_menu(uid, {"step": "await_feed_url"})
+    await message.reply_text(deps.tr(uid, "feed_ask_url"), parse_mode=None)
 
 
 async def list_rss_feeds(deps: WorldCommandDeps, message: Message) -> None:

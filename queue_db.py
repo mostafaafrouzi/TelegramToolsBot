@@ -111,6 +111,8 @@ class QueueDB:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN drive_folder_id TEXT")
         if "drive_sa_path" not in cols:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN drive_sa_path TEXT")
+        if "drive_oauth_path" not in cols:
+            conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN drive_oauth_path TEXT")
         if "cloudflare_api_token" not in cols:
             conn.execute("ALTER TABLE v2_user_prefs ADD COLUMN cloudflare_api_token TEXT")
 
@@ -855,6 +857,45 @@ class QueueDB:
                     )
                 conn.commit()
 
+    def get_drive_oauth_path(self, telegram_user_id: int) -> Optional[str]:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT drive_oauth_path FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                (int(telegram_user_id),),
+            ).fetchone()
+        if not row or row["drive_oauth_path"] is None:
+            return None
+        s = str(row["drive_oauth_path"]).strip()
+        return s or None
+
+    def upsert_drive_oauth_path(self, telegram_user_id: int, relative_path: str) -> None:
+        rel = (relative_path or "").strip().replace("\\", "/")
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    "SELECT 1 FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
+                    (int(telegram_user_id),),
+                ).fetchone()
+                if row:
+                    conn.execute(
+                        """
+                        UPDATE v2_user_prefs
+                        SET drive_oauth_path = ?, updated_at = ?
+                        WHERE telegram_user_id = ?
+                        """,
+                        (rel, now, int(telegram_user_id)),
+                    )
+                else:
+                    conn.execute(
+                        """
+                        INSERT INTO v2_user_prefs (telegram_user_id, menu_section, drive_oauth_path, updated_at)
+                        VALUES (?, 'main', ?, ?)
+                        """,
+                        (int(telegram_user_id), rel, now),
+                    )
+                conn.commit()
+
     def clear_drive_credentials(self, telegram_user_id: int) -> None:
         now = int(time.time())
         with self._lock:
@@ -862,7 +903,7 @@ class QueueDB:
                 conn.execute(
                     """
                     UPDATE v2_user_prefs
-                    SET drive_folder_id = NULL, drive_sa_path = NULL, updated_at = ?
+                    SET drive_folder_id = NULL, drive_sa_path = NULL, drive_oauth_path = NULL, updated_at = ?
                     WHERE telegram_user_id = ?
                     """,
                     (now, int(telegram_user_id)),

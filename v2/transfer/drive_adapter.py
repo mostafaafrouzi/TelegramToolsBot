@@ -1,4 +1,4 @@
-"""Google Drive transfer adapter (per-user service account JSON)."""
+"""Google Drive transfer adapter (per-user service account or OAuth)."""
 
 from __future__ import annotations
 
@@ -13,26 +13,28 @@ class GoogleDriveTransferAdapter:
         self,
         *,
         service_account_path: Optional[str] = None,
+        oauth_token_path: Optional[str] = None,
         folder_id: Optional[str] = None,
     ) -> tuple[bool, str]:
-        if not service_account_path or not folder_id:
-            return False, "Drive service account or folder_id not set for this user"
-        from pathlib import Path
-
-        p = Path(service_account_path)
-        if not p.is_file():
-            return False, "service account file missing"
+        if not folder_id:
+            return False, "Drive folder_id not set for this user"
+        has_sa = bool(service_account_path)
+        has_oauth = bool(oauth_token_path)
+        if not has_sa and not has_oauth:
+            return False, "Drive credentials not set (service account or OAuth)"
+        mode = "oauth" if has_oauth else "service_account"
         try:
             from v2.transfer.drive_client import list_files
 
             ok, detail = list_files(
                 service_account_path=service_account_path,
+                oauth_token_path=oauth_token_path,
                 folder_id=folder_id,
                 limit=1,
             )
             if ok:
-                return True, f"folder_id={folder_id} — API OK"
-            return False, f"folder_id={folder_id} — API error: {detail}"
+                return True, f"mode={mode} folder_id={folder_id} — API OK"
+            return False, f"mode={mode} folder_id={folder_id} — API error: {detail}"
         except Exception as e:
             return False, f"folder_id={folder_id} — healthcheck error: {e}"
 
@@ -43,22 +45,32 @@ class GoogleDriveTransferAdapter:
         from v2.transfer.drive_client import download_file
 
         file_id = source_ref.get("file_id") if isinstance(source_ref, dict) else str(source_ref)
-        sa = source_ref.get("service_account_path") if isinstance(source_ref, dict) else None
-        ok, detail = download_file(file_id, tmp_path, service_account_path=sa)
+        sa = oauth = None
+        if isinstance(source_ref, dict):
+            sa = source_ref.get("service_account_path")
+            oauth = source_ref.get("oauth_token_path")
+        ok, detail = download_file(
+            file_id,
+            tmp_path,
+            service_account_path=sa,
+            oauth_token_path=oauth,
+        )
         return {"ok": ok, "path": detail} if ok else {"ok": False, "error": detail}
 
     def upload(self, local_path: str, destination_ref: Any) -> dict:
         from v2.transfer.drive_client import upload_file
 
-        sa = folder = name = None
+        sa = folder = name = oauth = None
         if isinstance(destination_ref, dict):
             sa = destination_ref.get("service_account_path")
+            oauth = destination_ref.get("oauth_token_path")
             folder = destination_ref.get("folder_id")
             name = destination_ref.get("file_name")
         ok, msg, meta = upload_file(
             local_path,
             file_name=name,
             service_account_path=sa,
+            oauth_token_path=oauth,
             folder_id=folder,
         )
         if not ok:

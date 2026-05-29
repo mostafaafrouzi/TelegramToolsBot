@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Latency</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <div id="hdr"></div>
+  <p class="muted" id="hint"></p>
+  <div class="card">
+    <button type="button" class="btn" id="btn-run"></button>
+    <pre id="out" class="mono" style="margin-top:12px">—</pre>
+  </div>
+  <script src="common.js"></script>
+  <script>
+    T2R.initApp();
+    const en = T2R.lang() === "en";
+    document.getElementById("hdr").appendChild(T2R.header(en ? "Network latency" : "تأخیر شبکه", "index.html"));
+    document.getElementById("hint").textContent = en
+      ? "Measures round-trip from your phone/PC browser (not ICMP, not the VPS)."
+      : "از مرورگر گوشی/کامپیوتر شما اندازه‌گیری می‌شود (نه ICMP و نه VPS).";
+    document.getElementById("btn-run").textContent = en ? "Run test" : "شروع تست";
+    const out = document.getElementById("out");
+    const hosts = [
+      { label: "Telegram", url: "https://telegram.org" },
+      { label: "Cloudflare DNS", url: "https://1.1.1.1" },
+      { label: "Google", url: "https://www.google.com/generate_204" },
+      { label: "Quad9", url: "https://9.9.9.9" },
+    ];
+
+    document.getElementById("btn-run").onclick = async () => {
+      out.textContent = T2R.t("loading");
+      const lines = [];
+      for (const h of hosts) {
+        try {
+          const ms = await T2R.latencyMs(h.url, 12000);
+          lines.push(h.label + ": ~" + ms + " ms");
+        } catch (e) {
+          lines.push(h.label + ": " + (en ? "timeout/fail" : "ناموفق"));
+        }
+      }
+      out.textContent = lines.join("\n");
+    };
+  </script>
+</body>
+</html>

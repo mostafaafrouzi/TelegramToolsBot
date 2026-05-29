@@ -37,6 +37,7 @@ class InlineMenuDeps:
     help_handler: Callable[..., Awaitable[None]]
     my_id_handler: Callable[..., Awaitable[None]]
     world_deps: Any
+    feed_reader_deps: Any
     show_rubika_menu_handler: Callable[..., Awaitable[None]]
     show_bale_menu_handler: Callable[..., Awaitable[None]]
     show_drive_menu_handler: Callable[..., Awaitable[None]]
@@ -131,7 +132,18 @@ async def dispatch_inline_menu_callback(
 
     if k == "myid":
         await callback_query.answer()
-        await deps.my_id_handler(client, msg)
+        user = callback_query.from_user
+        username = f"@{user.username}" if getattr(user, "username", None) else "-"
+        await msg.reply_text(
+            deps.tr(
+                user_id,
+                "toolkit_myid_result",
+                user_id=user_id,
+                username=username,
+                chat_id=msg.chat.id if msg.chat else user_id,
+            ),
+            parse_mode=None,
+        )
         return True
 
     if k == "myip_hint":
@@ -155,6 +167,13 @@ async def dispatch_inline_menu_callback(
         await callback_query.answer()
         await handle_earthquakes(deps.world_deps, client, msg)
         return True
+    if k == "feeds":
+        await callback_query.answer()
+        from v2.handlers.feed_reader_commands import handle_show_feed_menu
+
+        await handle_show_feed_menu(deps.feed_reader_deps, client, msg)
+        return True
+
     if k == "rss":
         await callback_query.answer()
         await start_rss_wizard(deps.world_deps, msg)

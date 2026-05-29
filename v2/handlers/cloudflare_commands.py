@@ -56,8 +56,32 @@ async def dispatch_cloudflare_wizard(message: Message, user_id: int, state: dict
 
 
 async def handle_show_cloudflare_menu(deps: CloudflareCommandDeps, client: Any, message: Message) -> None:
+    from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.CLOUDFLARE)
+    token = deps.get_token(uid)
+    if token:
+        body = deps.tr(uid, "cf_menu_connected")
+        inline = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(deps.tr(uid, "btn_cf_status"), callback_data="cfmenu:status"),
+                    InlineKeyboardButton(deps.tr(uid, "btn_cf_zones"), callback_data="cfmenu:zones"),
+                ],
+                [
+                    InlineKeyboardButton(deps.tr(uid, "btn_cf_dns_help"), callback_data="cfmenu:dns_hint"),
+                    InlineKeyboardButton(deps.tr(uid, "btn_cf_disconnect"), callback_data="cfmenu:disconnect"),
+                ],
+            ]
+        )
+        await message.reply_text(body, reply_markup=inline, parse_mode=None)
+        await message.reply_text(
+            deps.tr(uid, "cf_quick_help"),
+            reply_markup=deps.build_cloudflare_menu(uid),
+            parse_mode=None,
+        )
+        return
     await message.reply_text(
         deps.tr(uid, "cf_menu_title"),
         reply_markup=deps.build_cloudflare_menu(uid),

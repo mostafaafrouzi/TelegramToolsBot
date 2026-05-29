@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>HTTP Headers</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <div id="hdr"></div>
+  <p class="muted" id="hint"></p>
+  <div class="card">
+    <input id="url" type="url" placeholder="https://example.com" />
+    <div class="btn-row">
+      <button type="button" class="btn" id="btn-h"></button>
+      <button type="button" class="btn secondary" id="btn-s"></button>
+    </div>
+    <pre id="out" class="mono" style="margin-top:10px">—</pre>
+    <div id="copy-wrap"></div>
+  </div>
+  <script src="common.js"></script>
+  <script>
+    T2R.initApp();
+    const en = T2R.lang() === "en";
+    document.getElementById("hdr").appendChild(T2R.header(en ? "HTTP Headers" : "هدرهای HTTP", "index.html"));
+    document.getElementById("hint").textContent = en
+      ? "Fetched from the bot server (enable MINIAPP_SERVE_LOCAL or proxy /miniapp/api/ to the bot)."
+      : "از سرور ربات گرفته می‌شود (MINIAPP_SERVE_LOCAL=1 یا پروکسی /miniapp/api/).";
+    document.getElementById("btn-h").textContent = en ? "Headers" : "هدرها";
+    document.getElementById("btn-s").textContent = en ? "Site status" : "وضعیت سایت";
+    const out = document.getElementById("out");
+    const urlEl = document.getElementById("url");
+
+    async function run(action) {
+      const url = urlEl.value.trim();
+      if (!url) {
+        out.textContent = en ? "Enter a URL." : "آدرس را وارد کنید.";
+        return;
+      }
+      out.textContent = T2R.t("loading");
+      try {
+        const j = await T2R.miniappApi(action, { url });
+        out.textContent = j.ok ? j.text : (en ? "Error: " : "خطا: ") + (j.error || "?");
+        document.getElementById("copy-wrap").innerHTML = "";
+        if (j.ok) T2R.addCopyButton(document.getElementById("copy-wrap"), () => out.textContent);
+      } catch (e) {
+        out.textContent = (en ? "API unavailable. " : "API در دسترس نیست. ") + e +
+          (en ? "\n\nServe static + proxy /miniapp/api/ or set MINIAPP_SERVE_LOCAL=1." : "\n\nMINIAPP_SERVE_LOCAL=1 یا پروکسی nginx.");
+      }
+    }
+
+    document.getElementById("btn-h").onclick = () => run("headers");
+    document.getElementById("btn-s").onclick = () => run("status");
+  </script>
+</body>
+</html>

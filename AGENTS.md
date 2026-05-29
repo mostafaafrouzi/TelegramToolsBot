@@ -4,7 +4,9 @@
 
 ### Project overview
 
-This is **TelegramToRubika (tele2rub)** — a Python Telegram bot that transfers files from Telegram to Rubika (and optionally Bale, Google Drive, SSH). See `README.md` for full feature list.
+This is **TelegramToRubika (tele2rub)** — a Python Telegram bot that transfers files from Telegram to Rubika (and optionally Bale, Google Drive, SSH), plus toolkit, RSS feeds, and a **Telegram Mini App** under `web/miniapp/`. See `README.md` for full feature list and env vars.
+
+**Installer:** `installer.sh` merges missing keys from `.env.example` on install/update/`--env-sync`, runs `compileall` on `v2/`, and checks `web/miniapp/`. Optional prompts: `MINIAPP_BASE_URL`, Drive OAuth.
 
 ### Development setup
 

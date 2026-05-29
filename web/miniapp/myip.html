@@ -2,58 +2,85 @@
 <html lang="fa" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>IP من</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>My IP</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <style>
-    body { font-family: system-ui, sans-serif; margin: 16px; background: var(--tg-theme-bg-color,#fff); color: var(--tg-theme-text-color,#111); }
-    .card { border-radius: 12px; padding: 16px; background: var(--tg-theme-secondary-bg-color,#f4f4f5); margin-bottom: 12px; }
-    h1 { font-size: 1.2rem; margin: 0 0 8px; }
-    button { width: 100%; padding: 12px; border: 0; border-radius: 10px; font-size: 1rem; margin-top: 8px;
-      background: var(--tg-theme-button-color,#2481cc); color: var(--tg-theme-button-text-color,#fff); }
-    pre { white-space: pre-wrap; word-break: break-all; font-size: 0.9rem; }
-  </style>
+  <link rel="stylesheet" href="common.css" />
 </head>
 <body>
+  <div id="hdr"></div>
   <div class="card">
-    <h1>📍 IP شما</h1>
-    <pre id="ip">در حال بارگذاری…</pre>
+    <h2 id="h-ip"></h2>
+    <pre id="ip-out" class="mono"></pre>
+    <div id="ip-actions"></div>
   </div>
   <div class="card">
-    <h1>📡 Ping</h1>
-    <pre id="ping">—</pre>
-    <button type="button" id="btnPing">تست Ping (از شبکه شما)</button>
+    <h2 id="h-geo"></h2>
+    <pre id="geo-out" class="mono"></pre>
   </div>
+  <div class="card">
+    <h2 id="h-ping"></h2>
+    <pre id="ping-out" class="mono">—</pre>
+    <button type="button" class="btn" id="btn-ping"></button>
+  </div>
+  <script src="common.js"></script>
   <script>
-    const tg = window.Telegram && window.Telegram.WebApp;
-    if (tg) { tg.ready(); tg.expand(); }
+    T2R.initApp();
+    const en = T2R.lang() === "en";
+    document.getElementById("hdr").appendChild(T2R.header(en ? "My IP" : "IP من", "index.html"));
+    document.getElementById("h-ip").textContent = en ? "Public IP" : "IP عمومی";
+    document.getElementById("h-geo").textContent = en ? "Location & ISP" : "موقعیت و ISP";
+    document.getElementById("h-ping").textContent = en ? "Latency (browser)" : "تأخیر (مرورگر)";
+    document.getElementById("btn-ping").textContent = en ? "Test latency" : "تست تأخیر";
 
-    async function loadIp() {
-      const el = document.getElementById('ip');
+    const ipOut = document.getElementById("ip-out");
+    const geoOut = document.getElementById("geo-out");
+    const pingOut = document.getElementById("ping-out");
+    const ipActions = document.getElementById("ip-actions");
+    let currentIp = "";
+
+    async function load() {
+      ipOut.textContent = T2R.t("loading");
+      geoOut.textContent = "…";
       try {
-        const r = await fetch('https://api.ipify.org?format=json');
-        const j = await r.json();
-        el.textContent = 'IP: ' + (j.ip || '?');
+        currentIp = await T2R.publicIp();
+        ipOut.textContent = currentIp;
+        T2R.addCopyButton(ipActions, () => currentIp);
+        const d = await T2R.ipDetails(currentIp);
+        const lines = [
+          (en ? "Country" : "کشور") + ": " + (d.country || "—") + " " + (d.country_code || ""),
+          (en ? "Region" : "استان") + ": " + (d.region || "—"),
+          (en ? "City" : "شهر") + ": " + (d.city || "—"),
+          "ISP: " + (d.connection && d.connection.isp ? d.connection.isp : d.isp || "—"),
+          (en ? "Timezone" : "منطقه زمانی") + ": " + (d.timezone && d.timezone.id ? d.timezone.id : d.timezone || "—"),
+        ];
+        if (d.latitude != null) lines.push("Lat/Lon: " + d.latitude + ", " + d.longitude);
+        geoOut.textContent = lines.join("\n");
       } catch (e) {
-        el.textContent = 'خطا: ' + e;
+        ipOut.textContent = T2R.t("error") + ": " + e;
+        geoOut.textContent = "—";
       }
     }
 
-    document.getElementById('btnPing').onclick = async () => {
-      const el = document.getElementById('ping');
-      el.textContent = 'در حال اندازه‌گیری…';
-      const host = '1.1.1.1';
-      const t0 = performance.now();
-      try {
-        await fetch('https://' + host, { mode: 'no-cors', cache: 'no-store' });
-        const ms = Math.round(performance.now() - t0);
-        el.textContent = 'تقریبی به ' + host + ': ~' + ms + ' ms\n(از مرورگر/شبکه شما)';
-      } catch (e) {
-        el.textContent = 'ناموفق: ' + e;
+    document.getElementById("btn-ping").onclick = async () => {
+      pingOut.textContent = T2R.t("loading");
+      const targets = [
+        { name: "Cloudflare", url: "https://1.1.1.1" },
+        { name: "Google", url: "https://www.google.com/generate_204" },
+      ];
+      const lines = [];
+      for (const t of targets) {
+        try {
+          const ms = await T2R.latencyMs(t.url, 10000);
+          lines.push(t.name + ": ~" + ms + " ms");
+        } catch (e) {
+          lines.push(t.name + ": " + (en ? "failed" : "ناموفق"));
+        }
       }
+      pingOut.textContent = lines.join("\n") + "\n\n" + (en ? "(from your device, not the bot server)" : "(از دستگاه شما، نه سرور ربات)");
     };
 
-    loadIp();
+    load();
   </script>
 </body>
 </html>

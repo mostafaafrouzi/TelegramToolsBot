@@ -90,6 +90,10 @@ class ReplyRouteDeps:
     build_admin_billing_menu: MenuBuilder
     build_toolkit_zip_menu: MenuBuilder
     build_admin_maintenance_menu: MenuBuilder
+    build_world_menu: MenuBuilder
+    show_world_menu_handler: MessageHandler
+    show_feed_menu_handler: MessageHandler
+    extra_slash_handlers: dict[str, MessageHandler]
 
 
 async def _run_slash(handler: MessageHandler, client: ClientRef, message: Message, command: str) -> None:
@@ -139,6 +143,12 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/show_transfer_menu":
         await deps.show_transfer_menu_handler(client, message)
+        return True
+    if mapped == "/show_world_menu":
+        await deps.show_world_menu_handler(client, message)
+        return True
+    if mapped == "/show_feed_menu":
+        await deps.show_feed_menu_handler(client, message)
         return True
     if mapped == "/show_toolkit_menu":
         await deps.show_toolkit_menu_handler(client, message)
@@ -272,6 +282,9 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/myip":
         await _run_slash(deps.my_ip_handler, client, message, "/myip")
         return True
+    if mapped == "/miniapp":
+        await _run_slash(deps.my_ip_handler, client, message, "/miniapp")
+        return True
     if mapped == "/ping":
         await _run_slash(deps.tcp_ping_handler, client, message, "/ping")
         return True
@@ -301,6 +314,10 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/b64d":
         await _run_slash(deps.b64_decode_handler, client, message, "/b64d")
+        return True
+
+    if mapped and mapped in deps.extra_slash_handlers:
+        await _run_slash(deps.extra_slash_handlers[mapped], client, message, mapped)
         return True
 
     if mapped == "/newbatch":

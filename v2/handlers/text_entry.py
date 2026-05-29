@@ -11,7 +11,7 @@ from v2.core.menu_sections import MenuSection
 from v2.core.nav import maybe_disable_direct_mode
 from v2.toolkit.dns_light import resolve_hostname
 from v2.toolkit.ipinfo_light import get_ip_info
-from v2.toolkit.ping_light import tcp_ping
+from v2.toolkit.ping_light import smart_tcp_ping
 from v2.toolkit.text_utils_light import (
     b64_decode_str,
     b64_encode_str,
@@ -63,6 +63,8 @@ class TextEntryDeps:
     link_direct_deps: Any
     build_main_menu: Callable[[int], Any]
     dispatch_world_wizard: AsyncWizardFn
+    dispatch_feed_wizard: AsyncWizardFn
+    feed_reader_deps: Any
     world_command_deps: Any
     get_direct_mode_target: Callable[[int], Optional[str]]
     set_direct_mode_target: Callable[[int, Optional[str]], None]
@@ -206,14 +208,14 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
             deps.clear_state(user_id)
             await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
             return
-        host = (text or "").strip().split()[0]
-        port = 443
         parts = (text or "").strip().split()
+        host = parts[0] if parts else ""
+        port: int | None = None
         if len(parts) >= 2:
             try:
                 port = int(parts[1])
             except ValueError:
-                port = 443
+                port = None
         if not host:
             await message.reply_text(deps.tr(user_id, "toolkit_ping_send_only"), parse_mode=None)
             return
@@ -222,10 +224,10 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
             deps.clear_state(user_id)
             await message.reply_text(quota_msg, parse_mode=None)
             return
-        ok, ms = tcp_ping(host, port)
+        ok, ms, used_port = smart_tcp_ping(host, port=port)
         if not ok:
             await message.reply_text(
-                deps.tr(user_id, "toolkit_ping_error", host=host, port=port, error=ms),
+                deps.tr(user_id, "toolkit_ping_error", host=host, port=used_port or 443, error=ms),
                 parse_mode=None,
             )
             deps.clear_state(user_id)
@@ -233,7 +235,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         deps.toolkit_quota_commit(user_id)
         deps.clear_state(user_id)
         await message.reply_text(
-            deps.tr(user_id, "toolkit_ping_result", host=host, port=port, ms=ms),
+            deps.tr(user_id, "toolkit_ping_result", host=host, port=used_port, ms=ms),
             parse_mode=None,
         )
         return
@@ -294,7 +296,136 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         await message.reply_text(deps.tr(user_id, "toolkit_b64d_result", data=out) + extra, parse_mode=None)
         return
 
+    if await deps.dispatch_feed_wizard(message, user_id, text, deps.feed_reader_deps):
+        return
+
     if await deps.dispatch_world_wizard(message, user_id, text, deps.world_command_deps):
+        return
+
+    if state.get("step") == "await_toolkit_rev_dns":
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        ip = (text or "").strip()
+        if not ip:
+            await message.reply_text(deps.tr(user_id, "toolkit_rev_dns_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        from v2.toolkit.extra_tools_light import reverse_dns
+
+        ok, body = reverse_dns(ip)
+        if not ok:
+            await message.reply_text(deps.tr(user_id, "toolkit_net_error", error=body), parse_mode=None)
+            deps.clear_state(user_id)
+            return
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(body, parse_mode=None)
+        return
+
+    if state.get("step") == "await_toolkit_mac":
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        mac = (text or "").strip()
+        if not mac:
+            await message.reply_text(deps.tr(user_id, "toolkit_mac_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        from v2.toolkit.mac_light import mac_vendor_lookup
+
+        ok, body = mac_vendor_lookup(mac)
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(
+            body if ok else deps.tr(user_id, "toolkit_net_error", error=body),
+            parse_mode=None,
+        )
+        return
+
+    if state.get("step") == "await_toolkit_email":
+        if not deps.toolkit_utility_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_utility_disabled"), parse_mode=None)
+            return
+        addr = (text or "").strip()
+        if not addr:
+            await message.reply_text(deps.tr(user_id, "toolkit_email_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        from v2.toolkit.email_light import validate_email
+
+        ok, body = validate_email(addr)
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(
+            body if ok else deps.tr(user_id, "toolkit_net_error", error=body),
+            parse_mode=None,
+        )
+        return
+
+    if state.get("step") == "await_toolkit_url_expand":
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        url = (text or "").strip()
+        if not url:
+            await message.reply_text(deps.tr(user_id, "toolkit_url_expand_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        from v2.toolkit.extra_tools_light import expand_url
+
+        ok, body = expand_url(url)
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(
+            body if ok else deps.tr(user_id, "toolkit_net_error", error=body),
+            parse_mode=None,
+        )
+        return
+
+    if state.get("step") == "await_toolkit_timestamp":
+        if not deps.toolkit_utility_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_utility_disabled"), parse_mode=None)
+            return
+        raw = (text or "").strip()
+        if not raw:
+            await message.reply_text(deps.tr(user_id, "toolkit_timestamp_send_only"), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        from v2.toolkit.extra_tools_light import unix_timestamp_convert
+
+        ok, body = unix_timestamp_convert(raw)
+        deps.toolkit_quota_commit(user_id)
+        deps.clear_state(user_id)
+        await message.reply_text(
+            body if ok else deps.tr(user_id, "toolkit_net_error", error=body),
+            parse_mode=None,
+        )
         return
 
     if await deps.handle_zip_password_text(message, user_id, text, deps.zip_password_deps):

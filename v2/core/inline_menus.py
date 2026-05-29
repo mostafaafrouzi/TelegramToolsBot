@@ -6,6 +6,8 @@ from typing import Any, Callable, Optional
 
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from v2.core.miniapp_urls import miniapp_page_url
+
 Translator = Callable[[int, str], str]
 
 
@@ -39,16 +41,28 @@ def build_inline_main(uid: int, tr: Translator, *, is_admin: bool) -> tuple[str,
     return body, _kb(rows)
 
 
-def build_inline_toolkit(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMarkup]:
+def build_inline_toolkit(uid: int, tr: Translator, *, webapp_url: str = "") -> tuple[str, InlineKeyboardMarkup]:
     body = tr(uid, "toolkit_menu_title")
     rows = [
         _row(
             InlineKeyboardButton(tr(uid, "btn_toolkit_network"), callback_data="imenu:toolkit_net"),
             InlineKeyboardButton(tr(uid, "btn_toolkit_crypto"), callback_data="imenu:toolkit_crypto"),
         ),
-        _row(InlineKeyboardButton(tr(uid, "inline_world_menu"), callback_data="imenu:world")),
-        _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
     ]
+    hub_url = miniapp_page_url(webapp_url, "index.html")
+    if hub_url:
+        from pyrogram.types import WebAppInfo
+
+        rows.append(
+            _row(
+                InlineKeyboardButton(
+                    tr(uid, "btn_open_miniapp_hub"),
+                    web_app=WebAppInfo(url=hub_url),
+                )
+            )
+        )
+    rows.append(_row(InlineKeyboardButton(tr(uid, "inline_world_menu"), callback_data="imenu:world")))
+    rows.append(_row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")))
     return body, _kb(rows)
 
 
@@ -60,23 +74,42 @@ def build_inline_toolkit_network(uid: int, tr: Translator, *, webapp_url: str = 
 
         myip_btn = InlineKeyboardButton(
             tr(uid, "btn_tool_myip"),
-            web_app=WebAppInfo(url=f"{webapp_url.rstrip('/')}/miniapp/myip.html"),
+            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "myip.html")),
+        )
+        dns_btn = InlineKeyboardButton(
+            tr(uid, "btn_tool_dns"),
+            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "dns.html")),
+        )
+        whois_btn = InlineKeyboardButton(
+            tr(uid, "btn_tool_whois"),
+            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "whois.html")),
+        )
+        headers_btn = InlineKeyboardButton(
+            tr(uid, "btn_tool_http_headers"),
+            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "headers.html")),
         )
     else:
         myip_btn = InlineKeyboardButton(tr(uid, "btn_tool_myip"), callback_data="imenu:myip_hint")
+        dns_btn = InlineKeyboardButton(tr(uid, "btn_tool_dns"), callback_data="imenu:dns")
+        whois_btn = InlineKeyboardButton(tr(uid, "btn_tool_whois"), callback_data="imenu:whois")
+        headers_btn = None
 
     rows = [
-        _row(myip_btn, InlineKeyboardButton(tr(uid, "btn_tool_dns"), callback_data="imenu:dns")),
+        _row(myip_btn, dns_btn),
         _row(
             InlineKeyboardButton(tr(uid, "btn_tool_ping"), callback_data="imenu:ping"),
             InlineKeyboardButton(tr(uid, "btn_tool_ipinfo"), callback_data="imenu:ipinfo"),
         ),
         _row(
-            InlineKeyboardButton(tr(uid, "btn_tool_whois"), callback_data="imenu:whois"),
-            InlineKeyboardButton(tr(uid, "btn_tool_myid"), callback_data="imenu:myid"),
+            whois_btn,
+            headers_btn
+            if headers_btn
+            else InlineKeyboardButton(tr(uid, "btn_tool_myid"), callback_data="imenu:myid"),
         ),
-        _row(InlineKeyboardButton(tr(uid, "btn_back_toolkit"), callback_data="imenu:toolkit")),
     ]
+    if headers_btn:
+        rows.append(_row(InlineKeyboardButton(tr(uid, "btn_tool_myid"), callback_data="imenu:myid")))
+    rows.append(_row(InlineKeyboardButton(tr(uid, "btn_back_toolkit"), callback_data="imenu:toolkit")))
     return body, _kb(rows)
 
 
@@ -108,7 +141,10 @@ def build_inline_world(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMar
             InlineKeyboardButton(tr(uid, "btn_world_earthquake"), callback_data="imenu:quake"),
         ),
         _row(
+            InlineKeyboardButton(tr(uid, "btn_feed_reader"), callback_data="imenu:feeds"),
             InlineKeyboardButton(tr(uid, "btn_world_rss"), callback_data="imenu:rss"),
+        ),
+        _row(
             InlineKeyboardButton(tr(uid, "btn_world_rss_list"), callback_data="imenu:rss_list"),
         ),
         _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
@@ -195,6 +231,8 @@ def resolve_inline_menu(
         return build_inline_main(uid, tr, is_admin=is_admin)
     if k == "toolkit_net":
         return build_inline_toolkit_network(uid, tr, webapp_url=webapp_url)
+    if k == "toolkit":
+        return build_inline_toolkit(uid, tr, webapp_url=webapp_url)
     fn = _INLINE_BUILDERS.get(k)
     if not fn:
         return None

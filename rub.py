@@ -723,6 +723,7 @@ def process_task(task: dict):
         from v2.transfer.drive_client import upload_file
 
         sa_path = str(task.get("drive_sa_path") or "").strip() or None
+        oauth_path = str(task.get("drive_oauth_path") or "").strip() or None
         folder_id = str(task.get("drive_folder_id") or "").strip() or None
         try:
             push_status(task, "در حال آپلود به Google Drive ...", "uploading")
@@ -730,6 +731,7 @@ def process_task(task: dict):
                 local_path,
                 file_name=task.get("file_name") or local_path.name,
                 service_account_path=sa_path,
+                oauth_token_path=oauth_path,
                 folder_id=folder_id,
             )
             if not ok:
@@ -816,8 +818,14 @@ def process_task(task: dict):
         from v2.transfer.telegram_notify import send_document
 
         sa_path = str(task.get("drive_sa_path") or "").strip() or None
+        oauth_path = str(task.get("drive_oauth_path") or "").strip() or None
         push_status(task, "در حال دانلود از Drive ...", "downloading")
-        ok, detail = download_file(file_id, dest, service_account_path=sa_path)
+        ok, detail = download_file(
+            file_id,
+            dest,
+            service_account_path=sa_path,
+            oauth_token_path=oauth_path,
+        )
         if not ok:
             raise RuntimeError(detail)
         ok2, err = send_document(int(chat_id or 0), dest, caption=f"Drive: {file_id}")

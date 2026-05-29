@@ -245,8 +245,29 @@ def _download_direct(
     if target.exists():
         target = dest_dir / f"{target.stem}_{int(time.time())}{target.suffix}"
 
-    resp = requests.get(url, stream=True, timeout=(10, 120), allow_redirects=True)
-    resp.raise_for_status()
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; Tele2Rub/1.0)",
+        "Accept": "*/*",
+    }
+    last_err: Optional[Exception] = None
+    resp = None
+    for attempt in range(3):
+        try:
+            resp = requests.get(
+                url,
+                stream=True,
+                timeout=(15, 600),
+                allow_redirects=True,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            break
+        except requests.exceptions.RequestException as e:
+            last_err = e
+            if attempt < 2:
+                time.sleep(1.5 * (attempt + 1))
+    if resp is None:
+        raise RuntimeError(str(last_err) if last_err else "download_failed")
     total = int(resp.headers.get("content-length") or 0)
     downloaded = 0
     started = time.time()
