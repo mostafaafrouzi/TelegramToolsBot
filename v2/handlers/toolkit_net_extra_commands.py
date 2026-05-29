@@ -27,6 +27,7 @@ class ToolkitNetExtraDeps:
     tr: TranslateFn
     set_menu_section: Callable[[int, MenuSection], None]
     set_state_preserving_menu: Callable[[int, dict], None]
+    clear_state: Callable[[int], None]
     toolkit_network_light_enabled: bool
     toolkit_quota_try: Callable[[int], tuple[bool, str]]
     toolkit_quota_commit: Callable[[int], None]
@@ -155,3 +156,78 @@ async def handle_ssl_check(deps: ToolkitNetExtraDeps, client: Any, message: Mess
         send_only_key="toolkit_ssl_send_only",
         step="await_toolkit_ssl",
     )
+
+
+async def dispatch_toolkit_net_extra_wizard(
+    deps: ToolkitNetExtraDeps,
+    message: Message,
+    user_id: int,
+    text: str,
+    step: str,
+) -> bool:
+    """Handle send-only toolkit net-extra steps from ``text_entry``."""
+    if step == "await_toolkit_http_headers":
+        fn, send_only = http_headers_report, "toolkit_http_headers_send_only"
+    elif step == "await_toolkit_website_status":
+        fn, send_only = website_status_report, "toolkit_website_status_send_only"
+    elif step == "await_toolkit_subnet":
+        fn, send_only = subnet_calc_report, "toolkit_subnet_send_only"
+    elif step == "await_toolkit_blacklist":
+        fn, send_only = blacklist_check_report, "toolkit_blacklist_send_only"
+    elif step == "await_toolkit_ssl":
+        fn, send_only = ssl_cert_report, "toolkit_ssl_send_only"
+    elif step == "await_toolkit_port_check":
+        fn, send_only = None, "toolkit_port_check_send_only"
+    else:
+        return False
+
+    if not deps.toolkit_network_light_enabled:
+        deps.clear_state(user_id)
+        await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+        return True
+
+    raw = (text or "").strip()
+    if step == "await_toolkit_port_check":
+        if not raw:
+            await message.reply_text(deps.tr(user_id, send_only), parse_mode=None)
+            return True
+        parts = raw.split()
+        if len(parts) < 2:
+            await message.reply_text(deps.tr(user_id, send_only), parse_mode=None)
+            return True
+        host, port_s = parts[0], parts[1]
+        try:
+            port = int(port_s)
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, send_only), parse_mode=None)
+            return True
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return True
+        ok, body = await asyncio.to_thread(port_check_report, host, port)
+        deps.clear_state(user_id)
+        if not ok:
+            await message.reply_text(deps.tr(user_id, "toolkit_net_error", error=body), parse_mode=None)
+            return True
+        deps.toolkit_quota_commit(user_id)
+        await message.reply_text(body, parse_mode=None)
+        return True
+
+    if not raw:
+        await message.reply_text(deps.tr(user_id, send_only), parse_mode=None)
+        return True
+    ok, quota_msg = deps.toolkit_quota_try(user_id)
+    if not ok:
+        deps.clear_state(user_id)
+        await message.reply_text(quota_msg, parse_mode=None)
+        return True
+    ok, body = await asyncio.to_thread(fn, raw)
+    deps.clear_state(user_id)
+    if not ok:
+        await message.reply_text(deps.tr(user_id, "toolkit_net_error", error=body), parse_mode=None)
+        return True
+    deps.toolkit_quota_commit(user_id)
+    await message.reply_text(body, parse_mode=None)
+    return True

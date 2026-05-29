@@ -150,6 +150,7 @@ from v2.handlers.toolkit_extra_commands import (
 from v2.toolkit.drive_oauth_light import oauth_configured
 from v2.handlers.toolkit_net_extra_commands import (
     ToolkitNetExtraDeps,
+    dispatch_toolkit_net_extra_wizard,
     handle_blacklist_check,
     handle_http_headers,
     handle_port_check,
@@ -157,6 +158,7 @@ from v2.handlers.toolkit_net_extra_commands import (
     handle_subnet_calc,
     handle_website_status,
 )
+from v2.handlers.ssh_wizard import SshWizardDeps, dispatch_ssh_wizard, start_ssh_add_wizard
 from v2.handlers.cloudflare_commands import (
     CloudflareCommandDeps,
     dispatch_cloudflare_wizard,
@@ -655,14 +657,32 @@ I18N = {
         "ssh_list_empty": "هیچ سرور SSH ثبت نشده. `/ssh_add label host port user`",
         "ssh_list_title": "سرورهای SSH:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
-        "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`\nیا با کلید: `/ssh_add <label> <host> <port> <user> key:/path/to/id_rsa`",
+        "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`\nیا دکمه «➕ افزودن سرور» را بزن تا مرحله‌به‌مرحله راهنمایی شوی.",
+        "ssh_wizard_ask_label": "نام کوتاه برای این سرور بفرست (مثلاً `vps1`):",
+        "ssh_wizard_ask_host": "آدرس host یا IP سرور را بفرست:",
+        "ssh_wizard_ask_port": "پورت SSH را بفرست (معمولاً `22`):",
+        "ssh_wizard_ask_user": "نام کاربر SSH را بفرست (مثلاً `root`):",
+        "ssh_wizard_ask_auth": (
+            "روش ورود را انتخاب کن:\n"
+            "• `password` یا `1` — رمز عبور\n"
+            "• `key` یا `2` — چسباندن متن کلید خصوصی PEM\n"
+            "• `file` یا `3` — ارسال فایل `.pem` / `.key` به‌عنوان سند"
+        ),
+        "ssh_wizard_ask_password": "رمز SSH را بفرست (در پیام بعدی حذف می‌شود):",
+        "ssh_wizard_ask_key_paste": (
+            "متن کامل کلید خصوصی PEM را در یک پیام بفرست "
+            "(از `-----BEGIN` تا `-----END`)"
+        ),
+        "ssh_wizard_ask_key_file": "فایل کلید خصوصی (`.pem` یا `.key`) را به‌صورت **سند** بفرست (نه عکس).",
+        "ssh_wizard_bad_port": "پورت باید عدد بین ۱ تا ۶۵۵۳۵ باشد.",
+        "ssh_wizard_key_invalid": "کلید نامعتبر: {error}",
         "ssh_add_ok": "سرور `{label}` ({host}:{port}) ذخیره شد.",
         "ssh_put_usage": "استفاده: `/ssh_put <server_id> <remote_path>` سپس فایل را بفرست",
         "ssh_ls_usage": "استفاده: `/ssh_ls <server_id> [remote_path]`",
         "ssh_del_usage": "استفاده: `/ssh_del <server_id>`",
         "ssh_put_await_file": "مسیر روی سرور ثبت شد. حالا فایل را در تلگرام بفرست.",
         "ssh_server_not_found": "سرور SSH پیدا نشد.",
-        "ssh_auth_missing": "برای این سرور رمز یا کلید SSH ثبت نشده. دوباره با `/ssh_add` و رمز اضافه کن.",
+        "ssh_auth_missing": "برای این سرور رمز یا کلید SSH ثبت نشده. از «➕ افزودن سرور» دوباره اضافه کن.",
         "ssh_ls_result": "لیست `{path}`:\n{detail}",
         "ssh_ls_error": "SSH ls ناموفق: {error}",
         "ssh_del_ok": "سرور SSH `#{id}` حذف شد.",
@@ -833,6 +853,7 @@ I18N = {
         "btn_main_world": "🌍 جهان و زمان",
         "failed_detail_title": "آخرین خطاهای ثبت‌شده برای نشست شما:",
         "confirm_cancelled": "ارسال لغو شد.",
+        "confirm_already_handled": "این درخواست قبلاً پردازش شده است.",
         "cleanup_done": "پاکسازی `downloads/`: {n} فایل، حدود {mb} MB آزاد شد.",
         "direct_need_rubika": "برای حالت مستقیم اول `/rubika_connect` بزن.",
         "file_too_large": "فایل از سقف مجاز بزرگ‌تر است (حداکثر ~`{max_mb}` مگابایت با توجه به پلن و `MAX_FILE_MB`). حجم این فایل: ~`{size_mb}` مگابایت.",
@@ -1296,14 +1317,29 @@ I18N = {
         "ssh_list_empty": "No SSH servers. Use `/ssh_add label host port user`",
         "ssh_list_title": "SSH servers:",
         "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
-        "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`\nOr with key: `/ssh_add <label> <host> <port> <user> key:/path/to/id_rsa`",
+        "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`\nOr tap «➕ Add server» for a step-by-step wizard.",
+        "ssh_wizard_ask_label": "Send a short label for this server (e.g. `vps1`):",
+        "ssh_wizard_ask_host": "Send the server host or IP:",
+        "ssh_wizard_ask_port": "Send the SSH port (usually `22`):",
+        "ssh_wizard_ask_user": "Send the SSH username (e.g. `root`):",
+        "ssh_wizard_ask_auth": (
+            "Choose auth method:\n"
+            "• `password` or `1` — password\n"
+            "• `key` or `2` — paste PEM private key text\n"
+            "• `file` or `3` — send a `.pem` / `.key` file as a document"
+        ),
+        "ssh_wizard_ask_password": "Send the SSH password:",
+        "ssh_wizard_ask_key_paste": "Paste the full PEM private key in one message (from `-----BEGIN` to `-----END`):",
+        "ssh_wizard_ask_key_file": "Send the private key file (`.pem` or `.key`) as a **document** (not a photo).",
+        "ssh_wizard_bad_port": "Port must be a number from 1 to 65535.",
+        "ssh_wizard_key_invalid": "Invalid key: {error}",
         "ssh_add_ok": "Saved server `{label}` ({host}:{port}).",
         "ssh_put_usage": "Usage: `/ssh_put <server_id> <remote_path>` then send the file",
         "ssh_ls_usage": "Usage: `/ssh_ls <server_id> [remote_path]`",
         "ssh_del_usage": "Usage: `/ssh_del <server_id>`",
         "ssh_put_await_file": "Remote path saved. Send the file in Telegram now.",
         "ssh_server_not_found": "SSH server not found.",
-        "ssh_auth_missing": "No password/key for this server. Re-add with `/ssh_add` and password.",
+        "ssh_auth_missing": "No password/key for this server. Use «➕ Add server» to register again.",
         "ssh_ls_result": "Listing `{path}`:\n{detail}",
         "ssh_ls_error": "SSH ls failed: {error}",
         "ssh_del_ok": "SSH server `#{id}` deleted.",
@@ -1474,6 +1510,7 @@ I18N = {
         "btn_main_world": "🌍 World & time",
         "failed_detail_title": "Recent failures for your Rubika session:",
         "confirm_cancelled": "Send cancelled.",
+        "confirm_already_handled": "This request was already handled.",
         "cleanup_done": "Cleaned `downloads/`: {n} files, ~{mb} MB freed.",
         "direct_need_rubika": "Link Rubika first: `/rubika_connect`",
         "file_too_large": "File exceeds the limit (max ~`{max_mb}` MB from plan + `MAX_FILE_MB`). This file is ~`{size_mb}` MB.",
@@ -2201,10 +2238,11 @@ def get_effective_menu_section(user_id: int) -> Optional[str]:
 
 
 def set_state_preserving_menu(user_id: int, new_state: dict) -> None:
-    """Replace wizard/session keys but keep MENU_SECTION_KEY if already set."""
+    """Merge wizard/session keys; keep ``MENU_SECTION_KEY`` when omitted."""
     prev = get_state(user_id)
-    merged = dict(new_state)
-    if MENU_SECTION_KEY in prev:
+    merged = dict(prev)
+    merged.update(new_state)
+    if MENU_SECTION_KEY in prev and MENU_SECTION_KEY not in new_state:
         merged[MENU_SECTION_KEY] = prev[MENU_SECTION_KEY]
     set_state(user_id, merged)
 
@@ -2906,9 +2944,21 @@ TOOLKIT_NET_EXTRA_DEPS = ToolkitNetExtraDeps(
     tr=tr,
     set_menu_section=set_menu_section,
     set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
     toolkit_network_light_enabled=TOOLKIT_NETWORK_LIGHT,
     toolkit_quota_try=_toolkit_quota_try,
     toolkit_quota_commit=_toolkit_quota_commit,
+)
+
+SSH_WIZARD_DEPS = SshWizardDeps(
+    tr=tr,
+    base_dir=BASE_DIR,
+    get_state=get_state,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    ssh_add_server=queue.add_ssh_server,
+    build_ssh_menu=build_ssh_menu,
 )
 
 WORLD_COMMAND_DEPS = WorldCommandDeps(
@@ -3070,6 +3120,10 @@ async def ssh_list_handler(client: Client, message: Message):
 
 async def ssh_add_handler(client: Client, message: Message):
     await handle_ssh_add(TRANSFER_HUB_DEPS, client, message)
+
+
+async def ssh_add_wizard_handler(client: Client, message: Message):
+    await start_ssh_add_wizard(SSH_WIZARD_DEPS, message)
 
 
 async def ssh_ls_handler(client: Client, message: Message):
@@ -3797,6 +3851,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     drive_disconnect_handler=drive_disconnect_handler,
     drive_ls_handler=drive_ls_handler,
     ssh_list_handler=ssh_list_handler,
+    ssh_add_wizard_handler=ssh_add_wizard_handler,
     ssh_ls_handler=ssh_ls_handler,
     ssh_del_handler=ssh_del_handler,
     new_batch_handler=new_batch_handler,
@@ -4128,6 +4183,10 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     dispatch_world_wizard=dispatch_world_wizard,
     dispatch_feed_wizard=dispatch_feed_wizard,
     feed_reader_deps=FEED_READER_DEPS,
+    dispatch_toolkit_net_extra_wizard=dispatch_toolkit_net_extra_wizard,
+    toolkit_net_extra_deps=TOOLKIT_NET_EXTRA_DEPS,
+    dispatch_ssh_wizard=dispatch_ssh_wizard,
+    ssh_wizard_deps=SSH_WIZARD_DEPS,
     world_command_deps=WORLD_COMMAND_DEPS,
     toolkit_utility_light_enabled=TOOLKIT_UTILITY_LIGHT,
     get_direct_mode_target=get_direct_mode_target,
@@ -4146,6 +4205,7 @@ MEDIA_HANDLER_DEPS = MediaHandlerDeps(
     set_state_preserving_menu=set_state_preserving_menu,
     save_drive_sa_file=_save_drive_sa_file,
     get_ssh_server=queue.get_ssh_server,
+    ssh_wizard_deps=SSH_WIZARD_DEPS,
     get_media=get_media,
     build_download_filename=build_download_filename,
     download_dir=DOWNLOAD_DIR,

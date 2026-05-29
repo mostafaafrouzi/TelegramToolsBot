@@ -2,8 +2,64 @@
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 from typing import Optional
+
+
+def _load_private_key(
+    *,
+    password: Optional[str] = None,
+    key_filename: Optional[str] = None,
+    key_text: Optional[str] = None,
+):
+    import paramiko
+
+    if key_text:
+        stream = io.StringIO(key_text.strip())
+        for loader in (
+            paramiko.RSAKey.from_private_key,
+            paramiko.ECDSAKey.from_private_key,
+            paramiko.Ed25519Key.from_private_key,
+        ):
+            try:
+                stream.seek(0)
+                return loader(stream, password=password)
+            except Exception:
+                continue
+        raise ValueError("unsupported or invalid private key")
+    if key_filename:
+        for loader in (
+            paramiko.RSAKey.from_private_key_file,
+            paramiko.ECDSAKey.from_private_key_file,
+            paramiko.Ed25519Key.from_private_key_file,
+        ):
+            try:
+                return loader(key_filename, password=password)
+            except Exception:
+                continue
+        raise ValueError("unsupported or invalid private key file")
+    return None
+
+
+def _connect_transport(
+    host: str,
+    port: int,
+    username: str,
+    *,
+    password: Optional[str] = None,
+    key_filename: Optional[str] = None,
+    timeout: int = 60,
+):
+    import paramiko
+
+    transport = paramiko.Transport((host, int(port)))
+    pkey = _load_private_key(password=password, key_filename=key_filename)
+    if pkey is not None:
+        transport.connect(username=username, pkey=pkey, timeout=timeout)
+    else:
+        transport.connect(username=username, password=password, timeout=timeout)
+    return transport
 
 
 def sftp_put(
@@ -30,12 +86,14 @@ def sftp_put(
 
     transport = None
     try:
-        transport = paramiko.Transport((host, int(port)))
-        if key_filename:
-            pkey = paramiko.RSAKey.from_private_key_file(key_filename)
-            transport.connect(username=username, pkey=pkey, timeout=timeout)
-        else:
-            transport.connect(username=username, password=password, timeout=timeout)
+        transport = _connect_transport(
+            host,
+            port,
+            username,
+            password=password,
+            key_filename=key_filename,
+            timeout=timeout,
+        )
         sftp = paramiko.SFTPClient.from_transport(transport)
         if sftp is None:
             return False, "SFTP session failed"
@@ -67,12 +125,14 @@ def sftp_get(
 
     transport = None
     try:
-        transport = paramiko.Transport((host, int(port)))
-        if key_filename:
-            pkey = paramiko.RSAKey.from_private_key_file(key_filename)
-            transport.connect(username=username, pkey=pkey, timeout=timeout)
-        else:
-            transport.connect(username=username, password=password, timeout=timeout)
+        transport = _connect_transport(
+            host,
+            port,
+            username,
+            password=password,
+            key_filename=key_filename,
+            timeout=timeout,
+        )
         sftp = paramiko.SFTPClient.from_transport(transport)
         if sftp is None:
             return False, "SFTP session failed"
@@ -104,12 +164,14 @@ def sftp_list(
 
     transport = None
     try:
-        transport = paramiko.Transport((host, int(port)))
-        if key_filename:
-            pkey = paramiko.RSAKey.from_private_key_file(key_filename)
-            transport.connect(username=username, pkey=pkey, timeout=timeout)
-        else:
-            transport.connect(username=username, password=password, timeout=timeout)
+        transport = _connect_transport(
+            host,
+            port,
+            username,
+            password=password,
+            key_filename=key_filename,
+            timeout=timeout,
+        )
         sftp = paramiko.SFTPClient.from_transport(transport)
         if sftp is None:
             return False, "SFTP session failed"

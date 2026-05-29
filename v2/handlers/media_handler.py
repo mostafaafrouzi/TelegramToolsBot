@@ -31,6 +31,7 @@ class MediaHandlerDeps:
     set_state_preserving_menu: Callable[..., None]
     save_drive_sa_file: Callable[[int, Path], Any]
     get_ssh_server: Callable[[int, int], Optional[dict]]
+    ssh_wizard_deps: Any
     get_media: Callable[[Message], tuple[str, Any]]
     build_download_filename: Callable[[Message, str, Any], str]
     download_dir: Path
@@ -94,6 +95,39 @@ async def handle_media_message(deps: MediaHandlerDeps, client: Any, message: Mes
             await message.reply_text(body, parse_mode=None)
         except Exception as e:
             await message.reply_text(deps.tr(user_id, "media_error", error=str(e)), parse_mode=None)
+        return
+
+    # SSH add wizard: private key document upload
+    if state.get("step") == "await_ssh_add_key_file":
+        if not message.document:
+            await message.reply_text(deps.tr(user_id, "ssh_wizard_ask_key_file"), parse_mode=None)
+            return
+        fname = (message.document.file_name or "id_rsa").lower()
+        if not (fname.endswith(".pem") or fname.endswith(".key") or "id_rsa" in fname):
+            await message.reply_text(deps.tr(user_id, "ssh_wizard_ask_key_file"), parse_mode=None)
+            return
+        tmp = deps.download_dir / f"ssh_key_upload_{user_id}_{int(time.time())}.pem"
+        try:
+            downloaded = await client.download_media(message, file_name=str(tmp))
+            if not downloaded:
+                raise RuntimeError("download failed")
+            key_content = Path(downloaded).read_text(encoding="utf-8", errors="replace")
+            from v2.handlers.ssh_wizard import complete_ssh_key_file_upload
+
+            await complete_ssh_key_file_upload(
+                deps.ssh_wizard_deps,
+                message,
+                user_id,
+                key_content,
+            )
+        except Exception as e:
+            await message.reply_text(deps.tr(user_id, "media_error", error=str(e)), parse_mode=None)
+        finally:
+            try:
+                if tmp.exists():
+                    tmp.unlink()
+            except OSError:
+                pass
         return
 
     # SSH put: after /ssh_put <id> <remote_path>, next file is uploaded.

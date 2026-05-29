@@ -106,9 +106,7 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
 
         task = state.get("pending_task") or get_pending_confirm(user_id)
         if not task:
-            return False
-        if not task:
-            await callback_query.answer("Pending task not found", show_alert=True)
+            await callback_query.answer(deps.tr(user_id, "confirm_already_handled"), show_alert=True)
             return True
         if not await deps.gate_quota(callback_query.message, user_id, task):
             await callback_query.answer("Quota", show_alert=True)

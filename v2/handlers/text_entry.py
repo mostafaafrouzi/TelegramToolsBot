@@ -65,6 +65,10 @@ class TextEntryDeps:
     dispatch_world_wizard: AsyncWizardFn
     dispatch_feed_wizard: AsyncWizardFn
     feed_reader_deps: Any
+    dispatch_toolkit_net_extra_wizard: Callable[..., Awaitable[bool]]
+    toolkit_net_extra_deps: Any
+    dispatch_ssh_wizard: Callable[..., Awaitable[bool]]
+    ssh_wizard_deps: Any
     world_command_deps: Any
     get_direct_mode_target: Callable[[int], Optional[str]]
     set_direct_mode_target: Callable[[int, Optional[str]], None]
@@ -111,7 +115,8 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
     ):
         return
 
-    if state.get("step") == "await_cloudflare_token" and section == "cloudflare":
+    state = deps.get_state(user_id)
+    if state.get("step") == "await_cloudflare_token":
         if await deps.dispatch_cloudflare_wizard(
             message,
             user_id,
@@ -120,6 +125,15 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
             deps.cloudflare_command_deps,
         ):
             return
+
+    if await deps.dispatch_ssh_wizard(deps.ssh_wizard_deps, message, user_id, state, text):
+        return
+
+    if await deps.dispatch_feed_wizard(message, user_id, text, deps.feed_reader_deps):
+        return
+
+    if await deps.dispatch_world_wizard(message, user_id, text, deps.world_command_deps):
+        return
 
     if await deps.dispatch_zip_batch_wizard(
         message,
@@ -296,13 +310,18 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         await message.reply_text(deps.tr(user_id, "toolkit_b64d_result", data=out) + extra, parse_mode=None)
         return
 
-    if await deps.dispatch_feed_wizard(message, user_id, text, deps.feed_reader_deps):
+    state = deps.get_state(user_id)
+    step = state.get("step")
+    if step and await deps.dispatch_toolkit_net_extra_wizard(
+        deps.toolkit_net_extra_deps,
+        message,
+        user_id,
+        text,
+        step,
+    ):
         return
 
-    if await deps.dispatch_world_wizard(message, user_id, text, deps.world_command_deps):
-        return
-
-    if state.get("step") == "await_toolkit_rev_dns":
+    if step == "await_toolkit_rev_dns":
         if not deps.toolkit_network_light_enabled:
             deps.clear_state(user_id)
             await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)

@@ -33,6 +33,7 @@ class ReplyRouteDeps:
     drive_connect_handler: MessageHandler
     drive_disconnect_handler: MessageHandler
     ssh_list_handler: MessageHandler
+    ssh_add_wizard_handler: MessageHandler
     new_batch_handler: MessageHandler
     done_batch_handler: MessageHandler
     clear_queue_handler: MessageHandler
@@ -261,7 +262,7 @@ async def dispatch_reply_keyboard_route(
         await deps.ssh_list_handler(client, message)
         return True
     if mapped == "/ssh_add_help":
-        await message.reply_text(tr(user_id, "ssh_add_usage"), parse_mode=None)
+        await deps.ssh_add_wizard_handler(client, message)
         return True
     if mapped == "/ssh_put_help":
         await message.reply_text(tr(user_id, "ssh_put_usage"), parse_mode=None)
