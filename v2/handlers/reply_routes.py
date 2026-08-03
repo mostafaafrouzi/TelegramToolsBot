@@ -98,6 +98,7 @@ class ReplyRouteDeps:
     show_feed_menu_handler: MessageHandler
     extra_slash_handlers: dict[str, MessageHandler]
     build_admin_broadcast_menu: MenuBuilder | None = None
+    show_toolkit_calc_menu_handler: MessageHandler | None = None
 
 
 async def _run_slash(handler: MessageHandler, client: ClientRef, message: Message, command: str) -> None:
@@ -162,6 +163,10 @@ async def dispatch_reply_keyboard_route(
         return True
     if mapped == "/show_toolkit_crypto_menu":
         await deps.show_toolkit_crypto_menu_handler(client, message)
+        return True
+    if mapped == "/show_toolkit_calc_menu":
+        if deps.show_toolkit_calc_menu_handler:
+            await deps.show_toolkit_calc_menu_handler(client, message)
         return True
     if mapped == "/show_rubika_menu":
         await deps.show_rubika_menu_handler(client, message)

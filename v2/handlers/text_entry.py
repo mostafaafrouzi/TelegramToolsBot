@@ -84,6 +84,8 @@ class TextEntryDeps:
     set_direct_mode_target: Callable[[int, Optional[str]], None]
     dispatch_admin_ops_wizard: AsyncWizardFn | None = None
     admin_ops_deps: Any = None
+    dispatch_calc_wizard: AsyncWizardFn | None = None
+    calc_kit_deps: Any = None
 
 
 async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) -> None:
@@ -171,6 +173,10 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
 
     if await deps.dispatch_world_wizard(message, user_id, text, deps.world_command_deps):
         return
+
+    if deps.dispatch_calc_wizard and deps.calc_kit_deps:
+        if await deps.dispatch_calc_wizard(deps.calc_kit_deps, message, user_id, text):
+            return
 
     if await deps.dispatch_zip_batch_wizard(
         message,

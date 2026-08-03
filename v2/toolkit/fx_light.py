@@ -17,6 +17,8 @@ _ERAPI_URL = "https://open.er-api.com/v6/latest/USD"
 _NOBITEX_URL = "https://api.nobitex.ir/market/stats"
 
 _cache: dict[str, Any] = {"ts": 0.0, "bundle": None}
+_gold_cache: dict[str, float] = {}
+_gold_cache_ts: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -93,28 +95,62 @@ def _fetch_tgju_bundle() -> Optional[RateBundle]:
         if not isinstance(current, dict):
             current = data if isinstance(data, dict) else {}
         usd_raw = _tgju_pick(current, "price_dollar_rl", "price_dollar_dt", "price_dollar_sm")
-        eur_raw = _tgju_pick(current, "price_eur", "price_eur_ex")
-        gbp_raw = _tgju_pick(current, "price_gbp")
-        usdt_raw = _tgju_pick(current, "usdt-irr", "price_usdt")
         if not usd_raw:
             return None
         usd = _to_rial(usd_raw, prefer_toman_band=True)
         rates: dict[str, float] = {"USD": usd}
-        if eur_raw:
-            rates["EUR"] = _to_rial(eur_raw, prefer_toman_band=True)
-        if gbp_raw:
-            rates["GBP"] = _to_rial(gbp_raw, prefer_toman_band=True)
+        fx_map = {
+            "EUR": ("price_eur", "price_eur_ex"),
+            "GBP": ("price_gbp",),
+            "JPY": ("price_jpy",),
+            "AED": ("price_aed",),
+            "TRY": ("price_try",),
+            "CNY": ("price_cny",),
+            "CAD": ("price_cad",),
+            "CHF": ("price_chf",),
+            "AUD": ("price_aud",),
+            "SAR": ("price_sar",),
+            "IQD": ("price_iqd",),
+            "RUB": ("price_rub",),
+        }
+        for code, keys in fx_map.items():
+            raw = _tgju_pick(current, *keys)
+            if raw:
+                # TGJU free-market FX quotes are already in rial (not toman).
+                rates[code] = float(raw)
+        # Swedish krona (optional major)
+        sek = _tgju_pick(current, "price_sek")
+        if sek:
+            rates["SEK"] = float(sek)
+        usdt_raw = _tgju_pick(current, "usdt-irr", "price_usdt")
         if usdt_raw:
             usdt = _to_rial(usdt_raw, prefer_toman_band=True)
-            # If USDT looks like toman while USD is already rial, scale up.
             if usd > 500_000 and usdt < usd * 0.4:
                 usdt *= 10.0
-            # Outlier guard: keep ≈ USD free market.
             if abs(usdt - usd) / usd > 0.35:
                 usdt = usd
             rates["USDT"] = usdt
         else:
             rates["USDT"] = usd
+        global _gold_cache, _gold_cache_ts
+        gold: dict[str, float] = {}
+        oz = _tgju_pick(current, "ons")
+        if oz:
+            gold["XAU_OZ"] = float(oz)
+        for code, keys in (
+            ("MESGHAL", ("mesghal",)),
+            ("GOLD18", ("tgju_gold_irg18",)),
+            ("SEKEE", ("sekee", "retail_sekee")),
+            ("SEKEB", ("sekeb", "retail_sekeb")),
+            ("NIM", ("nim", "retail_nim")),
+            ("ROB", ("rob", "retail_rob")),
+            ("GERAMI", ("gerami", "retail_gerami")),
+        ):
+            raw = _tgju_pick(current, *keys)
+            if raw:
+                gold[code] = float(raw)
+        _gold_cache = gold
+        _gold_cache_ts = time.time()
         return RateBundle(
             rates=rates,
             source="TGJU",
@@ -397,3 +433,69 @@ def currency_convert(
         f"{src_line_fa}\n"
         f"به‌روزرسانی: {ts}"
     )
+
+
+_MARKET_FX_ORDER = (
+    "USD", "EUR", "GBP", "JPY", "AED", "TRY", "CNY", "CAD", "CHF",
+    "AUD", "SAR", "SEK", "IQD", "RUB", "USDT",
+)
+_MARKET_GOLD_ORDER = (
+    "XAU_OZ", "MESGHAL", "GOLD18", "SEKEE", "SEKEB", "NIM", "ROB", "GERAMI",
+)
+_MARKET_LABELS_FA = {
+    "USD": "دلار آمریکا", "EUR": "یورو", "GBP": "پوند", "JPY": "ین ژاپن",
+    "AED": "درهم امارات", "TRY": "لیر ترکیه", "CNY": "یوآن چین", "CAD": "دلار کانادا",
+    "CHF": "فرانک سوئیس", "AUD": "دلار استرالیا", "SAR": "ریال سعودی", "SEK": "کرون سوئد",
+    "IQD": "دینار عراق", "RUB": "روبل روسیه", "USDT": "تتر",
+    "XAU_OZ": "انس طلا (دلار)", "MESGHAL": "مثقال طلا", "GOLD18": "طلای ۱۸ عیار (گرم)",
+    "SEKEE": "سکه امامی", "SEKEB": "سکه بهار آزادی", "NIM": "نیم سکه", "ROB": "ربع سکه",
+    "GERAMI": "سکه گرمی",
+}
+_MARKET_LABELS_EN = {
+    "USD": "US Dollar", "EUR": "Euro", "GBP": "Pound", "JPY": "Yen",
+    "AED": "UAE Dirham", "TRY": "Turkish Lira", "CNY": "Yuan", "CAD": "Canadian Dollar",
+    "CHF": "Swiss Franc", "AUD": "Australian Dollar", "SAR": "Saudi Riyal", "SEK": "Swedish Krona",
+    "IQD": "Iraqi Dinar", "RUB": "Ruble", "USDT": "Tether",
+    "XAU_OZ": "Gold ounce (USD)", "MESGHAL": "Gold mesghal", "GOLD18": "18k gold /g",
+    "SEKEE": "Emami coin", "SEKEB": "Bahar Azadi coin", "NIM": "Half coin", "ROB": "Quarter coin",
+    "GERAMI": "Gram coin",
+}
+
+
+def market_quotes_report(*, lang: str = "fa", section: str = "all") -> tuple[bool, str]:
+    """TGJU-inspired board: major FX + gold/coins (free market)."""
+    ok, bundle_or_err = get_irr_rate_bundle(force_refresh=False)
+    if not ok or not isinstance(bundle_or_err, RateBundle):
+        return False, str(bundle_or_err)
+    b = bundle_or_err
+    labels = _MARKET_LABELS_EN if lang == "en" else _MARKET_LABELS_FA
+    lines: list[str] = []
+    lines.append("Iran free-market board" if lang == "en" else "تابلوی نرخ آزاد (الهام از TGJU)")
+    lines.append(("Source: " if lang == "en" else "منبع: ") + b.source)
+    lines.append(("Updated: " if lang == "en" else "به‌روزرسانی: ") + _fmt_ts(b.fetched_at, lang))
+    sec = (section or "all").lower()
+    if sec in ("all", "fx", "currency"):
+        lines.append("")
+        lines.append("FX" if lang == "en" else "ارزها (ریال)")
+        for code in _MARKET_FX_ORDER:
+            val = b.rates.get(code)
+            if not val:
+                continue
+            name = labels.get(code, code)
+            lines.append(f"• {name} ({code}): {val:,.0f} IRR ≈ {val/10.0:,.0f} toman")
+    if sec in ("all", "gold", "coin"):
+        lines.append("")
+        lines.append("Gold / coins" if lang == "en" else "طلا و سکه")
+        gold = _gold_cache if _gold_cache else {}
+        for code in _MARKET_GOLD_ORDER:
+            val = gold.get(code)
+            if not val:
+                continue
+            name = labels.get(code, code)
+            if code == "XAU_OZ":
+                lines.append(f"• {name}: {val:,.2f} USD")
+            else:
+                lines.append(f"• {name}: {val:,.0f} IRR ≈ {val/10.0:,.0f} toman")
+    lines.append("")
+    lines.append("Convert: /world_currency" if lang == "en" else "تبدیل: /world_currency")
+    return True, chr(10).join(lines)

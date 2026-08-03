@@ -9,7 +9,7 @@ from typing import Any, Callable, Optional
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.toolkit.calendar_light import age_report, calendar_report
-from v2.toolkit.fx_light import currency_convert
+from v2.toolkit.fx_light import currency_convert, market_quotes_report
 from v2.toolkit.timezone_light import timezone_report
 from v2.toolkit.weather_light import air_quality_report, recent_earthquakes, weather_report
 
@@ -69,6 +69,22 @@ def _commit_world(deps: WorldCommandDeps, uid: int) -> None:
             deps.world_quota_commit(uid)
         except Exception:
             pass
+
+
+async def handle_markets(deps: WorldCommandDeps, client: Any, message: Message) -> None:
+    uid = message.from_user.id
+    if not await _guard_world(deps, uid, message):
+        return
+    section = "all"
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) > 1:
+        arg = parts[1].strip().lower()
+        if arg in ("fx", "currency", "gold", "coin", "all"):
+            section = arg
+    ok, body = await asyncio.to_thread(market_quotes_report, lang=_lang(deps, uid), section=section)
+    if ok:
+        _commit_world(deps, uid)
+    await message.reply_text(body if ok else deps.tr(uid, "world_error", detail=body), parse_mode=None)
 
 
 async def handle_calendar(deps: WorldCommandDeps, client: Any, message: Message) -> None:

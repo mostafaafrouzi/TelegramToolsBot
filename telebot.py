@@ -111,6 +111,7 @@ from v2.handlers.world_commands import (
     WorldCommandDeps,
     dispatch_world_wizard,
     handle_calendar,
+    handle_markets,
     handle_earthquakes,
     handle_fx_quick_callback,
     start_age_wizard,
@@ -208,9 +209,15 @@ from v2.handlers.cloudflare_commands import (
 )
 from v2.handlers.toolkit_menu_commands import (
     ToolkitMenuDeps,
+    handle_show_toolkit_calc_menu,
     handle_show_toolkit_crypto_menu,
     handle_show_toolkit_menu,
     handle_show_toolkit_network_menu,
+)
+from v2.handlers.calc_kit_commands import (
+    CalcKitDeps,
+    dispatch_calc_wizard,
+    run_calc_command,
 )
 from v2.handlers.transfer_hub_commands import (
     TransferHubDeps,
@@ -406,14 +413,13 @@ I18N = {
         "welcome": (
             "سلام 💙 به TelegramToolsBot\n\n"
             "یک سوئیت کامل ابزار در تلگرام:\n"
-            "📁 انتقال فایل — روبیکا · بله · گوگل درایو · SSH · لینک مستقیم\n"
-            "🧰 ابزارها — DNS، پینگ، Whois، هش، Base64، Mini App و بیشتر\n"
-            "🌍 جهان — آب‌وهوا، نرخ ارز آزاد، زلزله، تقویم، زمان\n"
+            "📁 انتقال — روبیکا · بله · درایو · SSH · لینک مستقیم\n"
+            "🧰 ابزارها — شبکه/IP · هش/Base64 · محاسبات (وام، درصد، واحد، پلاک، …)\n"
+            "🌍 جهان — آب‌وهوا · تابلوی ارز و طلا · تبدیل ارز · زلزله · تقویم · زمان\n"
             "📰 فیدخوان — RSS / یوتیوب / X با push و خلاصه روزانه\n"
-            "☁️ Cloudflare — مدیریت DNS شخصی\n"
-            "📋 حساب — پلن، مصرف، خرید\n\n"
-            "از منوی پایین بخش دلخواه را باز کن.\n"
-            "/menu · /help · /lang · /imenu"
+            "☁️ Cloudflare — DNS شخصی · 📋 حساب — پلن و مصرف\n\n"
+            "هر بخش منو راهنمای همان بخش را نشان می‌دهد.\n"
+            "/menu · /help · /lang · /imenu · /world_markets"
         ),
         "onboard_next_steps": "از کجا شروع کنیم؟",
         "onboard_checklist": "وضعیت اتصال (اختیاری):\n{rubika} روبیکا\n{bale} بله\n{drive} گوگل درایو",
@@ -431,11 +437,12 @@ I18N = {
         ),
         "menu_intro": (
             "🏠 منوی اصلی\n\n"
-            "📁 **انتقال** — ارسال و انتقال فایل\n"
-            "🧰 **ابزارها** — مستقل از انتقال\n"
-            "📋 **حساب** — پلن و صف\n"
-            "⚙️ **تنظیمات** — حالت مستقیم و شبکه\n\n"
-            "در هر زیرمنو «🏠 منوی اصلی» یا «◀️» برای برگشت."
+            "📁 انتقال — فایل به روبیکا/بله/درایو/SSH\n"
+            "🧰 ابزارها — شبکه، هش، محاسبات\n"
+            "🌍 جهان — آب‌وهوا، ارز/طلا، تقویم\n"
+            "📰 فیدخوان — RSS و اعلان\n"
+            "📋 حساب — پلن و صف · ⚙️ ارسال مستقیم\n\n"
+            "در هر بخش راهنمای همان منو نشان داده می‌شود."
         ),
         "plan_menu_opened": (
             "📋 حساب و پلن\n"
@@ -443,10 +450,32 @@ I18N = {
         ),
         "pick_lang": "زبان را انتخاب کن:",
         "lang_saved": "زبان ذخیره شد.",
-        "transfer_menu_title": "📁 انتقال فایل\nمقصد را انتخاب کن — هر سرویس منوی خودش را دارد.",
-        "toolkit_menu_title": "🧰 ابزارها\nمستقل از انتقال — دسته را انتخاب کن.",
-        "toolkit_network_menu_title": "🌐 ابزار شبکه\nبعد از انتخاب، دستور + مقدار را بفرست (مثلاً `/dns google.com`).",
-        "toolkit_crypto_menu_title": "🔐 هش و Base64\nمثلاً `/md5 متن` یا `/b64e سلام`",
+        "transfer_menu_title": (
+            "📁 انتقال فایل\n\n"
+            "فایل/رسانه را بفرست یا مقصد را از قبل وصل کن.\n"
+            "💬 روبیکا — اتصال نشست و ارسال به چت/کانال\n"
+            "📨 بله — ربات و چت مقصد خودت\n"
+            "☁️ درایو — آپلود به Google Drive\n"
+            "🖥 SSH — آپلود/دانلود روی سرور\n"
+            "📦 فایل و صف — صف کارها و ZIP"
+        ),
+        "toolkit_menu_title": (
+            "🧰 ابزارها\n\n"
+            "مستقل از انتقال فایل — دسته را انتخاب کن:\n"
+            "🌐 شبکه و IP — DNS، پینگ، Whois، SSL، …\n"
+            "🔐 هش و Base64 — MD5، SHA256، رمز، تایم‌استمپ\n"
+            "🧮 محاسبات — وام، درصد، تبدیل واحد، پلاک، تاریخ، …"
+        ),
+        "toolkit_network_menu_title": (
+            "🌐 ابزار شبکه\n\n"
+            "DNS، پینگ، Whois، IP، SSL، پورت، بلک‌لیست و …\n"
+            "بعد از انتخاب دکمه، مقدار را بفرست (یا مثل `/dns google.com`)."
+        ),
+        "toolkit_crypto_menu_title": (
+            "🔐 هش و Base64\n\n"
+            "MD5 / SHA256 / Base64 / رمز تصادفی / تایم‌استمپ / لورم.\n"
+            "مثال: `/md5 متن` یا `/b64e سلام`"
+        ),
         "toolkit_zip_menu_title": "📦 ساخت فایل zip\nفایل‌ها را ارسال کن، سپس ZIP کن و به مقصد بفرست.",
         "rubika_menu_title": "💬 روبیکا\nاتصال و وضعیت حساب خودت.",
         "bale_menu_title": "📨 بله\nربات و مقصد خودت — `/bale_connect`",
@@ -490,6 +519,78 @@ I18N = {
         "btn_clear_all": "🗑 پاکسازی",
         "btn_toolkit_network": "🌐 شبکه و IP",
         "btn_toolkit_crypto": "🔐 هش و Base64",
+        "btn_toolkit_calc": "🧮 محاسبات",
+        "toolkit_calc_menu_title": (
+            "🧮 محاسبات\n"
+            "ابزارهای مستقل (الهام از kitset) — هر دکمه راهنمای ورودی خودش را دارد.\n"
+            "• درصد / وام / سپرده / ریال↔تومان\n"
+            "• تبدیل واحد و مبنا / باینری / شمارش متن\n"
+            "• پلاک و پیش‌شماره کد ملی / اختلاف تاریخ\n"
+            "• ریاضی پایه، IELTS، مصرف بنزین/سیگار"
+        ),
+        "btn_calc_percent": "٪ درصد",
+        "btn_calc_loan": "🏦 قسط وام",
+        "btn_calc_deposit": "💰 سود سپرده",
+        "btn_calc_rial": "🔄 ریال/تومان",
+        "btn_calc_words": "🔤 عدد به حروف",
+        "btn_calc_unit": "📐 تبدیل واحد",
+        "btn_calc_base": "🔢 تبدیل مبنا",
+        "btn_calc_binary": "01 باینری",
+        "btn_calc_fuel": "⛽ بنزین",
+        "btn_calc_plate": "🚗 شهر پلاک",
+        "btn_calc_nid": "🪪 شهر کدملی",
+        "btn_calc_datediff": "📆 اختلاف تاریخ",
+        "btn_calc_dateconv": "🗓 تبدیل تاریخ",
+        "btn_calc_random": "🎲 تصادفی",
+        "btn_calc_mean": "📊 میانگین",
+        "btn_calc_power": "⬆ توان",
+        "btn_calc_sqrt": "√ جذر",
+        "btn_calc_fact": "! فاکتوریل",
+        "btn_calc_prime": "🔢 عدد اول",
+        "btn_calc_ielts": "🎓 IELTS",
+        "btn_calc_cig": "🚬 سیگار",
+        "btn_calc_rect": "▭ مستطیل",
+        "btn_calc_square": "▢ مربع",
+        "btn_calc_case": "Aa حروف",
+        "btn_calc_wordcount": "📝 شمارش متن",
+        "calc_error": "خطا: {detail}",
+        "calc_hint_percent": "٪ درصد\nفرمت: `جزء کل` یا `of مقدار درصد` یا `chg قدیم جدید` یا `inc|dec مقدار درصد`",
+        "calc_hint_loan": "قسط وام\nفرمت: `اصل نرخ_سالانه_٪ تعداد_ماه`",
+        "calc_hint_deposit": "سود سپرده ساده\nفرمت: `اصل نرخ_سالانه_٪ تعداد_ماه`",
+        "calc_hint_rial": "ریال↔تومان\nفرمت: `عدد toman` یا `عدد rial`",
+        "calc_hint_words": "عدد به حروف فارسی\nیک عدد صحیح بفرست.",
+        "calc_hint_unit": "تبدیل واحد\nفرمت: `length|weight|volume|speed|data|temp مقدار از به`\nمثال: `length 10 km m` یا `temp 32 f c`",
+        "calc_hint_base": "تبدیل مبنا\nفرمت: `مقدار مبنا_از مبنا_به` مثال: `ff 16 10`",
+        "calc_hint_binary": "باینری↔متن\nفرمت: `to متن` یا `from 01001000...`",
+        "calc_hint_fuel": "مصرف بنزین\nفرمت: `مسافت_km مصرف_L/100 قیمت_لیتر`",
+        "calc_hint_plate": "شهر پلاک\nکد دو رقمی پلاک را بفرست (مثلاً 22).",
+        "calc_hint_nid": "شهر کد ملی\nحداقل ۳ رقم اول کد ملی را بفرست.",
+        "calc_hint_datediff": "اختلاف تاریخ\nدو تاریخ با فاصله: `1400/01/01 1403/06/15`",
+        "calc_hint_dateconv": "تبدیل تاریخ\nیک تاریخ شمسی یا میلادی: `YYYY/MM/DD`",
+        "calc_hint_random": "اعداد تصادفی\nفرمت: `تعداد حداقل حداکثر`",
+        "calc_hint_mean": "میانگین\nاعداد را با فاصله بفرست.",
+        "calc_hint_power": "توان\nفرمت: `پایه توان`",
+        "calc_hint_sqrt": "جذر\nیک عدد بفرست.",
+        "calc_hint_fact": "فاکتوریل\nیک عدد ۰ تا ۲۰۰ بفرست.",
+        "calc_hint_prime": "تشخیص عدد اول\nیک عدد صحیح بفرست.",
+        "calc_hint_ielts": "IELTS Overall\nچهار نمره: `L R W S` (گام ۰٫۵)",
+        "calc_hint_cig": "هزینه سیگار\nفرمت: `نخ_روزانه قیمت_پاکت [تعداد_در_پاکت] [روز]`",
+        "calc_hint_rect": "مستطیل\nفرمت: `عرض طول`",
+        "calc_hint_square": "مربع\nضلع را بفرست.",
+        "calc_hint_case": "حروف انگلیسی\nفرمت: `upper|lower|title متن`",
+        "calc_hint_wordcount": "شمارش متن\nمتن را بفرست.",
+        "btn_world_markets": "📈 ارز و طلا",
+        "world_menu_title": (
+            "🌍 جهان\n\n"
+            "ابزارهای زمان، آب‌وهوا و بازار ایران (الهام از TGJU).\n\n"
+            "🌤 آب‌وهوا — وضعیت و کیفیت هوا بر اساس شهر\n"
+            "🕒 ساعت جهانی — زمان محلی شهر/منطقه زمانی\n"
+            "📅 تقویم — امروز میلادی و شمسی\n"
+            "🎂 سن — محاسبه سن از تاریخ تولد\n"
+            "💱 ارز — تبدیل بین ارزها و ریال/تومان\n"
+            "📈 ارز و طلا — تابلوی دلار، یورو، ین، طلا و سکه\n"
+            "🌋 زلزله — رویدادهای اخیر"
+        ),
         "btn_toolkit_zip": "📦 ساخت فایل zip",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 IP من",
@@ -812,13 +913,13 @@ I18N = {
         "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "راهنمای سریع:\n\n"
-            "🏠 منو: /menu\n"
-            "📁 انتقال: روبیکا /rubika_connect · بله /bale_connect · درایو /drive_connect\n"
-            "🧰 ابزارها: /dns · /myip · /ping · /md5\n"
-            "📰 فید: /feeds · 🌍 جهان از منوی اصلی\n\n"
+            "🏠 /menu · زبان /lang · منوی شیشه‌ای /imenu\n"
+            "📁 انتقال: /rubika_connect · /bale_connect · /drive_connect\n"
+            "🧰 ابزارها: /dns · /myip · /ping · /md5 · منوی محاسبات\n"
+            "🌍 جهان: /world_markets · /world_currency · /world_weather\n"
+            "📰 فید: /feeds · /feed_add\n\n"
             "مصرف و پلن: /usage · /plan · /purchase · /plan_compare\n"
-            "وضعیت شبکه: /netstatus · حذف کار: /del <job_id>\n"
-            "اگر مشکلی دیدی، job_id را برای پشتیبانی بفرست."
+            "وضعیت شبکه: /netstatus · حذف کار: /del <job_id>"
         ),
         "help_short_admin": (
             "راهنمای سریع (ادمین):\n\n"
@@ -1152,7 +1253,13 @@ I18N = {
         "btn_feed_add": "➕ افزودن فید",
         "btn_feed_help": "ℹ️ راهنمای فید",
         "btn_plan_compare": "📊 مقایسه پلن‌ها",
-        "feed_section_opened": "بخش فید خوان — RSS، YouTube، X/Twitter",
+        "feed_section_opened": (
+            "📰 فیدخوان\n\n"
+            "RSS، YouTube و X/Twitter را دنبال کن.\n"
+            "➕ افزودن فید — لینک کانال/فید را بفرست\n"
+            "📋 فیدها — لیست، مشاهده و اعلان push\n"
+            "❓ راهنما — نکات فرمت و سهمیه"
+        ),
         "feed_help_body": (
             "📰 راهنمای Feed Reader\n"
             "• لینک RSS، کانال YouTube یا حساب X را بفرست\n"
@@ -1261,15 +1368,14 @@ I18N = {
     "en": {
         "welcome": (
             "Hi 💙 Welcome to TelegramToolsBot\n\n"
-            "A full toolkit in Telegram:\n"
-            "📁 Transfer — Rubika · Bale · Google Drive · SSH · direct links\n"
-            "🧰 Tools — DNS, ping, Whois, hash, Base64, Mini App, and more\n"
-            "🌍 World — weather, Iran FX, quakes, calendar, time\n"
+            "A full tools suite in Telegram:\n"
+            "📁 Transfer — Rubika · Bale · Drive · SSH · direct links\n"
+            "🧰 Tools — network/IP · hash/Base64 · calculators\n"
+            "🌍 World — weather · FX/gold board · convert · quakes · calendar\n"
             "📰 Feed Reader — RSS / YouTube / X with push & digest\n"
-            "☁️ Cloudflare — personal DNS management\n"
-            "📋 Account — plans, usage, purchase\n\n"
-            "Open any section from the menu below.\n"
-            "/menu · /help · /lang · /imenu"
+            "☁️ Cloudflare — personal DNS · 📋 Account — plan & usage\n\n"
+            "Each menu section shows its own short guide.\n"
+            "/menu · /help · /lang · /imenu · /world_markets"
         ),
         "onboard_next_steps": "Where do you want to start?",
         "onboard_checklist": "Optional connections:\n{rubika} Rubika\n{bale} Bale\n{drive} Google Drive",
@@ -1299,8 +1405,16 @@ I18N = {
         ),
         "pick_lang": "Choose language:",
         "lang_saved": "Language saved.",
-        "transfer_menu_title": "📁 File transfer\nPick a destination — each has its own submenu.",
-        "toolkit_menu_title": "🧰 Tools\nSeparate from transfer — pick a category.",
+        "transfer_menu_title": (
+            "📁 File transfer\n\n"
+            "Send media or connect a destination first.\n"
+            "Rubika · Bale · Drive · SSH · Files/queue"
+        ),
+        "toolkit_menu_title": (
+            "🧰 Tools\n\n"
+            "Separate from file transfer — pick a category:\n"
+            "🌐 Network & IP · 🔐 Hash & Base64 · 🧮 Calculators"
+        ),
         "toolkit_network_menu_title": "🌐 Network tools\nThen send command + value (e.g. `/dns google.com`).",
         "toolkit_crypto_menu_title": "🔐 Hash & Base64\ne.g. `/md5 text` or `/b64e hello`",
         "toolkit_zip_menu_title": "📦 Create ZIP file\nSend files, then ZIP and send to destination.",
@@ -1346,6 +1460,70 @@ I18N = {
         "btn_clear_all": "🗑 Clear all",
         "btn_toolkit_network": "🌐 Network & IP",
         "btn_toolkit_crypto": "🔐 Hash & Base64",
+        "btn_toolkit_calc": "🧮 Calculators",
+        "toolkit_calc_menu_title": (
+            "🧮 Calculators\n"
+            "Independent tools (kitset-inspired). Each button shows its own input guide.\n"
+            "Percent / loan / deposit / rial↔toman · units · plate/NID · dates · math"
+        ),
+        "btn_calc_percent": "% Percent",
+        "btn_calc_loan": "🏦 Loan EMI",
+        "btn_calc_deposit": "💰 Deposit",
+        "btn_calc_rial": "🔄 Rial/Toman",
+        "btn_calc_words": "🔤 Number words",
+        "btn_calc_unit": "📐 Units",
+        "btn_calc_base": "🔢 Base convert",
+        "btn_calc_binary": "01 Binary",
+        "btn_calc_fuel": "⛽ Fuel",
+        "btn_calc_plate": "🚗 Plate city",
+        "btn_calc_nid": "🪪 NID city",
+        "btn_calc_datediff": "📆 Date diff",
+        "btn_calc_dateconv": "🗓 Date convert",
+        "btn_calc_random": "🎲 Random",
+        "btn_calc_mean": "📊 Mean",
+        "btn_calc_power": "⬆ Power",
+        "btn_calc_sqrt": "√ Sqrt",
+        "btn_calc_fact": "! Factorial",
+        "btn_calc_prime": "🔢 Prime",
+        "btn_calc_ielts": "🎓 IELTS",
+        "btn_calc_cig": "🚬 Cigarette",
+        "btn_calc_rect": "▭ Rectangle",
+        "btn_calc_square": "▢ Square",
+        "btn_calc_case": "Aa Case",
+        "btn_calc_wordcount": "📝 Word count",
+        "calc_error": "Error: {detail}",
+        "calc_hint_percent": "Percent\n`part whole` or `of value pct` or `chg old new` or `inc|dec value pct`",
+        "calc_hint_loan": "Loan EMI\n`principal annual_rate_pct months`",
+        "calc_hint_deposit": "Deposit interest\n`principal annual_rate_pct months`",
+        "calc_hint_rial": "Rial↔Toman\n`amount toman` or `amount rial`",
+        "calc_hint_words": "Persian number words\nSend an integer.",
+        "calc_hint_unit": "Unit convert\n`kind amount from to` e.g. `length 10 km m`",
+        "calc_hint_base": "Base convert\n`value from_base to_base`",
+        "calc_hint_binary": "Binary↔text\n`to text` or `from 0100...`",
+        "calc_hint_fuel": "Fuel cost\n`km L_per_100 price_per_liter`",
+        "calc_hint_plate": "Plate city\nSend 2-digit plate code.",
+        "calc_hint_nid": "National ID city\nSend first 3 digits.",
+        "calc_hint_datediff": "Date diff\n`YYYY/MM/DD YYYY/MM/DD`",
+        "calc_hint_dateconv": "Date convert\n`YYYY/MM/DD` (Gregorian or Solar)",
+        "calc_hint_random": "Random\n`count min max`",
+        "calc_hint_mean": "Mean\nSpace-separated numbers.",
+        "calc_hint_power": "Power\n`base exp`",
+        "calc_hint_sqrt": "Sqrt\nSend a number.",
+        "calc_hint_fact": "Factorial\nInteger 0..200",
+        "calc_hint_prime": "Prime check\nSend an integer.",
+        "calc_hint_ielts": "IELTS\n`L R W S`",
+        "calc_hint_cig": "Cigarette cost\n`per_day pack_price [pack_size] [days]`",
+        "calc_hint_rect": "Rectangle\n`width height`",
+        "calc_hint_square": "Square\nSend side length.",
+        "calc_hint_case": "Case\n`upper|lower|title text`",
+        "calc_hint_wordcount": "Word count\nSend text.",
+        "btn_world_markets": "📈 FX & Gold",
+        "world_menu_title": (
+            "🌍 World\n\n"
+            "Time, weather, and Iran free-market board (TGJU-inspired).\n\n"
+            "🌤 Weather · 🕒 Time · 📅 Calendar · 🎂 Age\n"
+            "💱 Convert · 📈 FX & Gold board · 🌋 Earthquakes"
+        ),
         "btn_toolkit_zip": "📦 Create ZIP file",
         "btn_tool_dns": "🔍 DNS",
         "btn_tool_myip": "📍 My IP",
@@ -2292,6 +2470,9 @@ def build_toolkit_network_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_toolkit_crypto_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_toolkit_crypto_menu(user_id, tr)
+
+def build_toolkit_calc_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_toolkit_calc_menu(user_id, tr)
 
 
 def build_toolkit_zip_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -3625,6 +3806,18 @@ TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
     build_toolkit_menu=build_toolkit_menu,
     build_toolkit_network_menu=build_toolkit_network_menu,
     build_toolkit_crypto_menu=build_toolkit_crypto_menu,
+    build_toolkit_calc_menu=build_toolkit_calc_menu,
+)
+
+CALC_KIT_DEPS = CalcKitDeps(
+    tr=tr,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    get_state=get_state,
+    toolkit_quota_try=_toolkit_quota_try,
+    toolkit_quota_commit=_toolkit_quota_commit,
+    toolkit_utility_light_enabled=TOOLKIT_UTILITY_LIGHT,
 )
 
 TRANSFER_HUB_DEPS = TransferHubDeps(
@@ -3691,6 +3884,10 @@ async def show_toolkit_network_menu_handler(client: Client, message: Message):
 
 async def show_toolkit_crypto_menu_handler(client: Client, message: Message):
     await handle_show_toolkit_crypto_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_toolkit_calc_menu_handler(client: Client, message: Message):
+    await handle_show_toolkit_calc_menu(TOOLKIT_MENU_DEPS, client, message)
 
 
 async def show_rubika_menu_handler(client: Client, message: Message):
@@ -4366,7 +4563,7 @@ async def show_world_menu_handler(client: Client, message: Message):
     uid = message.from_user.id
     set_menu_section(uid, MenuSection.WORLD)
     await message.reply_text(
-        tr(uid, "inline_world_title"),
+        tr(uid, "world_menu_title"),
         reply_markup=build_world_menu(uid),
         parse_mode=None,
     )
@@ -4382,6 +4579,111 @@ async def world_calendar_handler(client: Client, message: Message):
 
 async def world_currency_handler(client: Client, message: Message):
     await start_currency_wizard(WORLD_COMMAND_DEPS, message)
+
+
+async def world_markets_handler(client: Client, message: Message):
+    await handle_markets(WORLD_COMMAND_DEPS, client, message)
+
+async def calc_percent_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "percent")
+
+
+async def calc_loan_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "loan")
+
+
+async def calc_deposit_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "deposit")
+
+
+async def calc_rial_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "rial")
+
+
+async def calc_words_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "words")
+
+
+async def calc_unit_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "unit")
+
+
+async def calc_base_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "base")
+
+
+async def calc_binary_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "binary")
+
+
+async def calc_fuel_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "fuel")
+
+
+async def calc_plate_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "plate")
+
+
+async def calc_nid_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "nid")
+
+
+async def calc_datediff_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "datediff")
+
+
+async def calc_dateconv_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "dateconv")
+
+
+async def calc_random_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "random")
+
+
+async def calc_mean_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "mean")
+
+
+async def calc_power_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "power")
+
+
+async def calc_sqrt_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "sqrt")
+
+
+async def calc_fact_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "fact")
+
+
+async def calc_prime_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "prime")
+
+
+async def calc_ielts_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "ielts")
+
+
+async def calc_cig_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "cig")
+
+
+async def calc_rect_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "rect")
+
+
+async def calc_square_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "square")
+
+
+async def calc_case_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "case")
+
+
+async def calc_wordcount_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "wordcount")
+
+
 
 
 async def world_quake_handler(client: Client, message: Message):
@@ -4667,6 +4969,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     show_toolkit_menu_handler=show_toolkit_menu_handler,
     show_toolkit_network_menu_handler=show_toolkit_network_menu_handler,
     show_toolkit_crypto_menu_handler=show_toolkit_crypto_menu_handler,
+    show_toolkit_calc_menu_handler=show_toolkit_calc_menu_handler,
     show_rubika_menu_handler=show_rubika_menu_handler,
     show_bale_menu_handler=show_bale_menu_handler,
     show_drive_menu_handler=show_drive_menu_handler,
@@ -4715,6 +5018,32 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
         "/world_weather": world_weather_handler,
         "/world_calendar": world_calendar_handler,
         "/world_currency": world_currency_handler,
+        "/world_markets": world_markets_handler,
+        "/calc_percent": calc_percent_handler,
+        "/calc_loan": calc_loan_handler,
+        "/calc_deposit": calc_deposit_handler,
+        "/calc_rial": calc_rial_handler,
+        "/calc_words": calc_words_handler,
+        "/calc_unit": calc_unit_handler,
+        "/calc_base": calc_base_handler,
+        "/calc_binary": calc_binary_handler,
+        "/calc_fuel": calc_fuel_handler,
+        "/calc_plate": calc_plate_handler,
+        "/calc_nid": calc_nid_handler,
+        "/calc_datediff": calc_datediff_handler,
+        "/calc_dateconv": calc_dateconv_handler,
+        "/calc_random": calc_random_handler,
+        "/calc_mean": calc_mean_handler,
+        "/calc_power": calc_power_handler,
+        "/calc_sqrt": calc_sqrt_handler,
+        "/calc_fact": calc_fact_handler,
+        "/calc_prime": calc_prime_handler,
+        "/calc_ielts": calc_ielts_handler,
+        "/calc_cig": calc_cig_handler,
+        "/calc_rect": calc_rect_handler,
+        "/calc_square": calc_square_handler,
+        "/calc_case": calc_case_handler,
+        "/calc_wordcount": calc_wordcount_handler,
         "/world_quake": world_quake_handler,
         "/world_time": world_time_handler,
         "/world_age": world_age_handler,
@@ -4852,6 +5181,7 @@ INLINE_MENU_DEPS = InlineMenuDeps(
     admin_handler=admin_handler,
     plan_compare_handler=plan_compare_handler,
     show_feed_menu_handler=show_feed_menu_handler,
+    calc_kit_deps=CALC_KIT_DEPS,
 )
 
 
@@ -5024,6 +5354,8 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     link_direct_deps=LINK_DIRECT_HANDLER_DEPS,
     build_main_menu=build_main_menu,
     dispatch_world_wizard=dispatch_world_wizard,
+    dispatch_calc_wizard=dispatch_calc_wizard,
+    calc_kit_deps=CALC_KIT_DEPS,
     dispatch_feed_wizard=dispatch_feed_wizard,
     feed_reader_deps=FEED_READER_DEPS,
     dispatch_toolkit_net_extra_wizard=dispatch_toolkit_net_extra_wizard,

@@ -1,4 +1,4 @@
-"""Toolkit menu hub and submenus (network / crypto)."""
+"""Toolkit menu hub and submenus (network / crypto / calc)."""
 
 from __future__ import annotations
 
@@ -20,6 +20,7 @@ class ToolkitMenuDeps:
     build_toolkit_menu: MenuBuilder
     build_toolkit_network_menu: MenuBuilder
     build_toolkit_crypto_menu: MenuBuilder
+    build_toolkit_calc_menu: MenuBuilder | None = None
 
 
 async def handle_show_toolkit_menu(deps: ToolkitMenuDeps, client: Any, message: Message) -> None:
@@ -46,4 +47,14 @@ async def handle_show_toolkit_crypto_menu(deps: ToolkitMenuDeps, client: Any, me
     await message.reply_text(
         deps.tr(uid, "toolkit_crypto_menu_title"),
         reply_markup=deps.build_toolkit_crypto_menu(uid),
+    )
+
+
+async def handle_show_toolkit_calc_menu(deps: ToolkitMenuDeps, client: Any, message: Message) -> None:
+    uid = message.from_user.id
+    deps.set_menu_section(uid, MenuSection.TOOLKIT)
+    markup = deps.build_toolkit_calc_menu(uid) if deps.build_toolkit_calc_menu else None
+    await message.reply_text(
+        deps.tr(uid, "toolkit_calc_menu_title"),
+        reply_markup=markup,
     )

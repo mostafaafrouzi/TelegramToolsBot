@@ -51,6 +51,9 @@ def build_inline_toolkit(uid: int, tr: Translator, *, webapp_url: str = "") -> t
             InlineKeyboardButton(tr(uid, "btn_toolkit_network"), callback_data="imenu:toolkit_net"),
             InlineKeyboardButton(tr(uid, "btn_toolkit_crypto"), callback_data="imenu:toolkit_crypto"),
         ),
+        _row(
+            InlineKeyboardButton(tr(uid, "btn_toolkit_calc"), callback_data="imenu:toolkit_calc"),
+        ),
     ]
     hub_url = miniapp_page_url(webapp_url, "index.html")
     if hub_url:
@@ -132,6 +135,30 @@ def build_inline_toolkit_crypto(uid: int, tr: Translator) -> tuple[str, InlineKe
     return body, _kb(rows)
 
 
+def build_inline_toolkit_calc(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMarkup]:
+    body = tr(uid, "toolkit_calc_menu_title")
+    rows = [
+        _row(
+            InlineKeyboardButton(tr(uid, "btn_calc_percent"), callback_data="imenu:calc_percent"),
+            InlineKeyboardButton(tr(uid, "btn_calc_loan"), callback_data="imenu:calc_loan"),
+        ),
+        _row(
+            InlineKeyboardButton(tr(uid, "btn_calc_deposit"), callback_data="imenu:calc_deposit"),
+            InlineKeyboardButton(tr(uid, "btn_calc_rial"), callback_data="imenu:calc_rial"),
+        ),
+        _row(
+            InlineKeyboardButton(tr(uid, "btn_calc_unit"), callback_data="imenu:calc_unit"),
+            InlineKeyboardButton(tr(uid, "btn_calc_words"), callback_data="imenu:calc_words"),
+        ),
+        _row(
+            InlineKeyboardButton(tr(uid, "btn_calc_plate"), callback_data="imenu:calc_plate"),
+            InlineKeyboardButton(tr(uid, "btn_calc_nid"), callback_data="imenu:calc_nid"),
+        ),
+        _row(InlineKeyboardButton(tr(uid, "btn_back_toolkit"), callback_data="imenu:toolkit")),
+    ]
+    return body, _kb(rows)
+
+
 def build_inline_world(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMarkup]:
     body = tr(uid, "inline_world_title")
     rows = [
@@ -145,6 +172,9 @@ def build_inline_world(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMar
         ),
         _row(
             InlineKeyboardButton(tr(uid, "btn_world_currency"), callback_data="imenu:currency"),
+            InlineKeyboardButton(tr(uid, "btn_world_markets"), callback_data="imenu:markets"),
+        ),
+        _row(
             InlineKeyboardButton(tr(uid, "btn_world_earthquake"), callback_data="imenu:quake"),
         ),
         _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
@@ -226,6 +256,7 @@ _INLINE_BUILDERS = {
     "toolkit": build_inline_toolkit,
     "toolkit_net": build_inline_toolkit_network,
     "toolkit_crypto": build_inline_toolkit_crypto,
+    "toolkit_calc": build_inline_toolkit_calc,
     "world": build_inline_world,
     "feed": build_inline_feed,
     "transfer": build_inline_transfer,

@@ -66,6 +66,33 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     # Toolkit hub
     "btn_toolkit_network": "/show_toolkit_network_menu",
     "btn_toolkit_crypto": "/show_toolkit_crypto_menu",
+    "btn_toolkit_calc": "/show_toolkit_calc_menu",
+    "btn_calc_percent": "/calc_percent",
+    "btn_calc_loan": "/calc_loan",
+    "btn_calc_deposit": "/calc_deposit",
+    "btn_calc_rial": "/calc_rial",
+    "btn_calc_words": "/calc_words",
+    "btn_calc_unit": "/calc_unit",
+    "btn_calc_base": "/calc_base",
+    "btn_calc_binary": "/calc_binary",
+    "btn_calc_fuel": "/calc_fuel",
+    "btn_calc_plate": "/calc_plate",
+    "btn_calc_nid": "/calc_nid",
+    "btn_calc_datediff": "/calc_datediff",
+    "btn_calc_dateconv": "/calc_dateconv",
+    "btn_calc_random": "/calc_random",
+    "btn_calc_mean": "/calc_mean",
+    "btn_calc_power": "/calc_power",
+    "btn_calc_sqrt": "/calc_sqrt",
+    "btn_calc_fact": "/calc_fact",
+    "btn_calc_prime": "/calc_prime",
+    "btn_calc_ielts": "/calc_ielts",
+    "btn_calc_cig": "/calc_cig",
+    "btn_calc_rect": "/calc_rect",
+    "btn_calc_square": "/calc_square",
+    "btn_calc_case": "/calc_case",
+    "btn_calc_wordcount": "/calc_wordcount",
+    "btn_world_markets": "/world_markets",
     "btn_tool_dns": "/dns",
     "btn_tool_myip": "/myip",
     "btn_tool_ping": "/ping",
@@ -362,6 +389,7 @@ def build_world_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_world_calendar"),
                 tr(user_id, "btn_world_age"),
                 tr(user_id, "btn_world_currency"),
+                tr(user_id, "btn_world_markets"),
                 tr(user_id, "btn_world_earthquake"),
             ],
             3,
@@ -431,7 +459,11 @@ def build_ssh_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
 def build_toolkit_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         _grid(
-            [tr(user_id, "btn_toolkit_network"), tr(user_id, "btn_toolkit_crypto")],
+            [
+                tr(user_id, "btn_toolkit_network"),
+                tr(user_id, "btn_toolkit_crypto"),
+                tr(user_id, "btn_toolkit_calc"),
+            ],
             3,
         )
         + [[tr(user_id, "btn_back_main")]]
@@ -477,6 +509,42 @@ def build_toolkit_crypto_menu(user_id: int, tr: Translator) -> ReplyKeyboardMark
                 tr(user_id, "btn_tool_password"),
                 tr(user_id, "btn_tool_timestamp"),
                 tr(user_id, "btn_tool_lorem"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")]]
+    )
+
+
+def build_toolkit_calc_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        _grid(
+            [
+                tr(user_id, "btn_calc_percent"),
+                tr(user_id, "btn_calc_loan"),
+                tr(user_id, "btn_calc_deposit"),
+                tr(user_id, "btn_calc_rial"),
+                tr(user_id, "btn_calc_words"),
+                tr(user_id, "btn_calc_unit"),
+                tr(user_id, "btn_calc_base"),
+                tr(user_id, "btn_calc_binary"),
+                tr(user_id, "btn_calc_fuel"),
+                tr(user_id, "btn_calc_plate"),
+                tr(user_id, "btn_calc_nid"),
+                tr(user_id, "btn_calc_datediff"),
+                tr(user_id, "btn_calc_dateconv"),
+                tr(user_id, "btn_calc_random"),
+                tr(user_id, "btn_calc_mean"),
+                tr(user_id, "btn_calc_power"),
+                tr(user_id, "btn_calc_sqrt"),
+                tr(user_id, "btn_calc_fact"),
+                tr(user_id, "btn_calc_prime"),
+                tr(user_id, "btn_calc_ielts"),
+                tr(user_id, "btn_calc_cig"),
+                tr(user_id, "btn_calc_rect"),
+                tr(user_id, "btn_calc_square"),
+                tr(user_id, "btn_calc_case"),
+                tr(user_id, "btn_calc_wordcount"),
             ],
             3,
         )

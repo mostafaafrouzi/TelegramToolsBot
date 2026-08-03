@@ -60,6 +60,64 @@ def _parse_birth_date(raw: str) -> tuple[bool, date | str]:
         return False, str(e)
 
 
+def convert_date(date_str: str, *, lang: str = "fa") -> tuple[bool, str]:
+    """Convert Gregorian ↔ Solar Hijri for a single date."""
+    ok, parsed = _parse_birth_date(date_str)
+    if not ok:
+        detail = str(parsed)
+        if lang == "en":
+            return False, f"Invalid date ({detail}). Use YYYY/MM/DD."
+        return False, f"تاریخ نامعتبر ({detail}). فرمت: YYYY/MM/DD."
+    g: date = parsed  # type: ignore[assignment]
+    try:
+        import jdatetime
+
+        j = jdatetime.date.fromgregorian(date=g)
+        if lang == "en":
+            return True, f"Gregorian: {g.isoformat()}\nSolar Hijri: {j.strftime('%Y/%m/%d')}"
+        return True, f"میلادی: {g.isoformat()}\nشمسی: {j.strftime('%Y/%m/%d')}"
+    except ImportError:
+        return False, "jdatetime_missing" if lang == "en" else "jdatetime نصب نیست."
+    except Exception as e:
+        return False, str(e)[:200]
+
+
+def date_diff(a: str, b: str, *, lang: str = "fa") -> tuple[bool, str]:
+    ok1, d1 = _parse_birth_date(a)
+    ok2, d2 = _parse_birth_date(b)
+    if not ok1:
+        return False, str(d1)
+    if not ok2:
+        return False, str(d2)
+    left: date = d1  # type: ignore[assignment]
+    right: date = d2  # type: ignore[assignment]
+    if left > right:
+        left, right = right, left
+    delta = right - left
+    years = right.year - left.year
+    months = right.month - left.month
+    days = right.day - left.day
+    if days < 0:
+        months -= 1
+        from calendar import monthrange
+
+        prev_month = right.month - 1 or 12
+        prev_year = right.year if right.month > 1 else right.year - 1
+        days += monthrange(prev_year, prev_month)[1]
+    if months < 0:
+        years -= 1
+        months += 12
+    if lang == "en":
+        return True, (
+            f"Date diff\nFrom: {left.isoformat()}\nTo: {right.isoformat()}\n"
+            f"{years}y {months}m {days}d · {delta.days} total days"
+        )
+    return True, (
+        f"اختلاف تاریخ\nاز: {left.isoformat()}\nتا: {right.isoformat()}\n"
+        f"{years} سال و {months} ماه و {days} روز · مجموع {delta.days} روز"
+    )
+
+
 def age_report(date_str: str, *, lang: str = "fa") -> tuple[bool, str]:
     ok, parsed = _parse_birth_date(date_str)
     if not ok:

@@ -12,6 +12,7 @@ from v2.core.nav import maybe_disable_direct_mode
 from v2.handlers.world_commands import (
     handle_calendar,
     handle_earthquakes,
+    handle_markets,
     start_age_wizard,
     start_currency_wizard,
     start_timezone_wizard,
@@ -46,6 +47,7 @@ class InlineMenuDeps:
     admin_handler: Callable[..., Awaitable[None]]
     plan_compare_handler: Callable[..., Awaitable[None]] | None = None
     show_feed_menu_handler: Callable[..., Awaitable[None]] | None = None
+    calc_kit_deps: Any = None
 
 
 _IMENU_ACTIONS = frozenset(
@@ -172,6 +174,19 @@ async def dispatch_inline_menu_callback(
     if k == "currency":
         await callback_query.answer()
         await start_currency_wizard(deps.world_deps, msg)
+        return True
+    if k == "markets":
+        await callback_query.answer()
+        await handle_markets(deps.world_deps, client, msg)
+        return True
+    if k == "toolkit_calc":
+        await callback_query.answer()
+        await show_inline_menu(deps, client, msg, user_id, "toolkit_calc", edit=True)
+        return True
+    if k.startswith("calc_") and deps.calc_kit_deps is not None:
+        await callback_query.answer()
+        from v2.handlers.calc_kit_commands import start_calc_tool
+        await start_calc_tool(deps.calc_kit_deps, msg, k[len('calc_'):])
         return True
     if k == "quake":
         await callback_query.answer()

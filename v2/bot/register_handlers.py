@@ -93,6 +93,7 @@ _TEXT_EXCLUDED_COMMANDS = [
     "world_weather",
     "world_calendar",
     "world_currency",
+    "world_markets",
     "world_quake",
     "world_time",
     "world_age",
@@ -104,6 +105,31 @@ _TEXT_EXCLUDED_COMMANDS = [
     "urlexpand",
     "timestamp",
     "lorem",
+    "calc_percent",
+    "calc_loan",
+    "calc_deposit",
+    "calc_rial",
+    "calc_words",
+    "calc_unit",
+    "calc_base",
+    "calc_binary",
+    "calc_fuel",
+    "calc_plate",
+    "calc_nid",
+    "calc_datediff",
+    "calc_dateconv",
+    "calc_random",
+    "calc_mean",
+    "calc_power",
+    "calc_sqrt",
+    "calc_fact",
+    "calc_prime",
+    "calc_ielts",
+    "calc_cig",
+    "calc_rect",
+    "calc_square",
+    "calc_case",
+    "calc_wordcount",
 ]
 
 _MEDIA_FILTER = filters.private & (
@@ -143,6 +169,7 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.world_weather_handler, priv & cmd("world_weather"))
     mh(tb.world_calendar_handler, priv & cmd("world_calendar"))
     mh(tb.world_currency_handler, priv & cmd("world_currency"))
+    mh(tb.world_markets_handler, priv & cmd("world_markets"))
     mh(tb.world_quake_handler, priv & cmd("world_quake"))
     mh(tb.world_time_handler, priv & cmd("world_time"))
     mh(tb.world_age_handler, priv & cmd("world_age"))
@@ -157,6 +184,31 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.url_expand_handler, priv & cmd("urlexpand"))
     mh(tb.timestamp_handler, priv & cmd("timestamp"))
     mh(tb.lorem_handler, priv & cmd("lorem"))
+    mh(tb.calc_percent_handler, priv & cmd("calc_percent"))
+    mh(tb.calc_loan_handler, priv & cmd("calc_loan"))
+    mh(tb.calc_deposit_handler, priv & cmd("calc_deposit"))
+    mh(tb.calc_rial_handler, priv & cmd("calc_rial"))
+    mh(tb.calc_words_handler, priv & cmd("calc_words"))
+    mh(tb.calc_unit_handler, priv & cmd("calc_unit"))
+    mh(tb.calc_base_handler, priv & cmd("calc_base"))
+    mh(tb.calc_binary_handler, priv & cmd("calc_binary"))
+    mh(tb.calc_fuel_handler, priv & cmd("calc_fuel"))
+    mh(tb.calc_plate_handler, priv & cmd("calc_plate"))
+    mh(tb.calc_nid_handler, priv & cmd("calc_nid"))
+    mh(tb.calc_datediff_handler, priv & cmd("calc_datediff"))
+    mh(tb.calc_dateconv_handler, priv & cmd("calc_dateconv"))
+    mh(tb.calc_random_handler, priv & cmd("calc_random"))
+    mh(tb.calc_mean_handler, priv & cmd("calc_mean"))
+    mh(tb.calc_power_handler, priv & cmd("calc_power"))
+    mh(tb.calc_sqrt_handler, priv & cmd("calc_sqrt"))
+    mh(tb.calc_fact_handler, priv & cmd("calc_fact"))
+    mh(tb.calc_prime_handler, priv & cmd("calc_prime"))
+    mh(tb.calc_ielts_handler, priv & cmd("calc_ielts"))
+    mh(tb.calc_cig_handler, priv & cmd("calc_cig"))
+    mh(tb.calc_rect_handler, priv & cmd("calc_rect"))
+    mh(tb.calc_square_handler, priv & cmd("calc_square"))
+    mh(tb.calc_case_handler, priv & cmd("calc_case"))
+    mh(tb.calc_wordcount_handler, priv & cmd("calc_wordcount"))
     mh(tb.rubika_status_handler, priv & cmd("rubika_status"))
     mh(tb.rubika_connect_handler, priv & cmd("rubika_connect"))
     mh(tb.direct_mode_handler, priv & cmd("directmode"))
