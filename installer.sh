@@ -448,8 +448,14 @@ print('rub-import-ok')
 import os
 os.chdir('$dir')
 from v2.web.miniapp_api import dispatch_miniapp_api
-st, ct, body = dispatch_miniapp_api('/miniapp/api/whois', 'q=127.0.0.1')
-assert st == 200 and b'\"ok\"' in body, (st, body[:200])
+# Auth required by default (Telegram initData HMAC).
+os.environ['MINIAPP_API_OPEN'] = '0'
+st, _ct, body = dispatch_miniapp_api('/miniapp/api/whois', 'q=127.0.0.1')
+assert st == 401, (st, body[:200])
+# Open mode (dev) should reach the router.
+os.environ['MINIAPP_API_OPEN'] = '1'
+st2, _ct2, body2 = dispatch_miniapp_api('/miniapp/api/nope', '')
+assert st2 == 404 and b'unknown_action' in body2, (st2, body2[:200])
 print('miniapp-api-ok')
 " || warn "Mini App API smoke test failed (check v2/web/miniapp_api.py)"
   # Mini App production readiness: HTTPS base URL when configured
@@ -474,9 +480,14 @@ print('miniapp-api-ok')
 
 check_recent_journal_errors(){
   local unit="$1"
-  local logs
-  # Only lines after the latest restart (avoid failing update due to pre-restart crash loop).
-  logs="$(journalctl -u "$unit" -n 80 --no-pager 2>/dev/null || true)"
+  local logs since
+  # Only lines after the current unit activation (ignore historical crash loops).
+  since="$(systemctl show -p ActiveEnterTimestamp --value "$unit" 2>/dev/null || true)"
+  if [[ -n "$since" && "$since" != "n/a" && "$since" != "0" ]]; then
+    logs="$(journalctl -u "$unit" --since "$since" --no-pager 2>/dev/null || true)"
+  else
+    logs="$(journalctl -u "$unit" -n 40 --no-pager 2>/dev/null || true)"
+  fi
   if echo "$logs" | grep -E "Traceback|NameError|ModuleNotFoundError|Failed to start" | grep -v "task_failed\|upload.*error\|rubika.*error" >/dev/null 2>&1; then
     err "Recent errors detected in journal for $unit"
     echo "$logs" | tail -n 80 >>"$LOG_FILE" 2>&1 || true
