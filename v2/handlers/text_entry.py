@@ -82,6 +82,8 @@ class TextEntryDeps:
     world_command_deps: Any
     get_direct_mode_target: Callable[[int], Optional[str]]
     set_direct_mode_target: Callable[[int, Optional[str]], None]
+    dispatch_admin_ops_wizard: AsyncWizardFn | None = None
+    admin_ops_deps: Any = None
 
 
 async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) -> None:
@@ -529,6 +531,12 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         elif getattr(message, "_admin_clear_state", False):
             deps.clear_state(user_id)
         return
+
+    if deps.dispatch_admin_ops_wizard and deps.admin_ops_deps:
+        if await deps.dispatch_admin_ops_wizard(
+            deps.admin_ops_deps, client, message, user_id, state, text
+        ):
+            return
 
     if await deps.handle_link_direct_text(deps.link_direct_deps, client, message, user_id, text):
         return

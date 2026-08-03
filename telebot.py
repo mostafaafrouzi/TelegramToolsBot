@@ -79,6 +79,17 @@ from v2.handlers.admin_commands import (
     handle_admin_tier,
     handle_cleanup_downloads,
 )
+from v2.handlers.admin_ops import (
+    AdminOpsDeps,
+    dispatch_admin_ops_wizard,
+    handle_admin_job_help,
+    handle_admin_service_status,
+    handle_admin_stats,
+    handle_admin_tail_logs,
+    handle_show_admin_broadcast_menu,
+    start_broadcast_segment,
+)
+
 from v2.handlers.plan_commands import (
     PlanCommandDeps,
     handle_plan,
@@ -393,18 +404,25 @@ app = build_bot_client(
 I18N = {
     "fa": {
         "welcome": (
-            "سلام 💙\n\n"
-            "شروع سریع در ۳ قدم:\n"
-            "۱) روبیکا را وصل کن\n"
-            "۲) یک فایل بفرست\n"
-            "۳) ارسال را تأیید کن\n\n"
-            "همچنین ابزارها، فید خوان، جهان و پلن از منوی اصلی در دسترس‌اند.\n"
-            "/menu منو · /lang زبان · /help راهنما"
+            "سلام 💙 به TelegramToolsBot\n\n"
+            "یک سوئیت کامل ابزار در تلگرام:\n"
+            "📁 انتقال فایل — روبیکا · بله · گوگل درایو · SSH · لینک مستقیم\n"
+            "🧰 ابزارها — DNS، پینگ، Whois، هش، Base64، Mini App و بیشتر\n"
+            "🌍 جهان — آب‌وهوا، نرخ ارز آزاد، زلزله، تقویم، زمان\n"
+            "📰 فیدخوان — RSS / یوتیوب / X با push و خلاصه روزانه\n"
+            "☁️ Cloudflare — مدیریت DNS شخصی\n"
+            "📋 حساب — پلن، مصرف، خرید\n\n"
+            "از منوی پایین بخش دلخواه را باز کن.\n"
+            "/menu · /help · /lang · /imenu"
         ),
-        "onboard_next_steps": "قدم بعدی را انتخاب کن:",
-        "onboard_checklist": "وضعیت اتصال:\n{rubika} روبیکا\n{bale} بله\n{drive} گوگل درایو",
-        "btn_onboard_rubika": "💬 اتصال روبیکا",
-        "btn_onboard_transfer": "📁 انتقال فایل",
+        "onboard_next_steps": "از کجا شروع کنیم؟",
+        "onboard_checklist": "وضعیت اتصال (اختیاری):\n{rubika} روبیکا\n{bale} بله\n{drive} گوگل درایو",
+        "btn_onboard_rubika": "💬 روبیکا",
+        "btn_onboard_transfer": "📁 انتقال",
+        "btn_onboard_tools": "🧰 ابزارها",
+        "btn_onboard_feed": "📰 فید",
+        "btn_onboard_world": "🌍 جهان",
+        "btn_onboard_plan": "📋 پلن",
         "btn_buy_pro_cta": "💳 ارتقا به Pro",
         "quota_soft_warn": (
             "⚠️ نزدیک سقف سهمیه هستی.\n"
@@ -516,6 +534,51 @@ I18N = {
         "btn_admin_reconcile": "تطبیق پرداخت‌ها",
         "btn_admin_cleanup": "پاکسازی دانلودها",
         "btn_admin_users_list": "📋 لیست کاربران",
+        "btn_admin_broadcast": "📣 پیام‌رسانی",
+        "btn_admin_stats": "📊 آمار",
+        "btn_admin_service_status": "⚙️ وضعیت سرویس",
+        "btn_admin_tail_logs": "📜 لاگ‌ها",
+        "btn_admin_job_help": "🔎 جستجوی job",
+        "btn_admin_bc_all": "همه",
+        "btn_admin_bc_known": "چت‌های شناخته",
+        "btn_admin_bc_new7": "جدید ۷روز",
+        "btn_admin_bc_guest": "پلن guest",
+        "btn_admin_bc_free": "پلن free",
+        "btn_admin_bc_pro": "پلن pro",
+        "btn_admin_bc_star": "پلن star",
+        "btn_admin_bc_expiring": "نزدیک انقضا",
+        "btn_admin_bc_expired": "منقضی‌شده",
+        "btn_admin_bc_inactive": "غیرفعال ۳۰روز",
+        "admin_broadcast_menu_title": "📣 پیام‌رسانی ادمین\nسگمنت را انتخاب کن؛ بعد متن پیام را بفرست و با بله تأیید کن.",
+        "admin_stats_body": (
+            "📊 آمار کاربران\n"
+            "کل فعالیت: {users_total}\n"
+            "چت شناخته: {known_chats}\n"
+            "جدید ۷روز: {new_7d}\n"
+            "غیرفعال ۳۰روز: {inactive_30d}\n"
+            "نزدیک انقضا ۷روز: {expiring_7d}\n"
+            "منقضی‌شده: {expired}\n"
+            "پلن‌ها — guest:{tier_guest} free:{tier_free} pro:{tier_pro} star:{tier_star}"
+        ),
+        "admin_broadcast_ask_body": "سگمنت `{segment}` ({label}) — مخاطب: {count}\nمتن پیام همگانی را بفرست (یا لغو).",
+        "admin_broadcast_body_empty": "متن پیام خالی است. متن را بفرست یا بگو لغو.",
+        "admin_broadcast_confirm": "ارسال به {count} نفر (سگمنت {segment})؟\n\nپیش‌نمایش:\n{preview}\n\nبرای تأیید: بله · برای لغو: خیر",
+        "admin_broadcast_confirm_hint": "بله / خیر را بفرست.",
+        "admin_broadcast_cancelled": "پیام‌رسانی لغو شد.",
+        "admin_broadcast_empty": "مخاطب یا متن خالی است.",
+        "admin_broadcast_sending": "در حال ارسال به {total} نفر…",
+        "admin_broadcast_progress": "پیشرفت {done}/{total} · موفق {sent} · ناموفق {failed}",
+        "admin_broadcast_done": "ارسال تمام شد.\nسگمنت: {segment}\nموفق: {sent} · ناموفق: {failed} · کل: {total}",
+        "admin_service_status_body": "⚙️ وضعیت سرویس\n\n{detail}",
+        "admin_tail_logs_body": "📜 لاگ‌های اخیر\n\n{detail}",
+        "admin_job_ask": "job_id را بفرست (یا لغو).",
+        "admin_job_not_found": "job پیدا نشد: {job_id}",
+        "feed_added_empty_warning": "فید ذخیره شد ولی فعلاً آیتمی نداشت. بعداً push یا مشاهده را امتحان کن.",
+        "feed_err_no_entries": "فید خوانده شد ولی آیتمی نداشت",
+        "feed_err_parse_failed": "ساختار فید قابل‌خواندن نبود",
+        "feed_err_http_error": "خطای HTTP هنگام دریافت فید",
+        "feed_err_timeout": "زمان دریافت فید تمام شد",
+
         "admin_users_list_empty": "هنوز کاربری ثبت نشده.",
         "btn_cf_connect": "🔐 اتصال CF",
         "btn_cf_status": "✅ وضعیت CF",
@@ -1197,18 +1260,25 @@ I18N = {
     },
     "en": {
         "welcome": (
-            "Hi 💙\n\n"
-            "Quick start in 3 steps:\n"
-            "1) Connect Rubika\n"
-            "2) Send a file\n"
-            "3) Confirm send\n\n"
-            "Tools, Feed Reader, World, and Plans are on the main menu.\n"
-            "/menu · /lang · /help"
+            "Hi 💙 Welcome to TelegramToolsBot\n\n"
+            "A full toolkit in Telegram:\n"
+            "📁 Transfer — Rubika · Bale · Google Drive · SSH · direct links\n"
+            "🧰 Tools — DNS, ping, Whois, hash, Base64, Mini App, and more\n"
+            "🌍 World — weather, Iran FX, quakes, calendar, time\n"
+            "📰 Feed Reader — RSS / YouTube / X with push & digest\n"
+            "☁️ Cloudflare — personal DNS management\n"
+            "📋 Account — plans, usage, purchase\n\n"
+            "Open any section from the menu below.\n"
+            "/menu · /help · /lang · /imenu"
         ),
-        "onboard_next_steps": "Pick a next step:",
-        "onboard_checklist": "Connection status:\n{rubika} Rubika\n{bale} Bale\n{drive} Google Drive",
-        "btn_onboard_rubika": "💬 Connect Rubika",
-        "btn_onboard_transfer": "📁 Transfer files",
+        "onboard_next_steps": "Where do you want to start?",
+        "onboard_checklist": "Optional connections:\n{rubika} Rubika\n{bale} Bale\n{drive} Google Drive",
+        "btn_onboard_rubika": "💬 Rubika",
+        "btn_onboard_transfer": "📁 Transfer",
+        "btn_onboard_tools": "🧰 Tools",
+        "btn_onboard_feed": "📰 Feed",
+        "btn_onboard_world": "🌍 World",
+        "btn_onboard_plan": "📋 Plan",
         "btn_buy_pro_cta": "💳 Upgrade to Pro",
         "quota_soft_warn": (
             "⚠️ You are nearing your quota.\n"
@@ -1320,6 +1390,51 @@ I18N = {
         "btn_admin_reconcile": "Reconcile billing",
         "btn_admin_cleanup": "Cleanup downloads",
         "btn_admin_users_list": "📋 User List",
+        "btn_admin_broadcast": "📣 Broadcast",
+        "btn_admin_stats": "📊 Stats",
+        "btn_admin_service_status": "⚙️ Service status",
+        "btn_admin_tail_logs": "📜 Tail logs",
+        "btn_admin_job_help": "🔎 Job lookup",
+        "btn_admin_bc_all": "All",
+        "btn_admin_bc_known": "Known chats",
+        "btn_admin_bc_new7": "New 7d",
+        "btn_admin_bc_guest": "Tier guest",
+        "btn_admin_bc_free": "Tier free",
+        "btn_admin_bc_pro": "Tier pro",
+        "btn_admin_bc_star": "Tier star",
+        "btn_admin_bc_expiring": "Expiring soon",
+        "btn_admin_bc_expired": "Expired",
+        "btn_admin_bc_inactive": "Inactive 30d",
+        "admin_broadcast_menu_title": "📣 Admin broadcast\nPick a segment, then send the message text and confirm with yes.",
+        "admin_stats_body": (
+            "📊 User stats\n"
+            "Activity users: {users_total}\n"
+            "Known chats: {known_chats}\n"
+            "New 7d: {new_7d}\n"
+            "Inactive 30d: {inactive_30d}\n"
+            "Expiring 7d: {expiring_7d}\n"
+            "Expired: {expired}\n"
+            "Tiers — guest:{tier_guest} free:{tier_free} pro:{tier_pro} star:{tier_star}"
+        ),
+        "admin_broadcast_ask_body": "Segment `{segment}` ({label}) — audience: {count}\nSend the broadcast text (or cancel).",
+        "admin_broadcast_body_empty": "Message body is empty. Send text or cancel.",
+        "admin_broadcast_confirm": "Send to {count} users (segment {segment})?\n\nPreview:\n{preview}\n\nConfirm: yes · Cancel: no",
+        "admin_broadcast_confirm_hint": "Send yes or no.",
+        "admin_broadcast_cancelled": "Broadcast cancelled.",
+        "admin_broadcast_empty": "Audience or body is empty.",
+        "admin_broadcast_sending": "Sending to {total} users…",
+        "admin_broadcast_progress": "Progress {done}/{total} · ok {sent} · fail {failed}",
+        "admin_broadcast_done": "Broadcast finished.\nSegment: {segment}\nOK: {sent} · fail: {failed} · total: {total}",
+        "admin_service_status_body": "⚙️ Service status\n\n{detail}",
+        "admin_tail_logs_body": "📜 Recent logs\n\n{detail}",
+        "admin_job_ask": "Send a job_id (or cancel).",
+        "admin_job_not_found": "Job not found: {job_id}",
+        "feed_added_empty_warning": "Feed saved but currently has no items. Try push/view later.",
+        "feed_err_no_entries": "Feed parsed but has no items",
+        "feed_err_parse_failed": "Could not parse feed structure",
+        "feed_err_http_error": "HTTP error fetching feed",
+        "feed_err_timeout": "Timed out fetching feed",
+
         "admin_users_list_empty": "No users recorded yet.",
         "btn_cf_connect": "🔐 CF Connect",
         "btn_cf_status": "✅ CF Status",
@@ -2229,6 +2344,10 @@ def build_admin_billing_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_admin_maintenance_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_admin_maintenance_menu(user_id, tr)
+
+
+def build_admin_broadcast_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_admin_broadcast_menu(user_id, tr)
 
 
 def safe_filename(name: Optional[str]) -> str:
@@ -3831,6 +3950,102 @@ ADMIN_COMMAND_DEPS = AdminCommandDeps(
     delete_v2_user_prefs=queue.delete_v2_user_prefs,
 )
 
+
+def _list_known_chat_ids() -> list[int]:
+    data = load_json(KNOWN_CHATS_FILE, {"ids": []})
+    out = []
+    for x in data.get("ids", []):
+        try:
+            out.append(int(x))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _list_expiring_user_ids(days: int) -> list[int]:
+    from user_entitlements import list_expiring_paid_tiers
+
+    rows = list_expiring_paid_tiers(within_sec=max(1, int(days)) * 86400, limit=5000)
+    return [int(r["user_id"]) for r in rows]
+
+
+def _admin_job_summary(job_id: str) -> str:
+    jid = (job_id or "").strip()
+    if not jid:
+        return ""
+    for task in queue.all_tasks():
+        if str(task.get("job_id") or "") == jid:
+            return (
+                f"job_id: {jid}\n"
+                f"status: queued\n"
+                f"type: {task.get('type')}\n"
+                f"user: {task.get('telegram_user_id')}\n"
+                f"session: {task.get('session_name')}\n"
+                f"file: {task.get('file_name') or task.get('path') or '-'}"
+            )
+    # failed / deleted markers
+    try:
+        from pathlib import Path as _P
+        failed = QUEUE_DIR / "failed.json"
+        if failed.is_file():
+            import json as _json
+            rows = _json.loads(failed.read_text(encoding="utf-8") or "[]")
+            for row in rows:
+                if str(row.get("job_id") or "") == jid:
+                    return f"job_id: {jid}\nstatus: failed\nerror: {row.get('error')}"
+    except Exception:
+        pass
+    return ""
+
+
+ADMIN_OPS_DEPS = AdminOpsDeps(
+    admin_ids=frozenset(ADMIN_IDS),
+    tr=tr,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    build_admin_broadcast_menu=build_admin_broadcast_menu,
+    build_admin_menu=build_admin_menu,
+    list_known_chat_ids=_list_known_chat_ids,
+    list_activity_user_ids=queue.list_activity_user_ids,
+    list_new_user_ids=queue.list_new_user_ids,
+    list_inactive_user_ids=queue.list_inactive_user_ids,
+    list_tier_user_ids=lambda tier: __import__("user_entitlements", fromlist=["list_tier_user_ids"]).list_tier_user_ids(tier),
+    list_expiring_user_ids=_list_expiring_user_ids,
+    list_expired_user_ids=lambda: __import__("user_entitlements", fromlist=["list_expired_paid_user_ids"]).list_expired_paid_user_ids(),
+    count_users=queue.count_users,
+    tier_counts=lambda: __import__("user_entitlements", fromlist=["tier_counts"]).tier_counts(),
+    service_unit="tele2rub",
+    queue_dir=QUEUE_DIR,
+    base_dir=BASE_DIR,
+    log_event=log_event,
+    get_job_summary=_admin_job_summary,
+)
+
+
+async def admin_stats_handler(client: Client, message: Message):
+    await handle_admin_stats(ADMIN_OPS_DEPS, client, message)
+
+
+async def admin_service_status_handler(client: Client, message: Message):
+    await handle_admin_service_status(ADMIN_OPS_DEPS, client, message)
+
+
+async def admin_tail_logs_handler(client: Client, message: Message):
+    await handle_admin_tail_logs(ADMIN_OPS_DEPS, client, message)
+
+
+async def admin_job_help_handler(client: Client, message: Message):
+    await handle_admin_job_help(ADMIN_OPS_DEPS, client, message)
+
+
+async def show_admin_broadcast_menu_handler(client: Client, message: Message):
+    await handle_show_admin_broadcast_menu(ADMIN_OPS_DEPS, client, message)
+
+
+async def admin_broadcast_seg_handler(client: Client, message: Message, segment: str):
+    await start_broadcast_segment(ADMIN_OPS_DEPS, message, segment)
+
 QUEUE_COMMAND_DEPS = QueueCommandDeps(
     tr=tr,
     set_menu_section=set_menu_section,
@@ -4487,6 +4702,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     build_admin_billing_menu=build_admin_billing_menu,
     build_toolkit_zip_menu=build_toolkit_zip_menu,
     build_admin_maintenance_menu=build_admin_maintenance_menu,
+    build_admin_broadcast_menu=build_admin_broadcast_menu,
     build_world_menu=build_world_menu,
     show_world_menu_handler=show_world_menu_handler,
     extra_slash_handlers={
@@ -4508,6 +4724,21 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
         "/feed_add": feed_add_handler,
         "/feeds": world_rss_list_handler,
         "/feed_help": feed_help_handler,
+        "/admin_stats": admin_stats_handler,
+        "/admin_service_status": admin_service_status_handler,
+        "/admin_tail_logs": admin_tail_logs_handler,
+        "/admin_job_help": admin_job_help_handler,
+        "/show_admin_broadcast_menu": show_admin_broadcast_menu_handler,
+        "/admin_broadcast_seg_all": lambda c, m: admin_broadcast_seg_handler(c, m, "all"),
+        "/admin_broadcast_seg_known": lambda c, m: admin_broadcast_seg_handler(c, m, "known"),
+        "/admin_broadcast_seg_new7": lambda c, m: admin_broadcast_seg_handler(c, m, "new7"),
+        "/admin_broadcast_seg_guest": lambda c, m: admin_broadcast_seg_handler(c, m, "guest"),
+        "/admin_broadcast_seg_free": lambda c, m: admin_broadcast_seg_handler(c, m, "free"),
+        "/admin_broadcast_seg_pro": lambda c, m: admin_broadcast_seg_handler(c, m, "pro"),
+        "/admin_broadcast_seg_star": lambda c, m: admin_broadcast_seg_handler(c, m, "star"),
+        "/admin_broadcast_seg_expiring7": lambda c, m: admin_broadcast_seg_handler(c, m, "expiring7"),
+        "/admin_broadcast_seg_expired": lambda c, m: admin_broadcast_seg_handler(c, m, "expired"),
+        "/admin_broadcast_seg_inactive30": lambda c, m: admin_broadcast_seg_handler(c, m, "inactive30"),
         "/plan_compare": plan_compare_handler,
         "/password": password_handler,
         "/revdns": reverse_dns_handler,
@@ -4778,6 +5009,8 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     cloudflare_command_deps=CLOUDFLARE_COMMAND_DEPS,
     dispatch_admin_wizard=dispatch_admin_wizard,
     admin_command_deps=ADMIN_COMMAND_DEPS,
+    dispatch_admin_ops_wizard=dispatch_admin_ops_wizard,
+    admin_ops_deps=ADMIN_OPS_DEPS,
     set_state_preserving_menu=set_state_preserving_menu,
     dispatch_zip_batch_wizard=dispatch_zip_batch_wizard,
     zip_batch_wizard_deps=ZIP_BATCH_WIZARD_DEPS,

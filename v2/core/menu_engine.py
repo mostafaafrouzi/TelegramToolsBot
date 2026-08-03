@@ -120,6 +120,8 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_admin_users": "/show_admin_users_menu",
     "btn_admin_billing": "/show_admin_billing_menu",
     "btn_admin_maintenance": "/show_admin_maintenance_menu",
+    "btn_admin_broadcast": "/show_admin_broadcast_menu",
+    "btn_admin_stats": "/admin_stats",
     "btn_admin_users_list": "/admin_users_list",
     "btn_admin_tier_help": "/admin_tier_wizard",
     "btn_admin_bonus_help": "/admin_bonus_wizard",
@@ -129,6 +131,19 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_admin_reconcile": "/admin_reconcile_billing",
     "btn_admin_cleanup": "/cleanup_downloads",
     "btn_admin_version": "/version",
+    "btn_admin_service_status": "/admin_service_status",
+    "btn_admin_tail_logs": "/admin_tail_logs",
+    "btn_admin_job_help": "/admin_job_help",
+    "btn_admin_bc_all": "/admin_broadcast_seg_all",
+    "btn_admin_bc_known": "/admin_broadcast_seg_known",
+    "btn_admin_bc_new7": "/admin_broadcast_seg_new7",
+    "btn_admin_bc_free": "/admin_broadcast_seg_free",
+    "btn_admin_bc_pro": "/admin_broadcast_seg_pro",
+    "btn_admin_bc_star": "/admin_broadcast_seg_star",
+    "btn_admin_bc_guest": "/admin_broadcast_seg_guest",
+    "btn_admin_bc_expiring": "/admin_broadcast_seg_expiring7",
+    "btn_admin_bc_expired": "/admin_broadcast_seg_expired",
+    "btn_admin_bc_inactive": "/admin_broadcast_seg_inactive30",
 }
 
 # Literal button text (slashes, aliases) — language-independent.
@@ -548,14 +563,37 @@ def build_admin_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
         _grid(
             [
                 tr(user_id, "btn_admin_panel"),
-                tr(user_id, "btn_admin_version"),
+                tr(user_id, "btn_admin_stats"),
                 tr(user_id, "btn_admin_users"),
                 tr(user_id, "btn_admin_billing"),
+                tr(user_id, "btn_admin_broadcast"),
                 tr(user_id, "btn_admin_maintenance"),
+                tr(user_id, "btn_admin_version"),
             ],
             3,
         )
         + [[tr(user_id, "btn_back_main")]]
+    )
+
+
+def build_admin_broadcast_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        _grid(
+            [
+                tr(user_id, "btn_admin_bc_all"),
+                tr(user_id, "btn_admin_bc_known"),
+                tr(user_id, "btn_admin_bc_new7"),
+                tr(user_id, "btn_admin_bc_guest"),
+                tr(user_id, "btn_admin_bc_free"),
+                tr(user_id, "btn_admin_bc_pro"),
+                tr(user_id, "btn_admin_bc_star"),
+                tr(user_id, "btn_admin_bc_expiring"),
+                tr(user_id, "btn_admin_bc_expired"),
+                tr(user_id, "btn_admin_bc_inactive"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")]]
     )
 
 
@@ -585,7 +623,8 @@ def build_admin_maintenance_menu(user_id: int, tr: Translator) -> ReplyKeyboardM
     return _reply(
         [
             [tr(user_id, "btn_admin_cleanup"), tr(user_id, "btn_admin_version")],
-            [tr(user_id, "btn_netstatus")],
+            [tr(user_id, "btn_admin_service_status"), tr(user_id, "btn_admin_tail_logs")],
+            [tr(user_id, "btn_admin_job_help"), tr(user_id, "btn_netstatus")],
             [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
         ]
     )

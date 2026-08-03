@@ -629,6 +629,45 @@ class QueueDB:
             ).fetchone()
             return dict(row) if row else None
 
+    def list_activity_user_ids(self, *, limit: int = 10000) -> list[int]:
+        with self._connect() as conn:
+            self._ensure_v2_user_activity_table(conn)
+            rows = conn.execute(
+                "SELECT telegram_user_id FROM v2_user_activity ORDER BY last_seen_at DESC LIMIT ?",
+                (max(1, int(limit)),),
+            ).fetchall()
+            return [int(r["telegram_user_id"]) for r in rows]
+
+    def list_new_user_ids(self, within_days: int = 7, *, limit: int = 5000) -> list[int]:
+        cutoff = int(time.time()) - max(0, int(within_days)) * 86400
+        with self._connect() as conn:
+            self._ensure_v2_user_activity_table(conn)
+            rows = conn.execute(
+                """
+                SELECT telegram_user_id FROM v2_user_activity
+                WHERE first_seen_at >= ?
+                ORDER BY first_seen_at DESC
+                LIMIT ?
+                """,
+                (cutoff, max(1, int(limit))),
+            ).fetchall()
+            return [int(r["telegram_user_id"]) for r in rows]
+
+    def list_inactive_user_ids(self, inactive_days: int = 30, *, limit: int = 5000) -> list[int]:
+        cutoff = int(time.time()) - max(0, int(inactive_days)) * 86400
+        with self._connect() as conn:
+            self._ensure_v2_user_activity_table(conn)
+            rows = conn.execute(
+                """
+                SELECT telegram_user_id FROM v2_user_activity
+                WHERE last_seen_at > 0 AND last_seen_at < ?
+                ORDER BY last_seen_at ASC
+                LIMIT ?
+                """,
+                (cutoff, max(1, int(limit))),
+            ).fetchall()
+            return [int(r["telegram_user_id"]) for r in rows]
+
     def upsert_menu_section(self, telegram_user_id: int, menu_section: str) -> None:
         """Mirror reply-keyboard menu section for v2 migration (dual-write with user_states.json)."""
         now = int(time.time())

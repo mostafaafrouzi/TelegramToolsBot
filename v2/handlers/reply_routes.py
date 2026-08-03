@@ -97,6 +97,7 @@ class ReplyRouteDeps:
     show_world_menu_handler: MessageHandler
     show_feed_menu_handler: MessageHandler
     extra_slash_handlers: dict[str, MessageHandler]
+    build_admin_broadcast_menu: MenuBuilder | None = None
 
 
 async def _run_slash(handler: MessageHandler, client: ClientRef, message: Message, command: str) -> None:
@@ -190,7 +191,12 @@ async def dispatch_reply_keyboard_route(
             reply_markup=deps.build_settings_menu(user_id),
         )
         return True
-    if mapped in ("/show_admin_users_menu", "/show_admin_billing_menu", "/show_admin_maintenance_menu"):
+    if mapped in (
+        "/show_admin_users_menu",
+        "/show_admin_billing_menu",
+        "/show_admin_maintenance_menu",
+        "/show_admin_broadcast_menu",
+    ):
         if user_id not in deps.admin_ids:
             await message.reply_text(tr(user_id, "admin_denied"))
             return True
@@ -201,6 +207,13 @@ async def dispatch_reply_keyboard_route(
         elif mapped == "/show_admin_billing_menu":
             title = tr(user_id, "admin_billing_menu_title")
             menu = deps.build_admin_billing_menu(user_id)
+        elif mapped == "/show_admin_broadcast_menu":
+            title = tr(user_id, "admin_broadcast_menu_title")
+            menu = (
+                deps.build_admin_broadcast_menu(user_id)
+                if deps.build_admin_broadcast_menu
+                else deps.build_admin_menu(user_id)
+            )
         else:
             title = tr(user_id, "admin_maintenance_menu_title")
             menu = deps.build_admin_maintenance_menu(user_id)

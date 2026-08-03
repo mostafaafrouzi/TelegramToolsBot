@@ -51,20 +51,19 @@ async def handle_start(deps: BasicCommandDeps, client: Any, message: Message) ->
     kb = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton(
-                    deps.tr(uid, "btn_onboard_rubika"),
-                    callback_data="imenu:rubika",
-                )
+                InlineKeyboardButton(deps.tr(uid, "btn_onboard_transfer"), callback_data="imenu:transfer"),
+                InlineKeyboardButton(deps.tr(uid, "btn_onboard_tools"), callback_data="imenu:toolkit"),
             ],
             [
-                InlineKeyboardButton(
-                    deps.tr(uid, "btn_onboard_transfer"),
-                    callback_data="imenu:transfer",
-                ),
-                InlineKeyboardButton(
-                    deps.tr(uid, "btn_main_help"),
-                    callback_data="imenu:help",
-                ),
+                InlineKeyboardButton(deps.tr(uid, "btn_onboard_world"), callback_data="imenu:world"),
+                InlineKeyboardButton(deps.tr(uid, "btn_onboard_feed"), callback_data="imenu:feeds"),
+            ],
+            [
+                InlineKeyboardButton(deps.tr(uid, "btn_onboard_rubika"), callback_data="imenu:rubika"),
+                InlineKeyboardButton(deps.tr(uid, "btn_onboard_plan"), callback_data="imenu:plan"),
+            ],
+            [
+                InlineKeyboardButton(deps.tr(uid, "btn_main_help"), callback_data="imenu:help"),
             ],
         ]
     )

@@ -371,6 +371,58 @@ def list_expiring_paid_tiers(*, within_sec: int = 3 * 86400, limit: int = 100) -
     ]
 
 
+def list_tier_user_ids(tier: str, *, limit: int = 5000) -> list[int]:
+    """User ids whose stored tier equals ``tier`` (not effective/expired remap)."""
+    t = (tier or "").strip().lower()
+    if t not in TIER_LIMITS:
+        return []
+    store = usage_store()
+    with store._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT user_id FROM user_entitlements
+            WHERE lower(tier) = ?
+            ORDER BY user_id ASC
+            LIMIT ?
+            """,
+            (t, max(1, int(limit))),
+        ).fetchall()
+    return [int(r["user_id"]) for r in rows]
+
+
+def list_expired_paid_user_ids(*, limit: int = 5000) -> list[int]:
+    """pro/star rows whose expires_at is in the past (still stored as paid tier)."""
+    store = usage_store()
+    now = int(time.time())
+    with store._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT user_id FROM user_entitlements
+            WHERE tier IN ('pro', 'star')
+              AND expires_at > 0
+              AND expires_at <= ?
+            ORDER BY expires_at DESC
+            LIMIT ?
+            """,
+            (now, max(1, int(limit))),
+        ).fetchall()
+    return [int(r["user_id"]) for r in rows]
+
+
+def tier_counts() -> dict[str, int]:
+    store = usage_store()
+    out = {k: 0 for k in TIER_LIMITS}
+    with store._connect() as conn:
+        rows = conn.execute(
+            "SELECT lower(tier) AS t, COUNT(1) AS c FROM user_entitlements GROUP BY lower(tier)"
+        ).fetchall()
+    for r in rows:
+        t = str(r["t"] or "")
+        if t in out:
+            out[t] = int(r["c"] or 0)
+    return out
+
+
 def set_user_tier(user_id: int, tier: str, expires_at: int = 0) -> None:
     tier = tier.strip().lower()
     if tier not in TIER_LIMITS:

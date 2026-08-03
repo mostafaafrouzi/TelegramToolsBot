@@ -232,9 +232,17 @@ async def dispatch_feed_wizard(
         return True
 
     ok, body, h = await asyncio.to_thread(fetch_feed, resolved, 6)
-    if not ok:
+    empty_ok = (not ok) and body == "no_entries"
+    if not ok and not empty_ok:
+        err_keys = {
+            "no_entries": "feed_err_no_entries",
+            "parse_failed": "feed_err_parse_failed",
+            "http_error": "feed_err_http_error",
+            "timeout": "feed_err_timeout",
+        }
+        detail = deps.tr(user_id, err_keys[body]) if body in err_keys else body
         await message.reply_text(
-            deps.tr(user_id, "feed_fetch_failed", detail=body, url=resolved),
+            deps.tr(user_id, "feed_fetch_failed", detail=detail, url=resolved),
             parse_mode=None,
         )
         return True
@@ -250,8 +258,13 @@ async def dispatch_feed_wizard(
     intro = deps.tr(user_id, "feed_added", feed_id=feed_id, kind=kind)
     if hint:
         intro += f"\n\n{hint}"
+    if empty_ok:
+        intro += "\n\n" + deps.tr(user_id, "feed_added_empty_warning")
+        preview = ""
+    else:
+        preview = "\n\n" + body[:3200]
     await message.reply_text(
-        intro + "\n\n" + body[:3200] + "\n\n" + deps.tr(user_id, "rss_push_ask"),
+        intro + preview + "\n\n" + deps.tr(user_id, "rss_push_ask"),
         reply_markup=_feed_actions_keyboard(
             user_id, feed_id, push_on=False, digest_on=True, tr=deps.tr
         ),

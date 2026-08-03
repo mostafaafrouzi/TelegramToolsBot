@@ -78,6 +78,10 @@ _TEXT_EXCLUDED_COMMANDS = [
     "admin_payment_lookup",
     "admin_payment_status",
     "admin_reconcile_billing",
+    "admin_stats",
+    "admin_service_status",
+    "admin_tail_logs",
+    "admin_job_help",
     "cleanup_downloads",
     "imenu",
     "httpheaders",
@@ -202,6 +206,10 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.admin_payment_lookup_handler, priv & cmd("admin_payment_lookup"))
     mh(tb.admin_payment_status_handler, priv & cmd("admin_payment_status"))
     mh(tb.admin_reconcile_billing_handler, priv & cmd("admin_reconcile_billing"))
+    mh(tb.admin_stats_handler, priv & cmd("admin_stats"))
+    mh(tb.admin_service_status_handler, priv & cmd("admin_service_status"))
+    mh(tb.admin_tail_logs_handler, priv & cmd("admin_tail_logs"))
+    mh(tb.admin_job_help_handler, priv & cmd("admin_job_help"))
     mh(tb.cleanup_downloads_handler, priv & cmd("cleanup_downloads"))
     mh(tb.safemode_handler, priv & cmd("safemode"))
     mh(tb.clear_queue_handler, priv & cmd("delall"))
