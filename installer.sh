@@ -837,6 +837,16 @@ update_flow(){
   stop_instance_services "$svc" "$split_flag"
   install_deps || return 1
   clone_or_update_repo "$dir" || return 1
+  # Running script may be the pre-pull copy; re-exec once so health checks match the new tree.
+  if [[ "${TELE2RUB_INSTALLER_REEXEC:-0}" != "1" && -f "$dir/installer.sh" ]]; then
+    info "Re-exec updated installer.sh once after git sync"
+    if [[ "${UPDATE_FORCE_AUTO:-0}" == "1" ]]; then
+      exec env TELE2RUB_INSTALLER_REEXEC=1 UPDATE_SKIP_BACKUP="${UPDATE_SKIP_BACKUP:-0}" UPDATE_FORCE_AUTO=1 \
+        bash "$dir/installer.sh" --update-quick
+    fi
+    exec env TELE2RUB_INSTALLER_REEXEC=1 UPDATE_SKIP_BACKUP="${UPDATE_SKIP_BACKUP:-0}" UPDATE_FORCE_AUTO=0 \
+      bash "$dir/installer.sh" --update
+  fi
   ensure_install_layout "$dir"
   setup_venv "$dir" || return 1
   update_build_version_in_env "$dir"
