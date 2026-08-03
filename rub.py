@@ -1001,18 +1001,23 @@ def worker_loop():
                 )
                 push_status(
                     task,
-                    "اینترنت بین‌الملل قطع است. کار حذف نشد و دوباره در صف قرار گرفت.",
+                    "اینترنت بین‌الملل قطع است. کار حذف نشد و دوباره در صف قرار گرفت.\nInternational network down — job requeued.",
                     "queued",
                 )
                 push_status(
                     new_task,
-                    f"کار به‌صورت خودکار retry شد.\nشناسه جدید: `{new_task.get('job_id')}`",
+                    f"Retry خودکار · Auto-retry\njob: {new_task.get('job_id')}",
                     "queued",
                 )
                 time.sleep(5)
             else:
                 append_failed(task, err)
-                push_status(task, f"خطا: {err}", "failed")
+                try:
+                    from v2.core.error_map import format_user_error
+
+                    push_status(task, format_user_error(err, lang="fa"), "failed")
+                except Exception:
+                    push_status(task, f"خطا: {err}", "failed")
         finally:
             clear_processing()
 

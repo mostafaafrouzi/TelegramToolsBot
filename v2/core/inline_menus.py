@@ -34,7 +34,10 @@ def build_inline_main(uid: int, tr: Translator, *, is_admin: bool) -> tuple[str,
             InlineKeyboardButton(tr(uid, "btn_main_plan_section"), callback_data="imenu:plan"),
             InlineKeyboardButton(tr(uid, "btn_main_help"), callback_data="imenu:help"),
         ),
-        _row(InlineKeyboardButton(tr(uid, "inline_world_menu"), callback_data="imenu:world")),
+        _row(
+            InlineKeyboardButton(tr(uid, "inline_world_menu"), callback_data="imenu:world"),
+            InlineKeyboardButton(tr(uid, "btn_main_feed"), callback_data="imenu:feeds"),
+        ),
     ]
     if is_admin:
         rows.append(_row(InlineKeyboardButton(tr(uid, "btn_main_admin"), callback_data="imenu:admin")))
@@ -144,10 +147,19 @@ def build_inline_world(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMar
             InlineKeyboardButton(tr(uid, "btn_world_currency"), callback_data="imenu:currency"),
             InlineKeyboardButton(tr(uid, "btn_world_earthquake"), callback_data="imenu:quake"),
         ),
+        _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
+    ]
+    return body, _kb(rows)
+
+
+def build_inline_feed(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMarkup]:
+    body = tr(uid, "feed_menu_title")
+    rows = [
         _row(
-            InlineKeyboardButton(tr(uid, "btn_feed_reader"), callback_data="imenu:feeds"),
-            InlineKeyboardButton(tr(uid, "btn_world_rss"), callback_data="imenu:rss"),
+            InlineKeyboardButton(tr(uid, "btn_feed_list"), callback_data="imenu:feeds"),
+            InlineKeyboardButton(tr(uid, "btn_feed_add"), callback_data="imenu:rss"),
         ),
+        _row(InlineKeyboardButton(tr(uid, "btn_feed_help"), callback_data="imenu:feed_help")),
         _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
     ]
     return body, _kb(rows)
@@ -200,7 +212,10 @@ def build_inline_plan(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMark
             InlineKeyboardButton(tr(uid, "btn_plan_plan"), callback_data="imenu:plan_show"),
             InlineKeyboardButton(tr(uid, "btn_plan_usage"), callback_data="imenu:usage"),
         ),
-        _row(InlineKeyboardButton(tr(uid, "btn_plan_buy"), callback_data="imenu:purchase")),
+        _row(
+            InlineKeyboardButton(tr(uid, "btn_plan_buy"), callback_data="imenu:purchase"),
+            InlineKeyboardButton(tr(uid, "btn_plan_compare"), callback_data="imenu:plan_compare"),
+        ),
         _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
     ]
     return body, _kb(rows)
@@ -212,6 +227,7 @@ _INLINE_BUILDERS = {
     "toolkit_net": build_inline_toolkit_network,
     "toolkit_crypto": build_inline_toolkit_crypto,
     "world": build_inline_world,
+    "feed": build_inline_feed,
     "transfer": build_inline_transfer,
     "settings": build_inline_settings,
     "plan": build_inline_plan,

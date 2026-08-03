@@ -106,12 +106,28 @@ class CloudflareWriteApiTests(unittest.TestCase):
 
 class MiniappApiTests(unittest.TestCase):
     def test_unknown_action(self):
+        import os
+        from unittest import mock
+
         from v2.web.miniapp_api import dispatch_miniapp_api
 
-        status, ctype, body = dispatch_miniapp_api("/miniapp/api/nope", "")
+        with mock.patch.dict(os.environ, {"MINIAPP_API_OPEN": "1"}, clear=False):
+            status, ctype, body = dispatch_miniapp_api("/miniapp/api/nope", "")
         self.assertEqual(status, 404)
         self.assertIn("json", ctype)
         self.assertIn(b"unknown_action", body)
+
+    def test_requires_auth_by_default(self):
+        import os
+        from unittest import mock
+
+        from v2.web.miniapp_api import dispatch_miniapp_api
+
+        with mock.patch.dict(os.environ, {"MINIAPP_API_OPEN": "0"}, clear=False):
+            status, _ctype, body = dispatch_miniapp_api("/miniapp/api/whois", "q=example.com")
+        self.assertEqual(status, 401)
+        low = body.lower()
+        self.assertTrue(b"missing" in low or b"unauthorized" in low or b"bad_hash" in low)
 
 
 if __name__ == "__main__":

@@ -15,7 +15,7 @@ class SafeModeCommandDeps:
     tr: TranslateFn
     load_settings: Callable[[], dict]
     save_settings: Callable[[dict], None]
-    set_waiting_for_zip_password: Callable[[bool], None]
+    set_waiting_for_zip_password: Callable[[bool, int], None]
 
 
 async def handle_safemode(deps: SafeModeCommandDeps, client: Any, message: Message) -> None:
@@ -31,7 +31,7 @@ async def handle_safemode(deps: SafeModeCommandDeps, client: Any, message: Messa
     if action == "on":
         settings["safe_mode"] = True
         deps.save_settings(settings)
-        deps.set_waiting_for_zip_password(True)
+        deps.set_waiting_for_zip_password(True, uid)
         await message.reply_text(deps.tr(uid, "safemode_on"))
         return
 
@@ -39,7 +39,7 @@ async def handle_safemode(deps: SafeModeCommandDeps, client: Any, message: Messa
         settings["safe_mode"] = False
         settings["zip_password"] = ""
         deps.save_settings(settings)
-        deps.set_waiting_for_zip_password(False)
+        deps.set_waiting_for_zip_password(False, uid)
         await message.reply_text(deps.tr(uid, "safemode_off"))
         return
 

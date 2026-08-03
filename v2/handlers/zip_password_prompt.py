@@ -1,4 +1,4 @@
-"""Handle global safe-mode ZIP password prompt (legacy global flag in telebot)."""
+"""Handle per-user safe-mode ZIP password prompt."""
 
 from __future__ import annotations
 
@@ -12,8 +12,8 @@ TranslateFn = Callable[[int, str], str]
 
 @dataclass(frozen=True)
 class ZipPasswordPromptDeps:
-    get_waiting_for_password: Callable[[], bool]
-    set_waiting_for_password: Callable[[bool], None]
+    get_waiting_for_password: Callable[[int], bool]
+    set_waiting_for_password: Callable[[bool, int], None]
     tr: TranslateFn
     load_settings: Callable[[], dict]
     save_settings: Callable[[Dict], None]
@@ -26,10 +26,10 @@ async def handle_zip_password_text(
     deps: ZipPasswordPromptDeps,
 ) -> bool:
     """
-    If bot is waiting for ZIP password after safemode on, consume message.
+    If this user is waiting for ZIP password after safemode on, consume message.
     Returns True when handled (including empty password re-prompt).
     """
-    if not deps.get_waiting_for_password():
+    if not deps.get_waiting_for_password(user_id):
         return False
 
     password = text.strip()
@@ -42,7 +42,7 @@ async def handle_zip_password_text(
     settings["zip_password"] = password
     deps.save_settings(settings)
 
-    deps.set_waiting_for_password(False)
+    deps.set_waiting_for_password(False, user_id)
 
     await message.reply_text(deps.tr(user_id, "password_saved_zip"))
     return True

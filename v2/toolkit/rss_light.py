@@ -144,14 +144,27 @@ def items_fingerprint(items: list[dict], *, n: int = 8) -> str:
 
 
 def format_items_body(items: list[dict]) -> str:
-    lines = []
+    blocks = []
     for i in items:
         title = (i.get("title") or "").strip()
         link = (i.get("link") or "").strip()
+        pub = (i.get("published") or "").strip()
+        desc = (i.get("description") or "").strip()
         if not title:
             continue
-        lines.append(f"• {title}\n  {link}" if link else f"• {title}")
-    return "\n\n".join(lines)
+        parts = [f"• {title}"]
+        if pub:
+            parts.append(f"  {pub[:40]}")
+        if desc:
+            snippet = re.sub(r"\s+", " ", desc).strip()
+            if len(snippet) > 120:
+                snippet = snippet[:117] + "…"
+            if snippet:
+                parts.append(f"  {snippet}")
+        if link:
+            parts.append(f"  {link}")
+        blocks.append("\n".join(parts))
+    return "\n\n".join(blocks)
 
 
 def fetch_feed_items(url: str, limit: int = 8) -> tuple[bool, list[dict], str]:

@@ -30,20 +30,27 @@ DISABLE_USAGE_LIMITS = os.getenv("DISABLE_USAGE_LIMITS", "").strip().lower() in 
 
 DEFAULT_TIER_FOR_NEW_USER = "free"
 
+# toolkit/world daily: 0 = unlimited. feed_push_allowed: 0/1.
 TIER_LIMITS: dict[str, dict[str, int]] = {
     "guest": {
         "quota_day_mb": 100,
         "quota_month_mb": 500,
         "max_file_mb": 50,
         "max_parallel": 1,
-        "toolkit_daily_cmds": 25,
+        "toolkit_daily_cmds": 15,
+        "world_daily_cmds": 10,
+        "feed_max": 5,
+        "feed_push_allowed": 0,
     },
     "free": {
         "quota_day_mb": 500,
         "quota_month_mb": 5000,
         "max_file_mb": 500,
         "max_parallel": 2,
-        "toolkit_daily_cmds": 0,
+        "toolkit_daily_cmds": 40,
+        "world_daily_cmds": 30,
+        "feed_max": 20,
+        "feed_push_allowed": 1,
     },
     "pro": {
         "quota_day_mb": 5000,
@@ -51,6 +58,19 @@ TIER_LIMITS: dict[str, dict[str, int]] = {
         "max_file_mb": 2048,
         "max_parallel": 5,
         "toolkit_daily_cmds": 0,
+        "world_daily_cmds": 0,
+        "feed_max": 50,
+        "feed_push_allowed": 1,
+    },
+    "star": {
+        "quota_day_mb": 15000,
+        "quota_month_mb": 120000,
+        "max_file_mb": 2048,
+        "max_parallel": 8,
+        "toolkit_daily_cmds": 0,
+        "world_daily_cmds": 0,
+        "feed_max": 100,
+        "feed_push_allowed": 1,
     },
 }
 
@@ -63,6 +83,9 @@ class ResolvedLimits:
     max_file_mb: int
     max_parallel: int
     toolkit_daily_cmds: int
+    world_daily_cmds: int
+    feed_max: int
+    feed_push_allowed: bool
     expires_at: int
 
 
@@ -146,7 +169,7 @@ def _effective_tier(row: Optional[sqlite3.Row]) -> str:
     if tier not in TIER_LIMITS:
         tier = DEFAULT_TIER_FOR_NEW_USER
     exp = int(row["expires_at"] or 0)
-    if tier == "pro" and exp > 0 and int(time.time()) > exp:
+    if tier in ("pro", "star") and exp > 0 and int(time.time()) > exp:
         return "free"
     return tier
 
@@ -173,6 +196,9 @@ def resolved_limits(user_id: int) -> ResolvedLimits:
         max_file_mb=base["max_file_mb"],
         max_parallel=base["max_parallel"],
         toolkit_daily_cmds=int(base.get("toolkit_daily_cmds", 0)),
+        world_daily_cmds=int(base.get("world_daily_cmds", 0)),
+        feed_max=int(base.get("feed_max", 20)),
+        feed_push_allowed=bool(int(base.get("feed_push_allowed", 0))),
         expires_at=exp,
     )
 
@@ -199,6 +225,66 @@ def effective_toolkit_daily_limit(user_id: int) -> int:
             return env_cap
         return min(tier_cap, env_cap)
     return tier_cap
+
+
+def effective_world_daily_limit(user_id: int) -> int:
+    """Max World/FX tool invocations per UTC day. 0 = unlimited."""
+    if DISABLE_USAGE_LIMITS:
+        return 0
+    return int(resolved_limits(user_id).world_daily_cmds)
+
+
+def effective_feed_max(user_id: int) -> int:
+    """Max saved feeds for user. Env WORLD_FEED_LIMIT_* can raise/override ceilings."""
+    lim = resolved_limits(user_id)
+    base = int(lim.feed_max)
+    env_key = {
+        "guest": "WORLD_FEED_LIMIT_GUEST",
+        "free": "WORLD_FEED_LIMIT_FREE",
+        "pro": "WORLD_FEED_LIMIT_PRO",
+        "star": "WORLD_FEED_LIMIT_STAR",
+    }.get(lim.tier, "WORLD_FEED_LIMIT_FREE")
+    raw = (os.getenv(env_key) or "").strip()
+    if raw:
+        try:
+            return max(1, int(raw))
+        except ValueError:
+            pass
+    return max(1, base)
+
+
+def feed_push_allowed(user_id: int) -> bool:
+    if DISABLE_USAGE_LIMITS:
+        return True
+    return bool(resolved_limits(user_id).feed_push_allowed)
+
+
+def plan_matrix_text(*, lang: str = "fa") -> str:
+    """Human-readable Free/Pro/Star comparison (guest omitted from marketing)."""
+    blocks = []
+    for tier in ("free", "pro", "star"):
+        b = TIER_LIMITS[tier]
+        tk = "∞" if int(b["toolkit_daily_cmds"]) == 0 else str(b["toolkit_daily_cmds"])
+        wd = "∞" if int(b["world_daily_cmds"]) == 0 else str(b["world_daily_cmds"])
+        if lang == "en":
+            push = "yes" if b["feed_push_allowed"] else "no"
+            blocks.append(
+                f"▸ {tier.upper()}\n"
+                f"  Transfer: {b['quota_day_mb']} / {b['quota_month_mb']} MB (day/mo)\n"
+                f"  File: {b['max_file_mb']} MB · Parallel: {b['max_parallel']}\n"
+                f"  Toolkit/day: {tk} · World/day: {wd}\n"
+                f"  Feeds: {b['feed_max']} · Push: {push}"
+            )
+        else:
+            push_fa = "بله" if b["feed_push_allowed"] else "خیر"
+            blocks.append(
+                f"▸ {tier.upper()}\n"
+                f"  انتقال: {b['quota_day_mb']} / {b['quota_month_mb']} MB (روز/ماه)\n"
+                f"  فایل: {b['max_file_mb']} MB · موازی: {b['max_parallel']}\n"
+                f"  ابزار/روز: {tk} · جهان/روز: {wd}\n"
+                f"  فید: {b['feed_max']} · Push: {push_fa}"
+            )
+    return "\n\n".join(blocks)
 
 
 def get_usage_snapshot(user_id: int) -> dict[str, Any]:
@@ -229,6 +315,10 @@ def get_usage_snapshot(user_id: int) -> dict[str, Any]:
         "quota_month_mb": lim.quota_month_mb,
         "max_file_mb": lim.max_file_mb,
         "max_parallel": lim.max_parallel,
+        "toolkit_daily_cmds": lim.toolkit_daily_cmds,
+        "world_daily_cmds": lim.world_daily_cmds,
+        "feed_max": lim.feed_max,
+        "feed_push_allowed": lim.feed_push_allowed,
     }
 
 
@@ -252,6 +342,33 @@ def record_successful_upload_bytes(user_id: int, byte_count: int) -> None:
                     (int(user_id), bucket, b),
                 )
             conn.commit()
+
+
+def list_expiring_paid_tiers(*, within_sec: int = 3 * 86400, limit: int = 100) -> list[dict[str, Any]]:
+    """Users on pro/star whose expires_at is in (now, now+within_sec]."""
+    store = usage_store()
+    now = int(time.time())
+    until = now + max(0, int(within_sec))
+    with store._connect() as conn:
+        rows = conn.execute(
+            """
+            SELECT user_id, tier, expires_at FROM user_entitlements
+            WHERE tier IN ('pro', 'star')
+              AND expires_at > ?
+              AND expires_at <= ?
+            ORDER BY expires_at ASC
+            LIMIT ?
+            """,
+            (now, until, max(1, int(limit))),
+        ).fetchall()
+    return [
+        {
+            "user_id": int(r["user_id"]),
+            "tier": str(r["tier"]),
+            "expires_at": int(r["expires_at"] or 0),
+        }
+        for r in rows
+    ]
 
 
 def set_user_tier(user_id: int, tier: str, expires_at: int = 0) -> None:
@@ -387,6 +504,18 @@ def can_enqueue(
         detail["remain_month_mb"] = max(0, (month_limit - month_b) / (1024 * 1024))
         detail["need_mb"] = f"{job_bytes_estimate / (1024 * 1024):.1f}"
         return False, "quota_month", detail
+
+    # Soft warning when projected usage crosses 80% of day or month caps.
+    warn_codes: list[str] = []
+    if day_limit > 0 and (day_b + job_bytes_estimate) / day_limit >= 0.8:
+        warn_codes.append("day")
+        detail["day_pct"] = round(100.0 * (day_b + job_bytes_estimate) / day_limit, 1)
+    if month_limit > 0 and (month_b + job_bytes_estimate) / month_limit >= 0.8:
+        warn_codes.append("month")
+        detail["month_pct"] = round(100.0 * (month_b + job_bytes_estimate) / month_limit, 1)
+    if warn_codes:
+        detail["quota_soft_warn"] = warn_codes
+        return True, "ok_warn", detail
 
     return True, "ok", detail
 

@@ -27,6 +27,16 @@ AsyncRouteFn = Callable[..., Awaitable[bool]]
 AsyncWizardFn = Callable[..., Awaitable[bool]]
 
 
+async def _reply_quota_fail(deps: "TextEntryDeps", message: Message, user_id: int, quota_msg: str) -> None:
+    from v2.core.upgrade_cta import buy_pro_keyboard
+
+    await message.reply_text(
+        quota_msg,
+        reply_markup=buy_pro_keyboard(user_id, deps.tr),
+        parse_mode=None,
+    )
+
+
 @dataclass(frozen=True)
 class TextEntryDeps:
     tr: TranslateFn
@@ -182,7 +192,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         ok, body = get_ip_info(ip)
         if not ok:
@@ -206,7 +216,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         ok, body = rdap_lookup(target)
         if not ok:
@@ -230,7 +240,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         ok, body = resolve_hostname(host)
         if not ok:
@@ -261,7 +271,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         ok, ms, used_port = smart_tcp_ping(host, port=port)
         if not ok:
@@ -303,7 +313,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         inp, trunc = clip_input(raw)
         extra = "\n" + deps.tr(user_id, "toolkit_input_truncated") if trunc else ""
@@ -358,7 +368,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         from v2.toolkit.extra_tools_light import reverse_dns
 
@@ -384,7 +394,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         from v2.toolkit.mac_light import mac_vendor_lookup
 
@@ -409,7 +419,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         from v2.toolkit.email_light import validate_email
 
@@ -434,7 +444,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         from v2.toolkit.extra_tools_light import expand_url
 
@@ -459,7 +469,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         from v2.toolkit.extra_tools_light import unix_timestamp_convert
 
@@ -496,7 +506,7 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:
             deps.clear_state(user_id)
-            await message.reply_text(quota_msg, parse_mode=None)
+            await _reply_quota_fail(deps, message, user_id, quota_msg)
             return
         from v2.toolkit.google_search_light import google_search
 

@@ -73,11 +73,11 @@ async def dispatch_admin_wizard(
 
     if step == "admin_tier_tier":
         tier = text.strip().lower()
-        if tier not in ("guest", "free", "pro"):
+        if tier not in ("guest", "free", "pro", "star"):
             await message.reply_text(deps.tr(user_id, "admin_wizard_tier_ask"), parse_mode=None)
             return True
         target = int(state.get("admin_target_user_id") or 0)
-        if tier == "pro":
+        if tier in ("pro", "star"):
             message._admin_next_state = {  # type: ignore[attr-defined]
                 "step": "admin_tier_days",
                 "admin_target_user_id": target,
@@ -262,7 +262,7 @@ async def handle_admin_tier(deps: AdminCommandDeps, client: Any, message: Messag
     parts = (message.text or "").split()
     if len(parts) < 3:
         await message.reply_text(
-            "Usage: `/admin_tier <telegram_user_id> <guest|free|pro> [days_valid_for_pro]`",
+            "Usage: `/admin_tier <telegram_user_id> <guest|free|pro|star> [days_valid]`",
             parse_mode=None,
         )
         return
@@ -276,7 +276,7 @@ async def handle_admin_tier(deps: AdminCommandDeps, client: Any, message: Messag
     if len(parts) >= 4:
         try:
             days = int(parts[3].strip())
-            if tier == "pro" and days > 0:
+            if tier in ("pro", "star") and days > 0:
                 exp = int(time.time()) + days * 86400
         except ValueError:
             pass

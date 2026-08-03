@@ -181,7 +181,11 @@
   }
 
   async function miniappApi(action, params) {
-    const qs = new URLSearchParams(params || {}).toString();
+    const p = Object.assign({}, params || {});
+    if (tg && tg.initData) {
+      p.initData = tg.initData;
+    }
+    const qs = new URLSearchParams(p).toString();
     const url = apiBase() + "/miniapp/api/" + action + (qs ? "?" + qs : "");
     const r = await fetch(url, { headers: { Accept: "application/json" } });
     const j = await r.json();

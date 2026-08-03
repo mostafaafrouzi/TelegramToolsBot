@@ -22,6 +22,9 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_main_feed": "/show_feed_menu",
     "btn_main_miniapp": "/miniapp",
     "btn_feed_reader": "/show_feed_menu",
+    "btn_feed_add": "/feed_add",
+    "btn_feed_list": "/feeds",
+    "btn_feed_help": "/feed_help",
     "btn_main_help": "/help",
     "btn_main_admin": "/show_admin_menu",
     "btn_back_main": "/menu",
@@ -106,6 +109,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_plan_plan": "/plan",
     "btn_plan_usage": "/usage",
     "btn_plan_buy": "/purchase",
+    "btn_plan_compare": "/plan_compare",
     "btn_admin_panel": "/admin",
     "btn_cf_connect": "/cf_connect",
     "btn_cf_status": "/cf_status",
@@ -277,6 +281,7 @@ def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboa
         tr(user_id, "btn_main_toolkit"),
         tr(user_id, "btn_main_miniapp"),
         tr(user_id, "btn_main_world"),
+        tr(user_id, "btn_main_feed"),
         tr(user_id, "btn_main_ssh"),
         tr(user_id, "btn_main_cloudflare"),
         tr(user_id, "btn_main_plan_section"),
@@ -295,7 +300,22 @@ def build_plan_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_plan_plan"),
                 tr(user_id, "btn_plan_usage"),
                 tr(user_id, "btn_plan_buy"),
+                tr(user_id, "btn_plan_compare"),
                 tr(user_id, "btn_queue"),
+            ],
+            3,
+        )
+        + [[tr(user_id, "btn_back_main")]]
+    )
+
+
+def build_feed_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _reply(
+        _grid(
+            [
+                tr(user_id, "btn_feed_list"),
+                tr(user_id, "btn_feed_add"),
+                tr(user_id, "btn_feed_help"),
             ],
             3,
         )
@@ -328,8 +348,6 @@ def build_world_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_world_age"),
                 tr(user_id, "btn_world_currency"),
                 tr(user_id, "btn_world_earthquake"),
-                tr(user_id, "btn_feed_reader"),
-                tr(user_id, "btn_world_rss"),
             ],
             3,
         )

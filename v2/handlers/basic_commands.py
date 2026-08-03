@@ -21,30 +21,73 @@ class BasicCommandDeps:
     set_direct_mode_target: Callable[[int, Optional[str]], None]
     build_main_menu: Callable[[int], Any]
     app_version: str
+    clear_state: Callable[[int], None] | None = None
+    connection_checklist: Callable[[int], str] | None = None
+
+
+def _clear_wizard(deps: BasicCommandDeps, uid: int) -> None:
+    if deps.clear_state:
+        try:
+            deps.clear_state(uid)
+        except Exception:
+            pass
 
 
 async def handle_start(deps: BasicCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    # Exiting the "direct menu" or typing /start should disable direct mode first.
     if deps.get_direct_mode_target(uid):
         deps.set_direct_mode_target(uid, None)
+    _clear_wizard(deps, uid)
     deps.remember_chat(message.chat.id)
     deps.set_menu_section(uid, MenuSection.MAIN)
-    await message.reply_text(
-        deps.tr(uid, "welcome"),
-        reply_markup=deps.build_main_menu(uid),
+
+    body = deps.tr(uid, "welcome")
+    if deps.connection_checklist:
+        try:
+            body = body + "\n\n" + deps.connection_checklist(uid)
+        except Exception:
+            pass
+
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    deps.tr(uid, "btn_onboard_rubika"),
+                    callback_data="imenu:rubika",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    deps.tr(uid, "btn_onboard_transfer"),
+                    callback_data="imenu:transfer",
+                ),
+                InlineKeyboardButton(
+                    deps.tr(uid, "btn_main_help"),
+                    callback_data="imenu:help",
+                ),
+            ],
+        ]
     )
+    await message.reply_text(body, reply_markup=deps.build_main_menu(uid), parse_mode=None)
+    await message.reply_text(deps.tr(uid, "onboard_next_steps"), reply_markup=kb, parse_mode=None)
 
 
 async def handle_menu(deps: BasicCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    # Leaving any direct-menu flow back to main should disable direct mode first.
     if deps.get_direct_mode_target(uid):
         deps.set_direct_mode_target(uid, None)
+    _clear_wizard(deps, uid)
     deps.set_menu_section(uid, MenuSection.MAIN)
+    body = deps.tr(uid, "menu_intro")
+    if deps.connection_checklist:
+        try:
+            body = body + "\n\n" + deps.connection_checklist(uid)
+        except Exception:
+            pass
     await message.reply_text(
-        deps.tr(uid, "menu_intro"),
+        body,
         reply_markup=deps.build_main_menu(uid),
+        parse_mode=None,
     )
 
 

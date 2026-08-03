@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import json
+import os
+import time
 import urllib.parse
+from collections import defaultdict, deque
 from typing import Any
 
 from v2.toolkit.net_extra_light import (
@@ -14,6 +17,11 @@ from v2.toolkit.net_extra_light import (
 )
 from v2.toolkit.ping_light import smart_tcp_ping
 from v2.toolkit.whois_light import rdap_lookup
+from v2.web.telegram_webapp_auth import validate_init_data
+
+_RATE: dict[str, deque[float]] = defaultdict(deque)
+_RATE_LIMIT = 30
+_RATE_WINDOW = 60.0
 
 
 def _q(params: dict[str, list[str]], key: str) -> str:
@@ -21,14 +29,43 @@ def _q(params: dict[str, list[str]], key: str) -> str:
     return (vals[0] if vals else "").strip()
 
 
-def _json_response(ok: bool, *, text: str = "", error: str = "") -> tuple[int, bytes]:
+def _json_response(ok: bool, *, text: str = "", error: str = "", http: int | None = None) -> tuple[int, bytes]:
     body: dict[str, Any] = {"ok": ok}
     if ok:
         body["text"] = text
     else:
         body["error"] = error or text or "error"
     raw = json.dumps(body, ensure_ascii=False).encode("utf-8")
+    if http is not None:
+        return http, raw
     return 200 if ok else 400, raw
+
+
+def _rate_ok(bucket: str) -> bool:
+    now = time.time()
+    q = _RATE[bucket]
+    while q and now - q[0] > _RATE_WINDOW:
+        q.popleft()
+    if len(q) >= _RATE_LIMIT:
+        return False
+    q.append(now)
+    return True
+
+
+def _auth_ok(params: dict[str, list[str]]) -> tuple[bool, str]:
+    """Require Telegram initData unless MINIAPP_API_OPEN=1 (dev only)."""
+    open_mode = (os.getenv("MINIAPP_API_OPEN") or "").strip().lower() in ("1", "true", "yes")
+    if open_mode:
+        return True, "open"
+    init_data = _q(params, "initData") or _q(params, "init_data")
+    ok, payload = validate_init_data(init_data)
+    if not ok:
+        return False, str(payload.get("error") or "unauthorized")
+    user = payload.get("user") or {}
+    uid = str(user.get("id") or "anon")
+    if not _rate_ok(uid):
+        return False, "rate_limited"
+    return True, uid
 
 
 def dispatch_miniapp_api(path: str, query_string: str) -> tuple[int, str, bytes]:
@@ -45,6 +82,12 @@ def dispatch_miniapp_api(path: str, query_string: str) -> tuple[int, str, bytes]
         action = sub.split("/")[-1].lower() if "/api/" in sub else ""
 
     params = urllib.parse.parse_qs(query_string or "", keep_blank_values=False)
+
+    auth_ok, auth_detail = _auth_ok(params)
+    if not auth_ok:
+        code = 429 if auth_detail == "rate_limited" else 401
+        status, body = _json_response(False, error=auth_detail, http=code)
+        return status, "application/json; charset=utf-8", body
 
     if action == "headers":
         url = _q(params, "url")

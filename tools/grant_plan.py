@@ -20,17 +20,17 @@ from user_entitlements import add_bonus_month_mb, set_user_tier  # noqa: E402
 def main() -> None:
     p = argparse.ArgumentParser(description="Grant tier or monthly bonus MB to a Telegram user id.")
     sub = p.add_subparsers(dest="cmd", required=True)
-    t = sub.add_parser("tier", help="Set guest|free|pro")
+    t = sub.add_parser("tier", help="Set guest|free|pro|star")
     t.add_argument("user_id", type=int)
-    t.add_argument("name", choices=["guest", "free", "pro"])
-    t.add_argument("--days", type=int, default=0, help="If tier is pro, validity in days (from now).")
+    t.add_argument("name", choices=["guest", "free", "pro", "star"])
+    t.add_argument("--days", type=int, default=0, help="If tier is pro/star, validity in days (from now).")
     b = sub.add_parser("bonus", help="Add extra monthly quota MB (stacking)")
     b.add_argument("user_id", type=int)
     b.add_argument("mb", type=int)
     args = p.parse_args()
     if args.cmd == "tier":
         exp = 0
-        if args.name == "pro" and args.days > 0:
+        if args.name in ("pro", "star") and args.days > 0:
             exp = int(time.time()) + args.days * 86400
         set_user_tier(args.user_id, args.name, exp)
         print(f"OK tier={args.name} user={args.user_id} expires_at={exp}")

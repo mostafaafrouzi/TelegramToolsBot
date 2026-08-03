@@ -44,6 +44,8 @@ class InlineMenuDeps:
     show_files_menu_handler: Callable[..., Awaitable[None]]
     show_link_direct_menu_handler: Callable[..., Awaitable[None]]
     admin_handler: Callable[..., Awaitable[None]]
+    plan_compare_handler: Callable[..., Awaitable[None]] | None = None
+    show_feed_menu_handler: Callable[..., Awaitable[None]] | None = None
 
 
 _IMENU_ACTIONS = frozenset(
@@ -177,9 +179,16 @@ async def dispatch_inline_menu_callback(
         return True
     if k == "feeds":
         await callback_query.answer()
-        from v2.handlers.feed_reader_commands import handle_show_feed_menu
+        if deps.show_feed_menu_handler:
+            await deps.show_feed_menu_handler(client, msg)
+        else:
+            from v2.handlers.feed_reader_commands import handle_show_feed_menu
 
-        await handle_show_feed_menu(deps.feed_reader_deps, client, msg)
+            await handle_show_feed_menu(deps.feed_reader_deps, client, msg)
+        return True
+    if k == "feed_help":
+        await callback_query.answer()
+        await msg.reply_text(deps.tr(user_id, "feed_help_body"), parse_mode=None)
         return True
 
     if k == "rss":
@@ -193,6 +202,11 @@ async def dispatch_inline_menu_callback(
         from v2.handlers.feed_reader_commands import list_feeds_inline
 
         await list_feeds_inline(deps.feed_reader_deps, msg)
+        return True
+    if k == "plan_compare":
+        await callback_query.answer()
+        if deps.plan_compare_handler:
+            await deps.plan_compare_handler(client, msg)
         return True
 
     if k in ("dm_rubika", "dm_bale", "dm_drive"):

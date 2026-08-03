@@ -92,6 +92,19 @@ class QueueDB:
         if "ssh_key_path" not in cols:
             conn.execute("ALTER TABLE v2_ssh_servers ADD COLUMN ssh_key_path TEXT")
 
+    def _migrate_v2_feeds_digest(self, conn):
+        rows = conn.execute("PRAGMA table_info(v2_feeds)").fetchall()
+        if not rows:
+            return
+        cols = {r[1] for r in rows}
+        if "digest_enabled" not in cols:
+            conn.execute(
+                "ALTER TABLE v2_feeds ADD COLUMN digest_enabled INTEGER NOT NULL DEFAULT 0"
+            )
+            conn.execute(
+                "UPDATE v2_feeds SET digest_enabled = 1 WHERE push_enabled = 1"
+            )
+
     def _migrate_v2_user_prefs_bale_chat(self, conn):
         rows = conn.execute("PRAGMA table_info(v2_user_prefs)").fetchall()
         if not rows:
@@ -267,6 +280,7 @@ class QueueDB:
                     feed_url TEXT NOT NULL,
                     label TEXT,
                     push_enabled INTEGER NOT NULL DEFAULT 0,
+                    digest_enabled INTEGER NOT NULL DEFAULT 0,
                     last_content_hash TEXT,
                     created_at INTEGER NOT NULL,
                     updated_at INTEGER NOT NULL
@@ -276,7 +290,28 @@ class QueueDB:
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_v2_feeds_user ON v2_feeds(telegram_user_id)"
             )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS v2_world_daily (
+                    telegram_user_id INTEGER NOT NULL,
+                    day_ymd TEXT NOT NULL,
+                    hit_count INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (telegram_user_id, day_ymd)
+                )
+                """
+            )
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS v2_feed_digest_stamp (
+                    telegram_user_id INTEGER NOT NULL,
+                    day_ymd TEXT NOT NULL,
+                    sent_at INTEGER NOT NULL DEFAULT 0,
+                    PRIMARY KEY (telegram_user_id, day_ymd)
+                )
+                """
+            )
             self._migrate_v2_ssh_servers_secret(conn)
+            self._migrate_v2_feeds_digest(conn)
             conn.commit()
 
     def get_direct_mode(self, telegram_user_id: int) -> Optional[bool]:
@@ -713,6 +748,8 @@ class QueueDB:
                 conn.commit()
 
     def get_bale_credentials(self, telegram_user_id: int) -> tuple[Optional[str], Optional[str]]:
+        from v2.core.secret_vault import open_secret
+
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -723,7 +760,7 @@ class QueueDB:
             ).fetchone()
         if not row:
             return None, None
-        token = str(row["bale_bot_token"]).strip() if row["bale_bot_token"] else None
+        token = open_secret(str(row["bale_bot_token"])).strip() if row["bale_bot_token"] else None
         chat = str(row["bale_chat_id"]).strip() if row["bale_chat_id"] else None
         return token or None, chat or None
 
@@ -732,7 +769,9 @@ class QueueDB:
         return chat
 
     def upsert_bale_bot_token(self, telegram_user_id: int, bot_token: str) -> None:
-        tok = (bot_token or "").strip()
+        from v2.core.secret_vault import seal
+
+        tok = seal((bot_token or "").strip())
         if not tok:
             return
         now = int(time.time())
@@ -911,6 +950,8 @@ class QueueDB:
                 conn.commit()
 
     def get_cloudflare_api_token(self, telegram_user_id: int) -> Optional[str]:
+        from v2.core.secret_vault import open_secret
+
         with self._connect() as conn:
             row = conn.execute(
                 "SELECT cloudflare_api_token FROM v2_user_prefs WHERE telegram_user_id = ? LIMIT 1",
@@ -918,11 +959,13 @@ class QueueDB:
             ).fetchone()
         if not row or row["cloudflare_api_token"] is None:
             return None
-        token = str(row["cloudflare_api_token"]).strip()
+        token = open_secret(str(row["cloudflare_api_token"])).strip()
         return token or None
 
     def upsert_cloudflare_api_token(self, telegram_user_id: int, token: str) -> None:
-        tok = (token or "").strip()
+        from v2.core.secret_vault import seal
+
+        tok = seal((token or "").strip())
         if not tok:
             return
         now = int(time.time())
@@ -1011,6 +1054,8 @@ class QueueDB:
         return [dict(r) for r in rows]
 
     def get_ssh_server(self, telegram_user_id: int, server_id: int) -> Optional[dict]:
+        from v2.core.secret_vault import open_secret
+
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -1020,7 +1065,12 @@ class QueueDB:
                 """,
                 (int(telegram_user_id), int(server_id)),
             ).fetchone()
-        return dict(row) if row else None
+        if not row:
+            return None
+        d = dict(row)
+        if d.get("ssh_secret"):
+            d["ssh_secret"] = open_secret(str(d["ssh_secret"]))
+        return d
 
     def delete_ssh_server(self, telegram_user_id: int, server_id: int) -> bool:
         with self._lock:
@@ -1050,6 +1100,9 @@ class QueueDB:
             return False, "label, host, and ssh_user required"
         if port < 1 or port > 65535:
             return False, "port must be 1-65535"
+        from v2.core.secret_vault import seal
+
+        sealed = seal((ssh_secret or "").strip()) or None
         now = int(time.time())
         with self._lock:
             with self._connect() as conn:
@@ -1072,7 +1125,7 @@ class QueueDB:
                         host,
                         int(port),
                         ssh_user,
-                        (ssh_secret or "").strip() or None,
+                        sealed,
                         (ssh_key_path or "").strip() or None,
                         now,
                     ),
@@ -1378,6 +1431,74 @@ class QueueDB:
                 )
                 conn.commit()
 
+    def world_daily_get_count(self, telegram_user_id: int) -> int:
+        day = time.strftime("%Y%m%d", time.gmtime())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT hit_count FROM v2_world_daily
+                    WHERE telegram_user_id = ? AND day_ymd = ?
+                    """,
+                    (int(telegram_user_id), day),
+                ).fetchone()
+        return int(row["hit_count"]) if row else 0
+
+    def world_daily_increment_if_under_cap(self, telegram_user_id: int, *, daily_limit: int) -> None:
+        lim = int(daily_limit)
+        if lim <= 0:
+            return
+        day = time.strftime("%Y%m%d", time.gmtime())
+        with self._lock:
+            with self._connect() as conn:
+                row = conn.execute(
+                    """
+                    SELECT hit_count FROM v2_world_daily
+                    WHERE telegram_user_id = ? AND day_ymd = ?
+                    """,
+                    (int(telegram_user_id), day),
+                ).fetchone()
+                cur = int(row["hit_count"]) if row else 0
+                if cur >= lim:
+                    return
+                newc = cur + 1
+                conn.execute(
+                    """
+                    INSERT INTO v2_world_daily (telegram_user_id, day_ymd, hit_count)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(telegram_user_id, day_ymd) DO UPDATE SET
+                        hit_count = excluded.hit_count
+                    """,
+                    (int(telegram_user_id), day, newc),
+                )
+                conn.commit()
+
+    def feed_digest_was_sent(self, telegram_user_id: int, day_ymd: str) -> bool:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT sent_at FROM v2_feed_digest_stamp
+                WHERE telegram_user_id = ? AND day_ymd = ?
+                """,
+                (int(telegram_user_id), str(day_ymd)),
+            ).fetchone()
+        return bool(row and int(row["sent_at"] or 0) > 0)
+
+    def feed_digest_mark_sent(self, telegram_user_id: int, day_ymd: str) -> None:
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO v2_feed_digest_stamp (telegram_user_id, day_ymd, sent_at)
+                    VALUES (?, ?, ?)
+                    ON CONFLICT(telegram_user_id, day_ymd) DO UPDATE SET
+                        sent_at = excluded.sent_at
+                    """,
+                    (int(telegram_user_id), str(day_ymd), now),
+                )
+                conn.commit()
+
     def count_feeds(self, telegram_user_id: int) -> int:
         with self._connect() as conn:
             row = conn.execute(
@@ -1393,7 +1514,8 @@ class QueueDB:
         with self._connect() as conn:
             row = conn.execute(
                 """
-                SELECT id, feed_url, label, push_enabled, last_content_hash, created_at
+                SELECT id, feed_url, label, push_enabled, digest_enabled,
+                       last_content_hash, created_at
                 FROM v2_feeds
                 WHERE telegram_user_id = ? AND feed_url = ?
                 LIMIT 1
@@ -1409,6 +1531,7 @@ class QueueDB:
         *,
         label: str = "",
         push_enabled: bool = False,
+        digest_enabled: bool = False,
     ) -> int:
         """Insert feed or return existing id for same (user, url)."""
         now = int(time.time())
@@ -1431,16 +1554,17 @@ class QueueDB:
                 cur = conn.execute(
                     """
                     INSERT INTO v2_feeds (
-                        telegram_user_id, feed_url, label, push_enabled,
+                        telegram_user_id, feed_url, label, push_enabled, digest_enabled,
                         last_content_hash, created_at, updated_at
                     )
-                    VALUES (?, ?, ?, ?, NULL, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, NULL, ?, ?)
                     """,
                     (
                         int(telegram_user_id),
                         url,
                         (label or url)[:200],
                         1 if push_enabled else 0,
+                        1 if digest_enabled else 0,
                         now,
                         now,
                     ),
@@ -1452,7 +1576,8 @@ class QueueDB:
         with self._connect() as conn:
             rows = conn.execute(
                 """
-                SELECT id, feed_url, label, push_enabled, last_content_hash, created_at
+                SELECT id, feed_url, label, push_enabled, digest_enabled,
+                       last_content_hash, created_at
                 FROM v2_feeds WHERE telegram_user_id = ?
                 ORDER BY id DESC
                 """,
@@ -1484,6 +1609,20 @@ class QueueDB:
                 conn.commit()
                 return cur.rowcount > 0
 
+    def set_feed_digest(self, feed_id: int, telegram_user_id: int, enabled: bool) -> bool:
+        now = int(time.time())
+        with self._lock:
+            with self._connect() as conn:
+                cur = conn.execute(
+                    """
+                    UPDATE v2_feeds SET digest_enabled = ?, updated_at = ?
+                    WHERE id = ? AND telegram_user_id = ?
+                    """,
+                    (1 if enabled else 0, now, int(feed_id), int(telegram_user_id)),
+                )
+                conn.commit()
+                return cur.rowcount > 0
+
     def update_feed_hash(self, feed_id: int, content_hash: str) -> None:
         now = int(time.time())
         with self._lock:
@@ -1500,6 +1639,17 @@ class QueueDB:
                 """
                 SELECT id, telegram_user_id, feed_url, label, last_content_hash
                 FROM v2_feeds WHERE push_enabled = 1
+                """
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def list_digest_feeds(self) -> list[dict]:
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT id, telegram_user_id, feed_url, label, last_content_hash
+                FROM v2_feeds
+                WHERE digest_enabled = 1 OR push_enabled = 1
                 """
             ).fetchall()
         return [dict(r) for r in rows]

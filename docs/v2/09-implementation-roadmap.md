@@ -15,8 +15,14 @@
 
 ### به‌روزرسانی جهان و زمان + Feed (2026-08-03)
 
-- منوی World: timezone، age، ارز با IRR، زلزله غنی‌تر، پیش‌بینی آب‌وهوا؛ حذف Feed تکراری از منوی اصلی؛ `MenuSection.WORLD`
+- منوی World: timezone، age، ارز با IRR، زلزله غنی‌تر، پیش‌بینی آب‌وهوا؛ `MenuSection.WORLD`
 - Feed Reader: resolve یوتیوب `@handle`، push سطح آیتم، سقف/duplicate، digest روزانه تهران
+
+### FX بازار آزاد + Feed مستقل + پلن‌ها (2026-08-04)
+
+- ارز: TGJU بازار آزاد (+ Nobitex اختیاری) با برچسب منبع/زمان؛ fallback سفارشی/رسمی
+- Feed بخش مستقل منوی اصلی (`MenuSection.FEED`)، digest پایدار SQLite، pagination، digest-only
+- پلن‌ها: guest/free/pro/star + سهمیه toolkit/world/feed؛ `/usage` و `/plan_compare` غنی‌شده
 - تست: `tests/test_world.py`
 
 ---

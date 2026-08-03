@@ -40,9 +40,15 @@ class ToolkitCommandDeps:
 
 
 async def _guard_toolkit_quota_try(deps: ToolkitCommandDeps, message: Message, uid: int) -> bool:
+    from v2.core.upgrade_cta import buy_pro_keyboard
+
     ok, msg = deps.toolkit_quota_try(uid)
     if not ok:
-        await message.reply_text(msg, parse_mode=None)
+        await message.reply_text(
+            msg,
+            reply_markup=buy_pro_keyboard(uid, deps.tr),
+            parse_mode=None,
+        )
         return False
     return True
 

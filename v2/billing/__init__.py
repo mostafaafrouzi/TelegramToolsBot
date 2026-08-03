@@ -12,7 +12,10 @@ from v2.billing.zarinpal import (
     zarinpal_configured,
 )
 from v2.billing.ledger import record_initiated_payment
-from v2.billing.paid_entitlements import maybe_grant_plan_after_paid
+from v2.billing.paid_entitlements import (
+    claim_pending_entitlement_notifies,
+    maybe_grant_plan_after_paid,
+)
 from v2.billing.reconcile import run_reconcile
 from v2.billing.status import (
     ALL_STATUSES,
@@ -48,6 +51,7 @@ __all__ = [
     "VerifiedPaymentEvent",
     "apply_verified_payment_event",
     "maybe_grant_plan_after_paid",
+    "claim_pending_entitlement_notifies",
     "parse_verified_event_from_dict",
     "record_initiated_payment",
     "run_reconcile",

@@ -189,6 +189,24 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
                 return False
             return await deps.handle_feed_callback(client, callback_query, "toggle", feed_id)
 
+    if data.startswith("feeddigest:"):
+        parts = data.split(":")
+        if len(parts) >= 3 and parts[1] == "toggle":
+            try:
+                feed_id = int(parts[2])
+            except ValueError:
+                return False
+            return await deps.handle_feed_callback(
+                client, callback_query, "digest_toggle", feed_id
+            )
+
+    if data.startswith("feedpage:"):
+        try:
+            page = int(data.split(":", 1)[1])
+        except ValueError:
+            return False
+        return await deps.handle_feed_callback(client, callback_query, "page", page)
+
     if data.startswith("feedmenu:"):
         action = data.split(":", 1)[1]
         return await deps.handle_feed_callback(client, callback_query, action, 0)

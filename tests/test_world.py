@@ -1,8 +1,7 @@
-"""World / Feed Reader unit tests (stdlib unittest)."""
+"""World / Feed Reader / FX / entitlements unit tests (stdlib unittest)."""
 
 from __future__ import annotations
 
-import json
 import unittest
 from unittest import mock
 
@@ -112,13 +111,38 @@ class FxIrrTests(unittest.TestCase):
         self.assertTrue(ok)
         self.assertIn("USD", body)
 
-    def test_irr_bridge_mocked(self):
-        from v2.toolkit.fx_light import currency_convert
+    def test_irr_free_market_mocked(self):
+        from v2.toolkit.fx_light import RateBundle, clear_fx_cache, currency_convert
 
-        with mock.patch("v2.toolkit.fx_light._irr_usd_rate", return_value=(True, 420000.0)):
+        clear_fx_cache()
+        bundle = RateBundle(
+            rates={"USD": 1_900_000.0, "EUR": 2_100_000.0, "GBP": 2_400_000.0, "USDT": 1_905_000.0},
+            source="TGJU",
+            market="free_market",
+            fetched_at=1_700_000_000.0,
+        )
+        with mock.patch("v2.toolkit.fx_light.get_irr_rate_bundle", return_value=(True, bundle)):
             ok, body = currency_convert(1, "USD", "IRR", lang="fa")
         self.assertTrue(ok)
         self.assertIn("IRR", body)
+        self.assertIn("TGJU", body)
+        self.assertIn("بازار آزاد", body)
+        self.assertIn("1900000", body.replace(",", ""))
+
+    def test_official_fallback_labeled(self):
+        from v2.toolkit.fx_light import RateBundle, clear_fx_cache, currency_convert
+
+        clear_fx_cache()
+        bundle = RateBundle(
+            rates={"USD": 420_000.0, "USDT": 420_000.0},
+            source="open.er-api.com",
+            market="official",
+            fetched_at=1_700_000_000.0,
+        )
+        with mock.patch("v2.toolkit.fx_light.get_irr_rate_bundle", return_value=(True, bundle)):
+            ok, body = currency_convert(1, "USD", "IRT", lang="en")
+        self.assertTrue(ok)
+        self.assertIn("official", body.lower())
 
 
 class FeedDuplicateGuardTests(unittest.TestCase):
@@ -135,13 +159,20 @@ class FeedDuplicateGuardTests(unittest.TestCase):
             b = db.add_feed(99, "https://example.com/feed.xml", label="two")
             self.assertEqual(a, b)
             self.assertEqual(db.count_feeds(99), 1)
+            self.assertTrue(hasattr(db, "list_digest_feeds"))
+            self.assertTrue(hasattr(db, "feed_digest_mark_sent"))
+            db.feed_digest_mark_sent(99, "2026-08-04")
+            self.assertTrue(db.feed_digest_was_sent(99, "2026-08-04"))
         finally:
             td.cleanup()
 
 
-class MenuWorldTests(unittest.TestCase):
-    def test_world_menu_has_time_and_no_main_feed(self):
+class MenuWorldFeedTests(unittest.TestCase):
+    def test_main_has_feed_world_without_feed(self):
         from v2.core import menu_engine
+        from v2.core.menu_sections import MenuSection
+
+        self.assertEqual(MenuSection.FEED.value, "feed")
 
         def tr(_uid, key, **_kw):
             return key
@@ -150,11 +181,33 @@ class MenuWorldTests(unittest.TestCase):
         labels = [btn.text for row in kb.keyboard for btn in row]
         self.assertIn("btn_world_time", labels)
         self.assertIn("btn_world_age", labels)
+        self.assertNotIn("btn_feed_reader", labels)
+        self.assertNotIn("btn_world_rss", labels)
 
         main = menu_engine.build_main_menu(1, tr, is_admin=False)
         main_labels = [btn.text for row in main.keyboard for btn in row]
-        self.assertNotIn("btn_main_feed", main_labels)
+        self.assertIn("btn_main_feed", main_labels)
         self.assertIn("btn_main_world", main_labels)
+
+        feed = menu_engine.build_feed_menu(1, tr)
+        feed_labels = [btn.text for row in feed.keyboard for btn in row]
+        self.assertIn("btn_feed_add", feed_labels)
+
+
+class EntitlementMatrixTests(unittest.TestCase):
+    def test_tier_limits_include_star_and_world(self):
+        from user_entitlements import TIER_LIMITS, plan_matrix_text
+
+        self.assertIn("star", TIER_LIMITS)
+        for tier in ("guest", "free", "pro", "star"):
+            self.assertIn("world_daily_cmds", TIER_LIMITS[tier])
+            self.assertIn("feed_max", TIER_LIMITS[tier])
+            self.assertIn("feed_push_allowed", TIER_LIMITS[tier])
+        self.assertEqual(TIER_LIMITS["guest"]["feed_push_allowed"], 0)
+        self.assertEqual(TIER_LIMITS["free"]["toolkit_daily_cmds"], 40)
+        body = plan_matrix_text(lang="en")
+        self.assertIn("▸ PRO", body)
+        self.assertIn("▸ STAR", body)
 
 
 if __name__ == "__main__":

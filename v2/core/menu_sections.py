@@ -17,4 +17,5 @@ class MenuSection(str, Enum):
     LINK_DIRECT = "link_direct"
     CLOUDFLARE = "cloudflare"
     WORLD = "world"
+    FEED = "feed"
     ADMIN = "admin"

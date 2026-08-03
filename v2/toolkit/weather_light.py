@@ -66,6 +66,37 @@ def wmo_label(code: Optional[int], *, lang: str = "fa") -> str:
     return table.get(int(code), f"code {code}")
 
 
+def _aqi_band(aqi: Optional[float], *, lang: str = "fa") -> str:
+    if aqi is None:
+        return "?"
+    try:
+        n = float(aqi)
+    except (TypeError, ValueError):
+        return "?"
+    if lang == "en":
+        bands = (
+            (50, "Good"),
+            (100, "Moderate"),
+            (150, "Unhealthy for sensitive"),
+            (200, "Unhealthy"),
+            (300, "Very unhealthy"),
+            (9999, "Hazardous"),
+        )
+    else:
+        bands = (
+            (50, "خوب"),
+            (100, "متوسط"),
+            (150, "ناسالم برای حساس‌ها"),
+            (200, "ناسالم"),
+            (300, "بسیار ناسالم"),
+            (9999, "خطرناک"),
+        )
+    for limit, label in bands:
+        if n <= limit:
+            return label
+    return bands[-1][1]
+
+
 def _geocode(city: str, *, lang: str = "fa") -> tuple[bool, float, float, str]:
     try:
         r = requests.get(
@@ -94,7 +125,6 @@ def _fmt_sun(iso_s: str) -> str:
     if not iso_s:
         return "—"
     try:
-        # Open-Meteo: 2024-01-01T06:30
         if "T" in iso_s:
             return iso_s.split("T", 1)[1][:5]
         return iso_s[:16]
@@ -134,38 +164,49 @@ def weather_report(city: str, *, lang: str = "fa", forecast_days: int = 3) -> tu
         sunrise = _fmt_sun((daily.get("sunrise") or [""])[0])
         sunset = _fmt_sun((daily.get("sunset") or [""])[0])
         uv = (daily.get("uv_index_max") or [None])[0]
+
         if lang == "en":
             lines = [
-                f"🌤 {label}",
-                f"Now: {temp}°C · {cond} · humidity {hum}% · wind {wind} km/h",
-                f"Today: min {tmin}°C · max {tmax}°C · UV {uv}",
-                f"🌅 Sunrise: {sunrise} · 🌇 Sunset: {sunset}",
+                f"🌤 Weather — {label}",
+                "",
+                "Now",
+                f"• {temp}°C · {cond}",
+                f"• Humidity {hum}% · Wind {wind} km/h",
+                "",
+                "Today",
+                f"• Low {tmin}°C · High {tmax}°C · UV {uv}",
+                f"• Sunrise {sunrise} · Sunset {sunset}",
             ]
         else:
             lines = [
-                f"🌤 {label}",
-                f"الان: {temp}°C · {cond} · رطوبت {hum}% · باد {wind} km/h",
-                f"امروز: min {tmin}°C · max {tmax}°C · UV {uv}",
-                f"🌅 طلوع: {sunrise} · 🌇 غروب: {sunset}",
+                f"🌤 آب‌وهوا — {label}",
+                "",
+                "الان",
+                f"• {temp}°C · {cond}",
+                f"• رطوبت {hum}% · باد {wind} کیلومتر/ساعت",
+                "",
+                "امروز",
+                f"• کمینه {tmin}°C · بیشینه {tmax}°C · UV {uv}",
+                f"• طلوع {sunrise} · غروب {sunset}",
             ]
+
         dates = daily.get("time") or []
         dmax = daily.get("temperature_2m_max") or []
         dmin = daily.get("temperature_2m_min") or []
         dcodes = daily.get("weather_code") or []
         if len(dates) > 1:
             lines.append("")
-            lines.append("پیش‌بینی:" if lang != "en" else "Forecast:")
+            lines.append("📅 Forecast" if lang == "en" else "📅 پیش‌بینی")
             for i in range(1, min(len(dates), days)):
                 d = dates[i]
                 try:
                     d_short = datetime.fromisoformat(d).strftime("%m-%d")
                 except Exception:
                     d_short = d
-                lines.append(
-                    f"  {d_short}: {dmin[i] if i < len(dmin) else '?'}–"
-                    f"{dmax[i] if i < len(dmax) else '?'}°C · "
-                    f"{wmo_label(dcodes[i] if i < len(dcodes) else None, lang=lang)}"
-                )
+                lo = dmin[i] if i < len(dmin) else "?"
+                hi = dmax[i] if i < len(dmax) else "?"
+                cond_d = wmo_label(dcodes[i] if i < len(dcodes) else None, lang=lang)
+                lines.append(f"• {d_short} · {lo}–{hi}°C · {cond_d}")
         return True, "\n".join(lines)
     except Exception as e:
         return False, str(e)[:400]
@@ -188,14 +229,30 @@ def air_quality_report(city: str, *, lang: str = "fa") -> tuple[bool, str]:
         )
         r.raise_for_status()
         cur = r.json().get("current") or {}
+        aqi = cur.get("us_aqi")
+        band = _aqi_band(aqi, lang=lang)
+        pm25 = cur.get("pm2_5")
+        pm10 = cur.get("pm10")
         if lang == "en":
+            tip = "Tip: limit outdoor exercise if AQI is unhealthy."
             return True, (
                 f"🫁 Air quality — {label}\n"
-                f"PM2.5: {cur.get('pm2_5')} · PM10: {cur.get('pm10')} · US AQI: {cur.get('us_aqi')}"
+                f"\n"
+                f"• US AQI: {aqi} ({band})\n"
+                f"• PM2.5: {pm25} µg/m³\n"
+                f"• PM10: {pm10} µg/m³\n"
+                f"\n"
+                f"{tip}"
             )
+        tip = "نکته: در وضعیت ناسالم فعالیت سنگین بیرون را کم کن."
         return True, (
             f"🫁 کیفیت هوا — {label}\n"
-            f"PM2.5: {cur.get('pm2_5')} · PM10: {cur.get('pm10')} · US AQI: {cur.get('us_aqi')}"
+            f"\n"
+            f"• شاخص US AQI: {aqi} ({band})\n"
+            f"• ذرات PM2.5: {pm25} میکروگرم/مترمکعب\n"
+            f"• ذرات PM10: {pm10} میکروگرم/مترمکعب\n"
+            f"\n"
+            f"{tip}"
         )
     except Exception as e:
         return False, str(e)[:400]
@@ -232,7 +289,6 @@ def recent_earthquakes(limit: int = 8, *, min_mag: float = 4.5, lang: str = "fa"
             if len(rows) >= limit:
                 break
         if not rows:
-            # fallback significant
             r2 = requests.get(
                 "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/significant_day.geojson",
                 timeout=12,
@@ -247,17 +303,29 @@ def recent_earthquakes(limit: int = 8, *, min_mag: float = 4.5, lang: str = "fa"
                         when = datetime.utcfromtimestamp(int(ts) / 1000).strftime("%Y-%m-%d %H:%M UTC")
                     except Exception:
                         pass
-                rows.append((p.get("mag"), p.get("place") or "?", when, "—"))
+                try:
+                    mag = float(p.get("mag") or 0)
+                except (TypeError, ValueError):
+                    mag = 0.0
+                rows.append((mag, p.get("place") or "?", when, "—"))
         if not rows:
-            return True, ("No M≥{m} quakes in the last day.".format(m=min_mag) if lang == "en" else f"زلزلهٔ M≥{min_mag} در ۲۴ ساعت اخیر ثبت نشد.")
+            return True, (
+                f"No M≥{min_mag} quakes in the last 24 hours."
+                if lang == "en"
+                else f"زلزلهٔ M≥{min_mag} در ۲۴ ساعت اخیر ثبت نشد."
+            )
+        rows.sort(key=lambda x: float(x[0] or 0), reverse=True)
         header = (
-            f"🌍 Earthquakes (24h, M≥{min_mag}):"
+            f"🌍 Earthquakes — last 24h (M≥{min_mag})"
             if lang == "en"
-            else f"🌍 زلزله‌ها (۲۴h، M≥{min_mag}):"
+            else f"🌍 زلزله‌ها — ۲۴ ساعت اخیر (M≥{min_mag})"
         )
-        lines = [header]
+        lines = [header, ""]
+        depth_lbl = "depth" if lang == "en" else "عمق"
         for mag, place, when, depth in rows:
-            lines.append(f"• M{mag} — {place}\n  {when} · depth {depth}")
-        return True, "\n".join(lines)
+            lines.append(f"• M{mag:.1f} — {place}")
+            lines.append(f"  {when} · {depth_lbl} {depth}")
+            lines.append("")
+        return True, "\n".join(lines).rstrip()
     except Exception as e:
         return False, str(e)[:400]

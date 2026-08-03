@@ -29,11 +29,15 @@ from user_entitlements import (
     DISABLE_USAGE_LIMITS,
     add_bonus_month_mb,
     can_enqueue,
+    effective_feed_max,
     effective_toolkit_daily_limit,
+    effective_world_daily_limit,
     estimate_task_bytes,
     effective_max_file_bytes,
+    feed_push_allowed,
     get_usage_snapshot,
     parallel_job_count,
+    plan_matrix_text,
     set_user_tier,
 )
 from v2.core import menu_engine
@@ -57,7 +61,11 @@ from v2.handlers.zip_password_prompt import ZipPasswordPromptDeps, handle_zip_pa
 from v2.handlers.direct_mode_text import DirectModeTextDeps, handle_direct_mode_plain_text
 from v2.handlers.direct_url_hint import DirectUrlHintDeps, handle_direct_url_sendlink_hint
 from v2.handlers.basic_commands import BasicCommandDeps, handle_help, handle_lang, handle_log_help, handle_menu, handle_start, handle_version
-from v2.billing import maybe_grant_plan_after_paid, run_reconcile
+from v2.billing import (
+    claim_pending_entitlement_notifies,
+    maybe_grant_plan_after_paid,
+    run_reconcile,
+)
 from v2.handlers.admin_commands import (
     AdminCommandDeps,
     dispatch_admin_wizard,
@@ -71,7 +79,13 @@ from v2.handlers.admin_commands import (
     handle_admin_tier,
     handle_cleanup_downloads,
 )
-from v2.handlers.plan_commands import PlanCommandDeps, handle_plan, handle_purchase, handle_usage
+from v2.handlers.plan_commands import (
+    PlanCommandDeps,
+    handle_plan,
+    handle_plan_compare,
+    handle_purchase,
+    handle_usage,
+)
 from v2.handlers.queue_commands import QueueCommandDeps, handle_clear_queue, handle_queue_manage, handle_send_link, handle_send_text
 from v2.handlers.safemode_command import SafeModeCommandDeps, handle_safemode
 from v2.handlers.delete_command import DeleteCommandDeps, handle_delete_one
@@ -88,8 +102,6 @@ from v2.handlers.world_commands import (
     handle_calendar,
     handle_earthquakes,
     handle_fx_quick_callback,
-    maybe_send_daily_digest,
-    poll_rss_pushes,
     start_age_wizard,
     start_currency_wizard,
     start_timezone_wizard,
@@ -134,6 +146,8 @@ from v2.handlers.feed_reader_commands import (
     handle_feed_callback,
     handle_show_feed_menu,
     list_feeds_inline,
+    maybe_send_daily_digest,
+    poll_rss_pushes,
     start_add_feed_wizard,
 )
 from v2.handlers.cloudflare_menu_callbacks import dispatch_cf_menu_callback
@@ -380,11 +394,22 @@ I18N = {
     "fa": {
         "welcome": (
             "سلام 💙\n\n"
-            "🏠 **منوی اصلی** — دو بخش جدا:\n"
-            "📁 انتقال فایل (روبیکا، بله، درایو، SSH)\n"
-            "🧰 ابزارها (شبکه، هش، Base64)\n\n"
-            "برای روبیکا یک‌بار `/rubika_connect` بزن.\n"
-            "`/menu` منوی اصلی · `/lang` زبان"
+            "شروع سریع در ۳ قدم:\n"
+            "۱) روبیکا را وصل کن\n"
+            "۲) یک فایل بفرست\n"
+            "۳) ارسال را تأیید کن\n\n"
+            "همچنین ابزارها، فید خوان، جهان و پلن از منوی اصلی در دسترس‌اند.\n"
+            "/menu منو · /lang زبان · /help راهنما"
+        ),
+        "onboard_next_steps": "قدم بعدی را انتخاب کن:",
+        "onboard_checklist": "وضعیت اتصال:\n{rubika} روبیکا\n{bale} بله\n{drive} گوگل درایو",
+        "btn_onboard_rubika": "💬 اتصال روبیکا",
+        "btn_onboard_transfer": "📁 انتقال فایل",
+        "btn_buy_pro_cta": "💳 ارتقا به Pro",
+        "quota_soft_warn": (
+            "⚠️ نزدیک سقف سهمیه هستی.\n"
+            "امروز حدود {day_pct}% · این ماه حدود {month_pct}%\n"
+            "برای فضای بیشتر می‌توانی ارتقا بدهی."
         ),
         "menu_intro": (
             "🏠 منوی اصلی\n\n"
@@ -685,7 +710,7 @@ I18N = {
         "drive_ls_error": "لیست Drive ناموفق: {error}",
         "ssh_list_empty": "هیچ سرور SSH ثبت نشده. `/ssh_add label host port user`",
         "ssh_list_title": "سرورهای SSH:",
-        "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
+        "ssh_list_row": "#{id} · {label}\n  {ssh_user}@{host}:{port}",
         "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`\nیا دکمه «➕ افزودن سرور» را بزن تا مرحله‌به‌مرحله راهنمایی شوی.",
         "ssh_wizard_ask_label": "نام کوتاه برای این سرور بفرست (مثلاً `vps1`):",
         "ssh_wizard_ask_host": "آدرس host یا IP سرور را بفرست:",
@@ -724,32 +749,39 @@ I18N = {
         "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "راهنمای سریع:\n\n"
-            "🏠 منو: `/menu` — 📁 انتقال جدا از 🧰 ابزارها\n\n"
-            "📁 انتقال:\n"
-            "- روبیکا `/rubika_connect` · بله `/bale_connect` · درایو `/drive_connect`\n"
-            "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
-            "🧰 ابزارها (منوی مستقل):\n"
-            "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
-            "📤 ارسال مستقیم: `/directmode rubika|bale|drive on|off` · 🔗 لینک: منوی «لینک / ویدیو»\n\n"
-            "عیب‌یابی:\n"
-            "- وضعیت شبکه: `/netstatus`\n"
-            "- پنل ادمین: `/admin`\n"
-            "- حذف یک job: `/del <job_id>`\n\n"
-            "برای راهنمای تحلیل لاگ: `/loghelp`\n"
-            "• مصرف و سهمیه: `/usage` — پلن و خرید: `/plan` — راهنمای خرید: `/purchase`"
+            "🏠 منو: /menu\n"
+            "📁 انتقال: روبیکا /rubika_connect · بله /bale_connect · درایو /drive_connect\n"
+            "🧰 ابزارها: /dns · /myip · /ping · /md5\n"
+            "📰 فید: /feeds · 🌍 جهان از منوی اصلی\n\n"
+            "مصرف و پلن: /usage · /plan · /purchase · /plan_compare\n"
+            "وضعیت شبکه: /netstatus · حذف کار: /del <job_id>\n"
+            "اگر مشکلی دیدی، job_id را برای پشتیبانی بفرست."
+        ),
+        "help_short_admin": (
+            "راهنمای سریع (ادمین):\n\n"
+            "🏠 /menu · 📁 انتقال · 🧰 ابزارها · 📰 /feeds\n"
+            "پنل ادمین: /admin\n"
+            "لاگ: /loghelp\n"
+            "مصرف: /usage · پلن: /plan · خرید: /purchase"
         ),
         "loghelp_body": (
+            "اگر ارسال فایل مشکل داشت:\n\n"
+            "1) شناسه کار (job_id) را از پیام صف کپی کن.\n"
+            "2) همان شناسه را برای پشتیبانی بفرست.\n"
+            "3) یک‌بار /netstatus و وضعیت اتصال مقصد را چک کن.\n"
+            "4) در صورت نیاز با /del <job_id> لغو و دوباره بفرست."
+        ),
+        "loghelp_body_admin": (
             "راهنمای تحلیل لاگ job:\n\n"
-            "1) ابتدا `job_id` را از پیام Queued بردار.\n"
-            "2) در bot logs دنبال `task_queued` با همان `job_id` بگرد.\n"
-            "3) در worker logs باید به‌ترتیب ببینی:\n"
-            "   `task_started` -> (`task_done` یا `task_failed`).\n"
-            "4) اگر `task_requeued` دیدی، مشکل شبکه/دسترسی بوده و job جدید ساخته شده.\n"
-            "5) برای اتصال روبیکا، eventهای `rubika_connect_ok` یا `rubika_connect_failed` را چک کن.\n\n"
+            "1) job_id را از پیام Queued بردار.\n"
+            "2) bot logs: task_queued\n"
+            "3) worker: task_started -> task_done|task_failed\n"
+            "4) task_requeued = مشکل شبکه/دسترسی\n"
+            "5) rubika_connect_ok / rubika_connect_failed\n\n"
             "مسیر لاگ‌ها:\n"
-            "- `/opt/tele2rub/queue/bot_events.jsonl`\n"
-            "- `/opt/tele2rub/queue/worker_events.jsonl`\n"
-            "- `/tmp/tele2rub-installer.jsonl`"
+            "- /opt/tele2rub/queue/bot_events.jsonl\n"
+            "- /opt/tele2rub/queue/worker_events.jsonl\n"
+            "- /tmp/tele2rub-installer.jsonl"
         ),
         "rubika_not_connected": "روبیکا متصل نیست. از `/rubika_connect` استفاده کن.",
         "rubika_checking": "در حال بررسی وضعیت واقعی اتصال روبیکا ...",
@@ -889,23 +921,24 @@ I18N = {
         "confirm_use_buttons": "برای تأیید یا لغو ارسال، از دکمه‌های زیر همان پیام استفاده کن.",
         "cleanup_done": "پاکسازی `downloads/`: {n} فایل، حدود {mb} MB آزاد شد.",
         "direct_need_rubika": "برای حالت مستقیم اول `/rubika_connect` بزن.",
-        "file_too_large": "فایل از سقف مجاز بزرگ‌تر است (حداکثر ~`{max_mb}` مگابایت با توجه به پلن و `MAX_FILE_MB`). حجم این فایل: ~`{size_mb}` مگابایت.",
+        "file_too_large": "فایل از سقف پلن بزرگ‌تر است (حداکثر ~{max_mb} مگابایت). حجم این فایل: ~{size_mb} مگابایت.\nبرای ارتقا: /purchase",
+        "file_too_large_admin": "فایل از سقف مجاز بزرگ‌تر است (حداکثر ~{max_mb} مگابایت با توجه به پلن و MAX_FILE_MB). حجم: ~{size_mb} مگابایت.",
         "bale_file_too_large": "بله این فایل را نمی‌پذیرد (حداکثر `{max_mb}` MB). حجم فایل: ~`{size_mb}` MB.",
         "text_unhandled_hint": "متوجه این پیام نشدم. از دکمه‌های منو استفاده کن یا `/help` را بزن.",
         "admin_max_file": "`MAX_FILE_MB` (سقف آپلود env): `{mb}` (`0` یا خالی = بدون سقف env)",
         "admin_plan_note": "سهمیه پلن‌ها در SQLite (`user_entitlements`) — `/usage` برای کاربران.",
         "admin_clear_prefs_hint": "پاک کردن ردیف mirror prefs در SQLite: `/admin_clear_prefs <telegram_user_id>`",
         "admin_clear_state_mirrors_hint": "پاک mirror ویزارد/بچ در SQLite (JSON را عوض نمی‌کند): `/admin_clear_state_mirrors <telegram_user_id>`",
-        "admin_tier_usage": "استفاده: `/admin_tier <telegram_user_id> <guest|free|pro> [days]`",
+        "admin_tier_usage": "استفاده: `/admin_tier <telegram_user_id> <guest|free|pro|star> [days]`",
         "admin_bonus_usage": "استفاده: `/admin_bonus <telegram_user_id> <extra_month_mb>`",
         "admin_wizard_user_ask": "شناسه عددی تلگرام کاربر را بفرست:",
         "admin_wizard_need_user_id": "لطفاً فقط شناسه عددی معتبر بفرست.",
-        "admin_wizard_tier_ask": "پلن را بفرست: `guest`، `free` یا `pro`",
+        "admin_wizard_tier_ask": "پلن را بفرست: `guest`، `free`، `pro` یا `star`",
         "admin_wizard_days_ask": "برای pro تعداد روز اعتبار را بفرست:",
         "admin_wizard_tier_done": "پلن کاربر `{target}` روی `{tier}` تنظیم شد.",
         "admin_wizard_bonus_ask": "حجم اضافه ماهانه را به MB بفرست:",
         "admin_wizard_bonus_done": "برای کاربر `{target}` مقدار `{mb}` MB حجم اضافه ثبت شد.",
-        "admin_wizard_tier_for_user": "کاربر `{target}` — پلن را بفرست: `guest`، `free` یا `pro`",
+        "admin_wizard_tier_for_user": "کاربر `{target}` — پلن را بفرست: `guest`، `free`، `pro` یا `star`",
         "admin_wizard_bonus_for_user": "کاربر `{target}` — حجم اضافه ماهانه را به MB بفرست:",
         "admin_payment_lookup_hint": "لیست آخرین پرداخت‌های SQLite (`v2_payments`): `/admin_payment_lookup <telegram_user_id> [limit]`",
         "admin_payment_lookup_empty": "هیچ ردیف پرداختی برای این کاربر نیست.",
@@ -919,23 +952,32 @@ I18N = {
         "admin_reconcile_billing_hint": "انقضای ردیف‌های قدیمی pending/initiated: `/admin_reconcile_billing`",
         "admin_reconcile_billing_result": "Reconcile: منقضی‌شده `{expired}`، اسکن‌شده `{scanned}`.",
         "purchase_stub_started": (
-            "💳 خرید تست (`BILLING_STUB_CHECKOUT`)\n\n"
-            "ردیف `v2_payments` ساخته شد.\n"
-            "• payment_id: `{payment_id}`\n"
-            "• authority: `{authority}`\n\n"
-            "برای اعمال پلن پرو بعد از پرداخت موفق، وضعیت را `paid` کنید:\n"
-            "وب‌هوک `POST …/v2_payment_event` یا `/admin_payment_status <id> paid`."
+            "💳 درخواست خرید ثبت شد.\n\n"
+            "کد پیگیری: {payment_id}\n"
+            "پس از تأیید پرداخت، پلن Pro فعال می‌شود.\n"
+            "وضعیت مصرف: /usage"
+        ),
+        "purchase_stub_started_admin": (
+            "💳 خرید تست (BILLING_STUB_CHECKOUT)\n\n"
+            "ردیف v2_payments ساخته شد.\n"
+            "• payment_id: {payment_id}\n"
+            "• authority: {authority}\n\n"
+            "برای اعمال پرو: POST …/v2_payment_event یا /admin_payment_status <id> paid"
         ),
         "purchase_gateway_started": (
-            "💳 پرداخت زرین‌پال\n\n"
-            "• payment_id: `{payment_id}`\n"
-            "• authority: `{authority}`\n"
-            "• لینک پرداخت: {pay_url}\n\n"
-            "پس از پرداخت موفق، وضعیت ردیف به `paid` به‌روز می‌شود."
+            "💳 پرداخت زرین‌پال — Pro سی‌روزه\n\n"
+            "۱) روی دکمه «پرداخت» بزن\n"
+            "۲) در زرین‌پال پرداخت را کامل کن\n"
+            "۳) پس از تأیید، پلن Pro خودکار فعال می‌شود و پیام می‌گیری\n\n"
+            "کد پیگیری: {payment_id}\n"
+            "لینک: {pay_url}"
         ),
+        "btn_open_pay_url": "💳 پرداخت در زرین‌پال",
         "purchase_gateway_error": "خطای درگاه پرداخت: {error}",
-        "toolkit_network_disabled": "ابزارهای شبکه با env (`TOOLKIT_NETWORK_LIGHT`) خاموش است.",
-        "toolkit_utility_disabled": "ابزارهای متنی با env (`TOOLKIT_UTILITY_LIGHT`) خاموش است.",
+        "toolkit_network_disabled": "ابزارهای شبکه فعلاً در دسترس نیست.",
+        "toolkit_network_disabled_admin": "ابزارهای شبکه خاموش است — TOOLKIT_NETWORK_LIGHT را در .env روشن کن.",
+        "toolkit_utility_disabled": "این ابزار فعلاً در دسترس نیست.",
+        "toolkit_utility_disabled_admin": "ابزارهای متنی خاموش است — TOOLKIT_UTILITY_LIGHT را در .env روشن کن.",
         "toolkit_quota_exceeded": (
             "سهمیهٔ روزانهٔ ابزار تمام شد ({used}/{limit}). فردا دوباره امتحان کنید."
         ),
@@ -956,7 +998,8 @@ I18N = {
         "toolkit_whois_result": "{data}",
         "toolkit_whois_error": "whois/RDAP ناموفق: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
-        "toolkit_gsearch_usage": "استفاده: `/gsearch <query>` یا `/gisearch <query>`\nنیازمند env: `GOOGLE_CSE_API_KEYS` و `GOOGLE_CSE_ID`",
+        "toolkit_gsearch_usage": "جستجوی گوگل فعلاً در دسترس نیست.",
+        "toolkit_gsearch_usage_admin": "استفاده: /gsearch <query> یا /gisearch <query>\nنیازمند env: GOOGLE_CSE_API_KEYS و GOOGLE_CSE_ID",
         "toolkit_gsearch_send_only": "عبارت جستجو را بفرست:",
         "toolkit_gisearch_send_only": "عبارت جستجوی تصویر را بفرست:",
         "toolkit_gsearch_result": "{data}",
@@ -992,14 +1035,19 @@ I18N = {
         "toolkit_sha256_send_only": "متن را برای SHA256 بفرست.",
         "toolkit_b64e_send_only": "متن را برای Base64 encode بفرست.",
         "toolkit_b64d_send_only": "رشته Base64 را برای decode بفرست.",
-        "toolkit_myip_server_fallback": "IP خروجی سرور: `{ip}`\n\nبرای IP واقعی خودت، `MINIAPP_BASE_URL` را روی سرور تنظیم کن و دوباره «📍 IP من» را بزن.",
+        "toolkit_myip_server_fallback": "IP خروجی فعلی: {ip}\n\nبرای دیدن IP واقعی دستگاه خودت، Mini App باید فعال باشد. اگر فعال نیست با پشتیبانی هماهنگ کن.",
+        "toolkit_myip_server_fallback_admin": "IP خروجی سرور: {ip}\n\nبرای IP واقعی کاربر، MINIAPP_BASE_URL را در .env تنظیم کن.",
         "miniapp_myip_open": "ابزارهای مرورگر (IP واقعی شما، DNS، تأخیر شبکه، رمز و …) — دکمه‌ها را بزن:",
         "btn_open_myip_app": "📍 IP من",
         "btn_open_miniapp_hub": "🧰 مرکز ابزار Mini App",
         "miniapp_setup_hint": (
+            "ابزارهای مرورگر فعلاً در دسترس نیست.\n"
+            "لطفاً بعداً دوباره امتحان کن یا با پشتیبانی در تماس باش."
+        ),
+        "miniapp_setup_hint_admin": (
             "Mini App فعال نیست.\n"
-            "در `.env` مقدار `MINIAPP_BASE_URL` (آدرس HTTPS عمومی تا پوشه `web/`) را تنظیم کنید.\n"
-            "راهنما: README → بخش Telegram Mini App."
+            "در .env مقدار MINIAPP_BASE_URL (HTTPS عمومی تا پوشه web/) را تنظیم کن.\n"
+            "راهنما: README → Telegram Mini App."
         ),
         "media_pick_dest": "مقصد ارسال فایل را انتخاب کن:",
         "media_dest_session_expired": "انتخاب منقضی شد — فایل را دوباره بفرست.",
@@ -1035,10 +1083,48 @@ I18N = {
         "rss_push_new": "📰 آیتم جدید: {label}",
         "world_error": "خطا: {detail}",
         "world_digest_title": "📰 خلاصه روزانه فیدها — {date}",
-        "btn_main_feed": "📰 Feed Reader",
+        "btn_main_feed": "📰 فید خوان",
         "btn_feed_reader": "📰 مدیریت فیدها",
+        "btn_feed_list": "📋 لیست فیدها",
+        "btn_feed_add": "➕ افزودن فید",
+        "btn_feed_help": "ℹ️ راهنمای فید",
+        "btn_plan_compare": "📊 مقایسه پلن‌ها",
+        "feed_section_opened": "بخش فید خوان — RSS، YouTube، X/Twitter",
+        "feed_help_body": (
+            "📰 راهنمای Feed Reader\n"
+            "• لینک RSS، کانال YouTube یا حساب X را بفرست\n"
+            "• Push: اعلان فوری آیتم جدید (طبق پلن)\n"
+            "• Digest: خلاصه روزانه تهران برای فیدهای انتخابی\n"
+            "• /cancel برای لغو ویزارد"
+        ),
+        "feed_quota_line": "سهمیه فید: {used}/{limit}",
+        "feed_page_prev": "‹ قبلی",
+        "feed_page_next": "بعدی ›",
+        "feed_digest_on": "📰 خلاصه روزانه: روشن",
+        "feed_digest_off": "📰 خلاصه روزانه: خاموش",
+        "feed_digest_enabled": "خلاصه روزانه روشن شد",
+        "feed_digest_disabled": "خلاصه روزانه خاموش شد",
+        "feed_push_plan_blocked": "پلن فعلی اجازه push ندارد. ارتقا بده یا digest را روشن کن.",
+        "feed_resolve_failed": "نتوانستم این آدرس را به فید تبدیل کنم: {url}",
+        "world_quota_exceeded": "سقف ابزارهای جهان امروز پر است ({used}/{limit}). فردا یا با ارتقای پلن دوباره امتحان کن.",
+        "plan_compare_title": "📊 مقایسه پلن‌ها",
         "feed_menu_title": "📰 Feed Reader\nRSS · YouTube · X/Twitter\nافزودن فید، اعلان push، یا مشاهده دستی.",
-        "feed_digest_hint": "پوش = اعلان فوری آیتم جدید · digest روزانه خودکار صبح تهران برای همان فیدها.",
+        "feed_digest_hint": "پوش = اعلان فوری · digest = خلاصه روزانه تهران (قابل تنظیم جداگانه برای هر فید).",
+        "feed_digest_schedule": "ساعت خلاصه روزانه: حدود {hour}:00 به وقت تهران.",
+        "feed_empty_state": (
+            "هنوز فیدی نداری.\n"
+            "➕ افزودن فید را بزن و آدرس RSS، یوتیوب یا X را بفرست.\n"
+            "بعد می‌توانی push یا خلاصه روزانه را برای هر فید جدا روشن کنی."
+        ),
+        "payment_granted_dm": (
+            "✅ پرداخت تأیید شد.\n"
+            "پلن {tier} برای {days} روز فعال شد.\n"
+            "جزئیات: /usage"
+        ),
+        "payment_expiry_soon_dm": (
+            "⏰ پلن {tier} تا حدود {days_left} روز دیگر منقضی می‌شود.\n"
+            "برای تمدید: /purchase · مقایسه: /plan_compare"
+        ),
         "feed_ask_url": (
             "آدرس فید یا صفحه را بفرست:\n"
             "• RSS/Atom مستقیم\n"
@@ -1066,30 +1152,43 @@ I18N = {
         "toolkit_url_expand_send_only": "URL کوتاه‌شده را بفرست.",
         "toolkit_timestamp_send_only": "عدد Unix یا تاریخ `YYYY-MM-DD HH:MM:SS` بفرست.",
         "quota_parallel_msg": "سقف کارهای همزمان در صف پر است (`{cur}` / `{maxp}`). بعد از اتمام یکی دوباره تلاش کن.",
-        "quota_day_msg": "سقف حجم روزانه پر است. این کار ~{need} MB است؛ حدود `{left}` MB امروز باقی مانده.",
-        "quota_month_msg": "سقف حجم ماهانه پر است. این کار ~{need} MB است؛ حدود `{left}` MB این ماه باقی مانده.",
+        "quota_day_msg": "سقف حجم روزانه پر است.\nاین کار ~{need} MB است؛ حدود {left} MB امروز باقی مانده.\nبرای ارتقا: /purchase",
+        "quota_month_msg": "سقف حجم ماهانه پر است.\nاین کار ~{need} MB است؛ حدود {left} MB این ماه باقی مانده.\nبرای ارتقا: /purchase",
         "quota_file_cap_msg": "حجم این کار از سقف هر فایل بیشتر است (حداکثر `{max_mb}` MB، این فایل ~{need_mb} MB).",
-        "quota_unknown": "سقف مجاز پر است. `/usage` را بزن یا با ادمین تماس بگیر.",
+        "quota_unknown": "سقف مجاز پر است.\n/usage را ببین یا برای ارتقا /purchase را بزن.",
         "usage_panel": (
-            "مصرف و محدودیت:\n"
-            "• پلن: `{tier}`\n"
+            "📊 مصرف و محدودیت\n\n"
+            "پلن\n"
+            "• {tier} (انقضا: {expires})\n\n"
+            "انتقال\n"
             "• امروز: ~{day_used} / {day_cap} MB\n"
             "• این ماه: ~{month_used} / {month_cap} MB\n"
-            "• حداکثر هر فایل: `{max_file}` MB\n"
-            "• همزمان در صف/پردازش: `{parallel}` / `{max_parallel}`\n\n"
-            "موفقیت ارسال به روبیکا به مصرف اضافه می‌شود."
+            "• حداکثر فایل: {max_file} MB\n"
+            "• همزمان: {parallel} / {max_parallel}\n\n"
+            "ابزارها\n"
+            "• ابزارک روزانه: {toolkit_used_cap}\n"
+            "• جهان/ارز روزانه: {world_used_cap}\n"
+            "• فیدها: {feed_used}/{feed_cap} (push: {feed_push})\n\n"
+            "ارتقای پلن: /purchase · مقایسه: /plan_compare"
         ),
-        "usage_disabled_hint": "سهمیه‌گذاری با `DISABLE_USAGE_LIMITS` خاموش است (فقط محدودیت env در صورت تنظیم).",
+        "usage_disabled_hint": "سهمیه‌گذاری برای این ربات فعلاً غیرفعال است.",
+        "usage_disabled_hint_admin": "سهمیه‌گذاری با DISABLE_USAGE_LIMITS خاموش است (فقط محدودیت env در صورت تنظیم).",
         "batch_raw_hint": "جمع حجم خام فعلی: ~`{raw_mb}` MB ({n} فایل). بعد از ZIP ممکن است کمی فرق کند.",
         "direct_url_use_sendlink": "برای لینک از دکمه یا دستور `/sendlink` استفاده کن.",
         "direct_url_use_link_menu": "برای دانلود لینک/ویدیو از منوی اصلی «🔗 لینک / ویدیو» استفاده کن.",
         "purchase_info_body": (
             "💳 خرید / ارتقای پلن\n\n"
-            "درگاه پرداخت خودکار هنوز وصل نیست. فعلاً:\n"
-            "• از ادمین بخواه پلن را با `/admin_tier` یا `/admin_bonus` برایت تنظیم کند؛ یا\n"
-            "• اسکریپت `tools/grant_plan.py` روی سرور؛ یا\n"
-            "• `tools/payment_webhook_stub.py` با کلید `PAYMENT_WEBHOOK_SECRET`.\n\n"
-            "بعد از پرداخت واقعی، درگاه را به همین webhook وصل کن."
+            "• خرید آنلاین Pro (۳۰ روز): /purchase\n"
+            "• مقایسه پلن‌ها: /plan_compare\n"
+            "• وضعیت مصرف: /usage\n\n"
+            "برای پلن بالاتر (Star) با پشتیبانی هماهنگ کن."
+        ),
+        "purchase_info_body_admin": (
+            "💳 خرید / ارتقای پلن (ادمین)\n\n"
+            "• خرید Pro: /purchase (زرین‌پال)\n"
+            "• مقایسه: /plan_compare\n"
+            "• اعطای دستی: /admin_tier <uid> free|pro|star [days]\n"
+            "• یا tools/grant_plan.py روی سرور"
         ),
         "rubika_update_hint": (
             "اگر بعد از به‌روزرسانی سرور روبیکا «قطع» شد: یک‌بار `/rubika_connect` بزن. "
@@ -1099,11 +1198,22 @@ I18N = {
     "en": {
         "welcome": (
             "Hi 💙\n\n"
-            "🏠 **Main menu** — two separate areas:\n"
-            "📁 File transfer (Rubika, Bale, Drive, SSH)\n"
-            "🧰 Tools (network, hash, Base64)\n\n"
-            "Link Rubika once: `/rubika_connect`\n"
-            "`/menu` main menu · `/lang` language"
+            "Quick start in 3 steps:\n"
+            "1) Connect Rubika\n"
+            "2) Send a file\n"
+            "3) Confirm send\n\n"
+            "Tools, Feed Reader, World, and Plans are on the main menu.\n"
+            "/menu · /lang · /help"
+        ),
+        "onboard_next_steps": "Pick a next step:",
+        "onboard_checklist": "Connection status:\n{rubika} Rubika\n{bale} Bale\n{drive} Google Drive",
+        "btn_onboard_rubika": "💬 Connect Rubika",
+        "btn_onboard_transfer": "📁 Transfer files",
+        "btn_buy_pro_cta": "💳 Upgrade to Pro",
+        "quota_soft_warn": (
+            "⚠️ You are nearing your quota.\n"
+            "Today ~{day_pct}% · This month ~{month_pct}%\n"
+            "Upgrade for more room."
         ),
         "menu_intro": (
             "🏠 Main menu\n\n"
@@ -1389,7 +1499,7 @@ I18N = {
         "drive_ls_error": "Drive list failed: {error}",
         "ssh_list_empty": "No SSH servers. Use `/ssh_add label host port user`",
         "ssh_list_title": "SSH servers:",
-        "ssh_list_row": "`#{id}` {label} — `{ssh_user}@{host}:{port}`",
+        "ssh_list_row": "#{id} · {label}\n  {ssh_user}@{host}:{port}",
         "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`\nOr tap «➕ Add server» for a step-by-step wizard.",
         "ssh_wizard_ask_label": "Send a short label for this server (e.g. `vps1`):",
         "ssh_wizard_ask_host": "Send the server host or IP:",
@@ -1423,34 +1533,39 @@ I18N = {
         "drive_download_usage": "Usage: `/drive_download <google_drive_file_id>`",
         "drive_download_send_only": "Send a Google Drive file id:",
         "ssh_get_usage": "Usage: `/ssh_get <server_id> <remote_path>`",
-        "help_short": (
+                "help_short": (
             "Quick help:\n\n"
-            "🏠 `/menu` — 📁 Transfer and 🧰 Tools are separate\n\n"
-            "📁 Transfer:\n"
-            "- Rubika `/rubika_connect` · Bale `/bale_connect` · Drive `/drive_connect`\n"
-            "- SSH `/ssh_list` · ZIP `/newbatch` `/done`\n\n"
-            "🧰 Tools (own menu):\n"
-            "- `/dns host` · `/myip` · `/ping host:port` · `/md5 text` · `/sha256` · `/b64e` `/b64d`\n\n"
-            "📤 Direct send: `/directmode rubika|bale|drive on|off` · 🔗 links: Link / video menu\n\n"
-            "Troubleshooting:\n"
-            "- Network: `/netstatus`\n"
-            "- Admin: `/admin`\n"
-            "- Remove one job: `/del <job_id>`\n\n"
-            "Log analysis: `/loghelp`\n"
-            "Usage & limits: `/usage` — plan bundle: `/plan` — purchase info: `/purchase`"
+            "🏠 Menu: /menu\n"
+            "📁 Transfer: /rubika_connect · /bale_connect · /drive_connect\n"
+            "🧰 Tools: /dns · /myip · /ping · /md5\n"
+            "📰 Feeds: /feeds · 🌍 World from main menu\n\n"
+            "Usage & plans: /usage · /plan · /purchase · /plan_compare\n"
+            "Network: /netstatus · Cancel job: /del <job_id>\n"
+            "If something fails, send the job_id to support."
         ),
-        "loghelp_body": (
-            "Job log analysis:\n\n"
-            "1) Copy `job_id` from the Queued message.\n"
-            "2) In bot logs, find `task_queued` with that `job_id`.\n"
-            "3) In worker logs you should see:\n"
-            "   `task_started` -> (`task_done` or `task_failed`).\n"
-            "4) If you see `task_requeued`, network/access failed and a new job was created.\n"
-            "5) For Rubika login, check `rubika_connect_ok` / `rubika_connect_failed`.\n\n"
-            "Log paths:\n"
-            "- `/opt/tele2rub/queue/bot_events.jsonl`\n"
-            "- `/opt/tele2rub/queue/worker_events.jsonl`\n"
-            "- `/tmp/tele2rub-installer.jsonl`"
+        "help_short_admin": (
+            "Quick help (admin):\n\n"
+            "🏠 /menu · tools · /feeds\n"
+            "Admin panel: /admin\n"
+            "Logs: /loghelp\n"
+            "Usage: /usage · plan: /plan · purchase: /purchase"
+        ),
+                "loghelp_body": (
+            "If a transfer failed:\n\n"
+            "1) Copy the job_id from the queued message.\n"
+            "2) Send that id to support.\n"
+            "3) Check /netstatus and destination connection.\n"
+            "4) Cancel with /del <job_id> and retry if needed."
+        ),
+        "loghelp_body_admin": (
+            "Job log triage:\n\n"
+            "1) Take job_id from Queued message.\n"
+            "2) bot logs: task_queued\n"
+            "3) worker: task_started -> task_done|task_failed\n"
+            "4) task_requeued = network/access issue\n"
+            "Paths:\n"
+            "- /opt/tele2rub/queue/bot_events.jsonl\n"
+            "- /opt/tele2rub/queue/worker_events.jsonl"
         ),
         "rubika_not_connected": "Rubika is not linked. Use `/rubika_connect`.",
         "rubika_checking": "Checking live Rubika session...",
@@ -1590,23 +1705,24 @@ I18N = {
         "confirm_use_buttons": "Use the Confirm / Cancel buttons under that message to finish sending.",
         "cleanup_done": "Cleaned `downloads/`: {n} files, ~{mb} MB freed.",
         "direct_need_rubika": "Link Rubika first: `/rubika_connect`",
-        "file_too_large": "File exceeds the limit (max ~`{max_mb}` MB from plan + `MAX_FILE_MB`). This file is ~`{size_mb}` MB.",
+        "file_too_large": "File exceeds your plan limit (max ~{max_mb} MB). This file is ~{size_mb} MB.\nUpgrade: /purchase",
+        "file_too_large_admin": "File exceeds limit (max ~{max_mb} MB from plan + MAX_FILE_MB). This file is ~{size_mb} MB.",
         "bale_file_too_large": "Bale cannot accept this file (max `{max_mb}` MB). This file is ~`{size_mb}` MB.",
         "text_unhandled_hint": "I did not understand that message. Use the menu buttons or send `/help`.",
         "admin_max_file": "`MAX_FILE_MB` (env cap): `{mb}` (`0` or empty = no env cap)",
         "admin_plan_note": "Per-user plans live in SQLite (`user_entitlements`). Users: `/usage`.",
         "admin_clear_prefs_hint": "Clear cached `v2_user_prefs` row: `/admin_clear_prefs <telegram_user_id>`",
         "admin_clear_state_mirrors_hint": "Clear wizard/batch SQLite mirrors only (not JSON files): `/admin_clear_state_mirrors <telegram_user_id>`",
-        "admin_tier_usage": "Usage: `/admin_tier <telegram_user_id> <guest|free|pro> [days]`",
+        "admin_tier_usage": "Usage: `/admin_tier <telegram_user_id> <guest|free|pro|star> [days]`",
         "admin_bonus_usage": "Usage: `/admin_bonus <telegram_user_id> <extra_month_mb>`",
         "admin_wizard_user_ask": "Send the numeric Telegram user ID:",
         "admin_wizard_need_user_id": "Send a valid numeric user ID.",
-        "admin_wizard_tier_ask": "Send tier: `guest`, `free`, or `pro`",
+        "admin_wizard_tier_ask": "Send tier: `guest`, `free`, `pro`, or `star`",
         "admin_wizard_days_ask": "For pro, send validity days:",
         "admin_wizard_tier_done": "User `{target}` tier set to `{tier}`.",
         "admin_wizard_bonus_ask": "Send extra monthly quota in MB:",
         "admin_wizard_bonus_done": "Added `{mb}` MB bonus for user `{target}`.",
-        "admin_wizard_tier_for_user": "User `{target}` — send tier: `guest`, `free`, or `pro`",
+        "admin_wizard_tier_for_user": "User `{target}` — send tier: `guest`, `free`, `pro`, or `star`",
         "admin_wizard_bonus_for_user": "User `{target}` — send extra monthly quota in MB:",
         "admin_payment_lookup_hint": "Recent `v2_payments` rows: `/admin_payment_lookup <telegram_user_id> [limit]`",
         "admin_payment_lookup_empty": "No payment rows for this user.",
@@ -1620,23 +1736,32 @@ I18N = {
         "admin_reconcile_billing_hint": "Expire stale pending/initiated payments: `/admin_reconcile_billing`",
         "admin_reconcile_billing_result": "Reconcile: expired `{expired}`, scanned `{scanned}`.",
         "purchase_stub_started": (
-            "💳 Test checkout (`BILLING_STUB_CHECKOUT`)\n\n"
-            "Created `v2_payments` row.\n"
-            "• payment_id: `{payment_id}`\n"
-            "• authority: `{authority}`\n\n"
-            "To grant Pro after success, set status to `paid`:\n"
-            "`POST …/v2_payment_event` or `/admin_payment_status <id> paid`."
+            "💳 Purchase request recorded.\n\n"
+            "Reference: {payment_id}\n"
+            "After payment is confirmed, Pro will activate.\n"
+            "Check usage: /usage"
+        ),
+        "purchase_stub_started_admin": (
+            "💳 Test checkout (BILLING_STUB_CHECKOUT)\n\n"
+            "Created v2_payments row.\n"
+            "• payment_id: {payment_id}\n"
+            "• authority: {authority}\n\n"
+            "Grant Pro via POST …/v2_payment_event or /admin_payment_status <id> paid"
         ),
         "purchase_gateway_started": (
-            "💳 Zarinpal checkout\n\n"
-            "• payment_id: `{payment_id}`\n"
-            "• authority: `{authority}`\n"
-            "• pay URL: {pay_url}\n\n"
-            "After successful payment the row should become `paid`."
+            "💳 Zarinpal — Pro 30 days\n\n"
+            "1) Tap the Pay button\n"
+            "2) Complete payment in Zarinpal\n"
+            "3) After confirmation Pro activates and you get a DM\n\n"
+            "Tracking id: {payment_id}\n"
+            "Link: {pay_url}"
         ),
+        "btn_open_pay_url": "💳 Pay with Zarinpal",
         "purchase_gateway_error": "Payment gateway error: {error}",
-        "toolkit_network_disabled": "Network toolkit is off (set `TOOLKIT_NETWORK_LIGHT`).",
-        "toolkit_utility_disabled": "Text/encoding toolkit is off (set `TOOLKIT_UTILITY_LIGHT`).",
+        "toolkit_network_disabled": "Network tools are temporarily unavailable.",
+        "toolkit_network_disabled_admin": "Network toolkit is off — set TOOLKIT_NETWORK_LIGHT in .env.",
+        "toolkit_utility_disabled": "This tool is temporarily unavailable.",
+        "toolkit_utility_disabled_admin": "Text toolkit is off — set TOOLKIT_UTILITY_LIGHT in .env.",
         "toolkit_quota_exceeded": "Daily toolkit quota reached ({used}/{limit}). Try again tomorrow.",
         "toolkit_dns_usage": "Usage: `/dns <hostname>` — e.g. `/dns example.com`",
         "toolkit_dns_result": "`{host}`:\n{ips}",
@@ -1655,7 +1780,8 @@ I18N = {
         "toolkit_whois_result": "{data}",
         "toolkit_whois_error": "whois/RDAP failed: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
-        "toolkit_gsearch_usage": "Usage: `/gsearch <query>` or `/gisearch <query>`\nRequires env: `GOOGLE_CSE_API_KEYS` and `GOOGLE_CSE_ID`",
+        "toolkit_gsearch_usage": "Google search is temporarily unavailable.",
+        "toolkit_gsearch_usage_admin": "Usage: /gsearch <query> or /gisearch <query>\nRequires env: GOOGLE_CSE_API_KEYS and GOOGLE_CSE_ID",
         "toolkit_gsearch_send_only": "Send a search query:",
         "toolkit_gisearch_send_only": "Send an image search query:",
         "toolkit_gsearch_result": "{data}",
@@ -1691,13 +1817,18 @@ I18N = {
         "toolkit_sha256_send_only": "Send text to hash with SHA256.",
         "toolkit_b64e_send_only": "Send text to Base64-encode.",
         "toolkit_b64d_send_only": "Send a Base64 string to decode.",
-        "toolkit_myip_server_fallback": "Server egress IP: `{ip}`\n\nFor your real IP, set `MINIAPP_BASE_URL` on the server and open «My IP» again.",
+        "toolkit_myip_server_fallback": "Current egress IP: {ip}\n\nFor your real device IP, Mini App must be enabled. Contact support if unavailable.",
+        "toolkit_myip_server_fallback_admin": "Server egress IP: {ip}\n\nSet MINIAPP_BASE_URL in .env for real user IP.",
         "miniapp_myip_open": "Browser tools (your real IP, DNS, latency, password, …) — tap a button:",
         "btn_open_myip_app": "📍 My IP",
         "btn_open_miniapp_hub": "🧰 Mini App hub",
         "miniapp_setup_hint": (
+            "Browser tools are temporarily unavailable.\n"
+            "Please try again later or contact support."
+        ),
+        "miniapp_setup_hint_admin": (
             "Mini App is not configured.\n"
-            "Set `MINIAPP_BASE_URL` (public HTTPS URL to `web/`) in `.env`.\n"
+            "Set MINIAPP_BASE_URL (public HTTPS URL to web/) in .env.\n"
             "See README → Telegram Mini App."
         ),
         "media_pick_dest": "Choose where to send this file:",
@@ -1736,8 +1867,46 @@ I18N = {
         "world_digest_title": "📰 Daily feed digest — {date}",
         "btn_main_feed": "📰 Feed Reader",
         "btn_feed_reader": "📰 Manage feeds",
+        "btn_feed_list": "📋 Feed list",
+        "btn_feed_add": "➕ Add feed",
+        "btn_feed_help": "ℹ️ Feed help",
+        "btn_plan_compare": "📊 Compare plans",
+        "feed_section_opened": "Feed Reader — RSS, YouTube, X/Twitter",
+        "feed_help_body": (
+            "📰 Feed Reader help\n"
+            "• Send an RSS URL, YouTube channel, or X account\n"
+            "• Push: instant new-item alerts (plan-gated)\n"
+            "• Digest: daily Tehran summary for selected feeds\n"
+            "• /cancel to abort wizards"
+        ),
+        "feed_quota_line": "Feed quota: {used}/{limit}",
+        "feed_page_prev": "‹ Prev",
+        "feed_page_next": "Next ›",
+        "feed_digest_on": "📰 Daily digest: on",
+        "feed_digest_off": "📰 Daily digest: off",
+        "feed_digest_enabled": "Daily digest enabled",
+        "feed_digest_disabled": "Daily digest disabled",
+        "feed_push_plan_blocked": "Your plan cannot enable push. Upgrade or use digest-only.",
+        "feed_resolve_failed": "Could not resolve this URL to a feed: {url}",
+        "world_quota_exceeded": "World tools daily limit reached ({used}/{limit}). Try tomorrow or upgrade.",
+        "plan_compare_title": "📊 Plan comparison",
         "feed_menu_title": "📰 Feed Reader\nRSS · YouTube · X/Twitter\nAdd feeds, push alerts, or view on demand.",
-        "feed_digest_hint": "Push = instant new-item alerts · daily digest runs each Tehran morning for those feeds.",
+        "feed_digest_hint": "Push = instant alerts · Digest = Tehran morning summary (per-feed toggle).",
+        "feed_digest_schedule": "Daily digest hour: ~{hour}:00 Tehran time.",
+        "feed_empty_state": (
+            "No feeds yet.\n"
+            "Tap ➕ Add feed and send an RSS, YouTube, or X URL.\n"
+            "Then enable push or daily digest per feed."
+        ),
+        "payment_granted_dm": (
+            "✅ Payment confirmed.\n"
+            "Plan {tier} is active for {days} days.\n"
+            "Details: /usage"
+        ),
+        "payment_expiry_soon_dm": (
+            "⏰ Your {tier} plan expires in about {days_left} days.\n"
+            "Renew: /purchase · Compare: /plan_compare"
+        ),
         "feed_ask_url": (
             "Send a feed URL or profile page:\n"
             "• Direct RSS/Atom\n"
@@ -1765,30 +1934,43 @@ I18N = {
         "toolkit_url_expand_send_only": "Send a short URL to expand.",
         "toolkit_timestamp_send_only": "Send a Unix timestamp or `YYYY-MM-DD HH:MM:SS`.",
         "quota_parallel_msg": "Too many jobs at once for your plan (`{cur}` / `{maxp}`). Wait for one to finish.",
-        "quota_day_msg": "Daily data limit reached. This job ~{need} MB; ~{left} MB left today.",
-        "quota_month_msg": "Monthly data limit reached. This job ~{need} MB; ~{left} MB left this month.",
+        "quota_day_msg": "Daily data limit reached.\nThis job ~{need} MB; ~{left} MB left today.\nUpgrade: /purchase",
+        "quota_month_msg": "Monthly data limit reached.\nThis job ~{need} MB; ~{left} MB left this month.\nUpgrade: /purchase",
         "quota_file_cap_msg": "This file exceeds the per-file cap (`{max_mb}` MB max; yours ~{need_mb} MB).",
-        "quota_unknown": "Quota blocked. Try `/usage` or contact admin.",
+        "quota_unknown": "Quota blocked.\nCheck /usage or upgrade with /purchase.",
         "usage_panel": (
-            "Usage & limits:\n"
-            "• Tier: `{tier}`\n"
+            "📊 Usage & limits\n\n"
+            "Plan\n"
+            "• {tier} (expires: {expires})\n\n"
+            "Transfer\n"
             "• Today: ~{day_used} / {day_cap} MB\n"
             "• This month: ~{month_used} / {month_cap} MB\n"
-            "• Max per file: `{max_file}` MB\n"
-            "• Parallel jobs: `{parallel}` / `{max_parallel}`\n\n"
-            "Usage increments when Rubika upload succeeds."
+            "• Max file: {max_file} MB\n"
+            "• Parallel: {parallel} / {max_parallel}\n\n"
+            "Tools\n"
+            "• Toolkit daily: {toolkit_used_cap}\n"
+            "• World/FX daily: {world_used_cap}\n"
+            "• Feeds: {feed_used}/{feed_cap} (push: {feed_push})\n\n"
+            "Upgrade: /purchase · Compare: /plan_compare"
         ),
-        "usage_disabled_hint": "Quotas are off (`DISABLE_USAGE_LIMITS`). Only optional env caps apply.",
+        "usage_disabled_hint": "Usage quotas are currently disabled for this bot.",
+        "usage_disabled_hint_admin": "Quotas are off (DISABLE_USAGE_LIMITS). Only optional env caps apply.",
         "batch_raw_hint": "Current raw total ~`{raw_mb}` MB ({n} files). ZIP size may differ slightly.",
         "direct_url_use_sendlink": "For links use the button or `/sendlink`.",
         "direct_url_use_link_menu": "For link/video download use main menu «🔗 Link / video».",
         "purchase_info_body": (
             "💳 Plans / purchase\n\n"
-            "Automatic checkout is not wired yet. For now:\n"
-            "• Ask an admin to run `/admin_tier` or `/admin_bonus`; or\n"
-            "• Use `tools/grant_plan.py` on the server; or\n"
-            "• `tools/payment_webhook_stub.py` + `PAYMENT_WEBHOOK_SECRET`.\n\n"
-            "Connect your real PSP to that webhook when ready."
+            "• Buy Pro (30 days): /purchase\n"
+            "• Compare plans: /plan_compare\n"
+            "• Usage: /usage\n\n"
+            "For Star or custom plans, contact support."
+        ),
+        "purchase_info_body_admin": (
+            "💳 Plans / purchase (admin)\n\n"
+            "• Buy Pro: /purchase (Zarinpal)\n"
+            "• Compare: /plan_compare\n"
+            "• Grant: /admin_tier <uid> free|pro|star [days]\n"
+            "• Or tools/grant_plan.py on the server"
         ),
         "rubika_update_hint": (
             "If Rubika breaks after a server update: run `/rubika_connect` once. "
@@ -1828,9 +2010,24 @@ def set_lang(user_id: int, lang: str):
         log_event("v2_user_prefs_lang_upsert_failed", user_id=user_id, error=str(e))
 
 
+def is_admin(user_id: int) -> bool:
+    try:
+        return int(user_id) in ADMIN_IDS
+    except (TypeError, ValueError):
+        return False
+
+
 def tr(user_id: int, key: str, **kwargs) -> str:
+    """Translate i18n key. Admins prefer ``{key}_admin`` when that variant exists."""
     lang = get_lang(user_id)
-    text = I18N.get(lang, I18N["fa"]).get(key) or I18N["fa"].get(key) or key
+    pack = I18N.get(lang, I18N["fa"])
+    fa = I18N["fa"]
+    lookup = key
+    if is_admin(user_id):
+        admin_key = f"{key}_admin"
+        if admin_key in pack or admin_key in fa:
+            lookup = admin_key
+    text = pack.get(lookup) or fa.get(lookup) or pack.get(key) or fa.get(key) or key
     try:
         return text.format(**kwargs)
     except Exception:
@@ -1968,6 +2165,10 @@ def build_toolkit_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_world_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_world_menu(user_id, tr)
+
+
+def build_feed_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_feed_menu(user_id, tr)
 
 
 def build_toolkit_network_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -2108,7 +2309,7 @@ def make_bundle_zip_local(file_paths: list[Path], zip_name: str, password: str =
                 zip_file.write(file_path, arcname=file_path.name)
     return zip_path
 
-waiting_for_zip_password = False
+waiting_for_zip_password_users: set[int] = set()
 
 
 def load_json(path: Path, default):
@@ -2233,6 +2434,9 @@ def save_batch_sessions(data: dict):
     save_json(BATCH_FILE, data)
 
 
+_WIZARD_TTL_SEC = int((os.getenv("WIZARD_TTL_SEC") or "1800").strip() or "1800")
+
+
 def get_state(user_id: int) -> dict:
     key = get_user_key(user_id)
     file_s: dict = {}
@@ -2248,6 +2452,17 @@ def get_state(user_id: int) -> dict:
         log_event("v2_user_state_mirror_read_failed", user_id=user_id, error=str(e))
     # Merge: JSON file wins on conflicts (wizard keys often missing from stale mirror).
     s = {**mirror_s, **file_s}
+    # Expire stale wizard steps (keep menu_section).
+    try:
+        ts = int(s.get("_state_ts") or 0)
+        step = s.get("step")
+        if step and ts > 0 and _WIZARD_TTL_SEC > 0 and (time.time() - ts) > _WIZARD_TTL_SEC:
+            keep = {MENU_SECTION_KEY: s.get(MENU_SECTION_KEY)} if s.get(MENU_SECTION_KEY) else {}
+            s = keep
+            set_state(user_id, keep)
+            log_event("wizard_ttl_expired", user_id=user_id, step=str(step)[:80])
+    except Exception:
+        pass
     if MENU_SECTION_KEY in s:
         pass
     elif MENU_SECTION_KEY in mirror_s:
@@ -2265,11 +2480,14 @@ def get_state(user_id: int) -> dict:
 
 
 def set_state(user_id: int, data: dict):
+    payload = dict(data or {})
+    if payload.get("step"):
+        payload["_state_ts"] = int(time.time())
     states = load_user_states()
-    states[get_user_key(user_id)] = data
+    states[get_user_key(user_id)] = payload
     save_user_states(states)
     try:
-        queue.upsert_user_state_mirror(user_id, data)
+        queue.upsert_user_state_mirror(user_id, payload)
     except Exception as e:
         log_event("v2_user_state_mirror_upsert_failed", user_id=user_id, error=str(e))
 
@@ -2668,12 +2886,33 @@ def sync_v2_provider_credentials_from_users_json() -> None:
 
 async def gate_quota(message: Message, user_id: int, task: dict) -> bool:
     """Return True if the user may enqueue this task."""
+    from v2.core.upgrade_cta import buy_pro_keyboard
+
     task["telegram_user_id"] = user_id
     est = estimate_task_bytes(task)
     ok, code, det = can_enqueue(user_id, est, queue)
     if ok:
+        if code == "ok_warn" and det.get("quota_soft_warn"):
+            warn = tr(
+                user_id,
+                "quota_soft_warn",
+                day_pct=det.get("day_pct", "-"),
+                month_pct=det.get("month_pct", "-"),
+            )
+            try:
+                await message.reply_text(
+                    warn,
+                    reply_markup=buy_pro_keyboard(user_id, tr),
+                    parse_mode=None,
+                )
+            except Exception:
+                pass
         return True
-    await message.reply_text(quota_fail_text(user_id, code, det), parse_mode=None)
+    await message.reply_text(
+        quota_fail_text(user_id, code, det),
+        reply_markup=buy_pro_keyboard(user_id, tr),
+        parse_mode=None,
+    )
     log_event("quota_blocked", user_id=user_id, code=code)
     return False
 
@@ -2685,6 +2924,19 @@ def usage_report_text(user_id: int) -> str:
     day_u = u["day_bytes"] / (1024 * 1024)
     month_u = u["month_bytes"] / (1024 * 1024)
     cur_par = parallel_job_count(user_id, queue)
+    tk_lim = effective_toolkit_daily_limit(user_id)
+    wd_lim = effective_world_daily_limit(user_id)
+    tk_used = queue.toolkit_daily_get_count(user_id)
+    wd_used = queue.world_daily_get_count(user_id)
+    feed_used = queue.count_feeds(user_id)
+    feed_cap = effective_feed_max(user_id)
+    exp = int(u.get("expires_at") or 0)
+    exp_s = "-" if exp <= 0 else time.strftime("%Y-%m-%d", time.localtime(exp))
+    tk_s = "∞" if tk_lim <= 0 else f"{tk_used}/{tk_lim}"
+    wd_s = "∞" if wd_lim <= 0 else f"{wd_used}/{wd_lim}"
+    push_s = "yes" if feed_push_allowed(user_id) else "no"
+    if get_lang(user_id) != "en":
+        push_s = "بله" if feed_push_allowed(user_id) else "خیر"
     return tr(
         user_id,
         "usage_panel",
@@ -2696,7 +2948,18 @@ def usage_report_text(user_id: int) -> str:
         max_file=u["max_file_mb"],
         parallel=cur_par,
         max_parallel=u["max_parallel"],
+        toolkit_used_cap=tk_s,
+        world_used_cap=wd_s,
+        feed_used=feed_used,
+        feed_cap=feed_cap,
+        feed_push=push_s,
+        expires=exp_s,
     )
+
+
+def plan_compare_text_for_user(user_id: int) -> str:
+    lang = "en" if get_lang(user_id) == "en" else "fa"
+    return tr(user_id, "plan_compare_title") + "\n" + plan_matrix_text(lang=lang)
 
 
 def mark_deleted(task: dict):
@@ -2929,6 +3192,61 @@ async def payment_reconcile_loop():
             log_event("billing_reconcile_error", error=str(e))
 
 
+_EXPIRY_REMINDED: set[str] = set()
+
+
+async def payment_notify_loop():
+    """DM users after paid grant; soft reminder ~3 days before pro/star expiry."""
+    await asyncio.sleep(45)
+    while True:
+        await asyncio.sleep(60)
+        try:
+            for item in claim_pending_entitlement_notifies(queue, limit=40):
+                uid = int(item["telegram_user_id"])
+                try:
+                    await app.send_message(
+                        uid,
+                        tr(
+                            uid,
+                            "payment_granted_dm",
+                            tier=item.get("tier") or "pro",
+                            days=item.get("days") or 0,
+                        ),
+                        parse_mode=None,
+                    )
+                except Exception as e:
+                    log_event("payment_grant_dm_failed", user_id=uid, error=str(e)[:200])
+        except Exception as e:
+            log_event("payment_notify_loop_error", error=str(e)[:200])
+        try:
+            from user_entitlements import list_expiring_paid_tiers
+
+            for row in list_expiring_paid_tiers(within_sec=3 * 86400, limit=80):
+                uid = int(row["user_id"])
+                exp = int(row["expires_at"] or 0)
+                day_key = time.strftime("%Y-%m-%d", time.localtime(exp))
+                key = f"{uid}:{row.get('tier')}:{day_key}"
+                if key in _EXPIRY_REMINDED:
+                    continue
+                days_left = max(1, int((exp - time.time()) // 86400) or 1)
+                try:
+                    await app.send_message(
+                        uid,
+                        tr(
+                            uid,
+                            "payment_expiry_soon_dm",
+                            tier=row.get("tier") or "pro",
+                            days_left=days_left,
+                        ),
+                        parse_mode=None,
+                    )
+                    _EXPIRY_REMINDED.add(key)
+                except Exception:
+                    pass
+        except Exception as e:
+            log_event("payment_expiry_loop_error", error=str(e)[:200])
+
+
 async def rss_poll_loop():
     """Notify users when push-enabled RSS feeds change; also daily digest."""
     await asyncio.sleep(120)
@@ -2937,7 +3255,13 @@ async def rss_poll_loop():
         if not RSS_POLL_ENABLE:
             continue
         try:
-            await poll_rss_pushes(app, queue, tr, log_event=log_event)
+            await poll_rss_pushes(
+                app,
+                queue,
+                tr,
+                log_event=log_event,
+                feed_push_allowed=feed_push_allowed,
+            )
         except Exception as e:
             log_event("rss_poll_error", error=str(e))
         try:
@@ -2979,6 +3303,32 @@ def _create_gateway_purchase_checkout(user_id: int) -> tuple[int, str, str]:
     return r.payment_id, (r.authority or ""), pay_url
 
 
+def connection_checklist_text(user_id: int) -> str:
+    rub = "✅" if get_user_session(user_id) else "⬜"
+    bale_tok, bale_chat = (None, None)
+    try:
+        bale_tok, bale_chat = queue.get_bale_credentials(user_id)
+    except Exception:
+        pass
+    bale = "✅" if bale_tok and bale_chat else "⬜"
+    drive = "⬜"
+    try:
+        from v2.transfer.user_credentials import load_drive_credentials
+
+        dc = load_drive_credentials(queue, BASE_DIR, user_id)
+        if dc and dc.ready:
+            drive = "✅"
+    except Exception:
+        pass
+    return tr(
+        user_id,
+        "onboard_checklist",
+        rubika=rub,
+        bale=bale,
+        drive=drive,
+    )
+
+
 BASIC_COMMAND_DEPS = BasicCommandDeps(
     tr=tr,
     remember_chat=remember_chat,
@@ -2987,6 +3337,8 @@ BASIC_COMMAND_DEPS = BasicCommandDeps(
     set_direct_mode_target=set_direct_mode_target,
     build_main_menu=build_main_menu,
     app_version=APP_VERSION,
+    clear_state=clear_state,
+    connection_checklist=connection_checklist_text,
 )
 
 SESSION_SETTINGS_COMMAND_DEPS = SessionSettingsCommandDeps(
@@ -3032,6 +3384,7 @@ PLAN_COMMAND_DEPS = PlanCommandDeps(
     stub_checkout_enabled=BILLING_STUB_CHECKOUT,
     create_stub_checkout=_create_stub_purchase_checkout,
     create_gateway_checkout=_gateway_checkout_or_none(),
+    plan_compare_text=plan_compare_text_for_user,
 )
 
 
@@ -3057,6 +3410,28 @@ def _toolkit_quota_commit(uid: int) -> None:
     if lim <= 0:
         return
     queue.toolkit_daily_increment_if_under_cap(uid, daily_limit=lim)
+
+
+def _world_quota_try(uid: int) -> tuple[bool, str]:
+    lim = effective_world_daily_limit(uid)
+    if lim <= 0:
+        return True, ""
+    cur = queue.world_daily_get_count(uid)
+    if cur >= lim:
+        return False, tr(
+            uid,
+            "world_quota_exceeded",
+            used=cur,
+            limit=lim,
+        )
+    return True, ""
+
+
+def _world_quota_commit(uid: int) -> None:
+    lim = effective_world_daily_limit(uid)
+    if lim <= 0:
+        return
+    queue.world_daily_increment_if_under_cap(uid, daily_limit=lim)
 
 
 TOOLKIT_COMMAND_DEPS = ToolkitCommandDeps(
@@ -3098,6 +3473,8 @@ WORLD_COMMAND_DEPS = WorldCommandDeps(
     get_lang=get_lang,
     log_event=log_event,
     set_menu_section=set_menu_section,
+    world_quota_try=_world_quota_try,
+    world_quota_commit=_world_quota_commit,
 )
 
 FEED_READER_DEPS = FeedReaderDeps(
@@ -3108,6 +3485,9 @@ FEED_READER_DEPS = FeedReaderDeps(
     clear_state=clear_state,
     extract_first_url=extract_first_url,
     get_user_tier=lambda uid: str(get_usage_snapshot(uid).get("tier") or "free"),
+    feed_max_for_user=effective_feed_max,
+    feed_push_allowed=feed_push_allowed,
+    set_menu_section=set_menu_section,
 )
 
 TOOLKIT_EXTRA_DEPS = ToolkitExtraDeps(
@@ -3810,11 +4190,28 @@ async def world_rss_list_handler(client: Client, message: Message):
 
 
 async def show_feed_menu_handler(client: Client, message: Message):
+    uid = message.from_user.id
+    set_menu_section(uid, MenuSection.FEED)
+    await message.reply_text(
+        tr(uid, "feed_section_opened"),
+        reply_markup=build_feed_menu(uid),
+        parse_mode=None,
+    )
     await handle_show_feed_menu(FEED_READER_DEPS, client, message)
 
 
 async def feed_add_handler(client: Client, message: Message):
     await start_add_feed_wizard(FEED_READER_DEPS, message)
+
+
+async def feed_help_handler(client: Client, message: Message):
+    uid = message.from_user.id
+    set_menu_section(uid, MenuSection.FEED)
+    await message.reply_text(tr(uid, "feed_help_body"), parse_mode=None)
+
+
+async def plan_compare_handler(client: Client, message: Message):
+    await handle_plan_compare(PLAN_COMMAND_DEPS, client, message)
 
 
 async def password_handler(client: Client, message: Message):
@@ -3995,14 +4392,22 @@ async def delete_one_handler(client: Client, message: Message):
     await handle_delete_one(DELETE_COMMAND_DEPS, client, message)
 
 
-def _zip_password_waiting() -> bool:
-    global waiting_for_zip_password
-    return waiting_for_zip_password
+def _zip_password_waiting(user_id: int | None = None) -> bool:
+    if user_id is None:
+        return bool(waiting_for_zip_password_users)
+    return int(user_id) in waiting_for_zip_password_users
 
 
-def _set_zip_password_waiting(v: bool) -> None:
-    global waiting_for_zip_password
-    waiting_for_zip_password = v
+def _set_zip_password_waiting(v: bool, user_id: int | None = None) -> None:
+    if user_id is None:
+        if not v:
+            waiting_for_zip_password_users.clear()
+        return
+    uid = int(user_id)
+    if v:
+        waiting_for_zip_password_users.add(uid)
+    else:
+        waiting_for_zip_password_users.discard(uid)
 
 
 REPLY_ROUTE_DEPS = ReplyRouteDeps(
@@ -4100,6 +4505,10 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
         "/world_rss": world_rss_handler,
         "/world_rss_list": world_rss_list_handler,
         "/show_feed_menu": show_feed_menu_handler,
+        "/feed_add": feed_add_handler,
+        "/feeds": world_rss_list_handler,
+        "/feed_help": feed_help_handler,
+        "/plan_compare": plan_compare_handler,
         "/password": password_handler,
         "/revdns": reverse_dns_handler,
         "/urlexpand": url_expand_handler,
@@ -4210,6 +4619,8 @@ INLINE_MENU_DEPS = InlineMenuDeps(
     show_files_menu_handler=show_files_menu_handler,
     show_link_direct_menu_handler=show_link_direct_menu_handler,
     admin_handler=admin_handler,
+    plan_compare_handler=plan_compare_handler,
+    show_feed_menu_handler=show_feed_menu_handler,
 )
 
 
