@@ -62,3 +62,12 @@ class StubPaymentGateway:
             idempotency_key=idempotency_key,
         )
         return PaymentIntentResult(payment_id=pid, gateway=self._name, authority=authority)
+
+
+def build_payment_gateway(db: QueueDB):
+    """Prefer Zarinpal when configured; otherwise stub for local/dev checkout."""
+    from v2.billing.zarinpal import ZarinpalPaymentGateway, zarinpal_configured
+
+    if zarinpal_configured():
+        return ZarinpalPaymentGateway(db)
+    return StubPaymentGateway(db)

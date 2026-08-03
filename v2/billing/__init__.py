@@ -1,6 +1,16 @@
 """v2 billing: ledger table ``v2_payments`` in ``queue.sqlite3``."""
 
-from v2.billing.gateway import PaymentGateway, PaymentIntentResult, StubPaymentGateway
+from v2.billing.gateway import (
+    PaymentGateway,
+    PaymentIntentResult,
+    StubPaymentGateway,
+    build_payment_gateway,
+)
+from v2.billing.zarinpal import (
+    ZarinpalPaymentGateway,
+    process_zarinpal_callback,
+    zarinpal_configured,
+)
 from v2.billing.ledger import record_initiated_payment
 from v2.billing.paid_entitlements import maybe_grant_plan_after_paid
 from v2.billing.reconcile import run_reconcile
@@ -31,6 +41,10 @@ __all__ = [
     "PaymentGateway",
     "PaymentIntentResult",
     "StubPaymentGateway",
+    "ZarinpalPaymentGateway",
+    "build_payment_gateway",
+    "zarinpal_configured",
+    "process_zarinpal_callback",
     "VerifiedPaymentEvent",
     "apply_verified_payment_event",
     "maybe_grant_plan_after_paid",

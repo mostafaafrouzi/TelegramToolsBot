@@ -697,7 +697,7 @@ def process_task(task: dict):
         if not token:
             raise RuntimeError("Bale bot token missing. Use /bale_connect in the bot.")
         if not chat_id:
-            raise RuntimeError("Bale chat_id missing. Use /bale_connect in the bot.")
+            raise RuntimeError("Bale chat_id missing. Use /bale_set_chat or finish /bale_connect.")
         from v2.transfer.bale_client import send_file_auto
 
         try:
@@ -784,29 +784,32 @@ def process_task(task: dict):
         dest = DOWNLOAD_DIR / safe_filename(Path(remote_path).name or "ssh_download.bin")
         from v2.transfer.ssh_client import sftp_get
 
-        push_status(task, "در حال SFTP get ...", "downloading")
-        ok, detail = sftp_get(
-            srv.get("host", ""),
-            int(srv.get("port") or 22),
-            srv.get("ssh_user", ""),
-            remote_path,
-            dest,
-            password=srv.get("ssh_secret"),
-            key_filename=srv.get("ssh_key_path"),
-        )
-        if not ok:
-            raise RuntimeError(detail)
-        from v2.transfer.telegram_notify import send_document
-
-        ok2, err = send_document(int(chat_id or 0), dest, caption=f"SSH get: {remote_path}")
-        if not ok2:
-            raise RuntimeError(err)
         try:
-            dest.unlink()
-        except Exception:
-            pass
-        push_status(task, "فایل از SSH به تلگرام ارسال شد.", "done")
-        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+            push_status(task, "در حال SFTP get ...", "downloading")
+            ok, detail = sftp_get(
+                srv.get("host", ""),
+                int(srv.get("port") or 22),
+                srv.get("ssh_user", ""),
+                remote_path,
+                dest,
+                password=srv.get("ssh_secret"),
+                key_filename=srv.get("ssh_key_path"),
+            )
+            if not ok:
+                raise RuntimeError(detail)
+            from v2.transfer.telegram_notify import send_document
+
+            ok2, err = send_document(int(chat_id or 0), dest, caption=f"SSH get: {remote_path}")
+            if not ok2:
+                raise RuntimeError(err)
+            push_status(task, "فایل از SSH به تلگرام ارسال شد.", "done")
+            wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        finally:
+            try:
+                if dest.exists():
+                    dest.unlink()
+            except Exception:
+                pass
         return
 
     elif task_type == "drive_download":
@@ -819,24 +822,27 @@ def process_task(task: dict):
 
         sa_path = str(task.get("drive_sa_path") or "").strip() or None
         oauth_path = str(task.get("drive_oauth_path") or "").strip() or None
-        push_status(task, "در حال دانلود از Drive ...", "downloading")
-        ok, detail = download_file(
-            file_id,
-            dest,
-            service_account_path=sa_path,
-            oauth_token_path=oauth_path,
-        )
-        if not ok:
-            raise RuntimeError(detail)
-        ok2, err = send_document(int(chat_id or 0), dest, caption=f"Drive: {file_id}")
-        if not ok2:
-            raise RuntimeError(err)
         try:
-            dest.unlink()
-        except Exception:
-            pass
-        push_status(task, "فایل از Drive به تلگرام ارسال شد.", "done")
-        wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+            push_status(task, "در حال دانلود از Drive ...", "downloading")
+            ok, detail = download_file(
+                file_id,
+                dest,
+                service_account_path=sa_path,
+                oauth_token_path=oauth_path,
+            )
+            if not ok:
+                raise RuntimeError(detail)
+            ok2, err = send_document(int(chat_id or 0), dest, caption=f"Drive: {file_id}")
+            if not ok2:
+                raise RuntimeError(err)
+            push_status(task, "فایل از Drive به تلگرام ارسال شد.", "done")
+            wl("task_done", job_id=task.get("job_id"), task_type=task_type, duration_ms=int((time.time() - task_started_at) * 1000))
+        finally:
+            try:
+                if dest.exists():
+                    dest.unlink()
+            except Exception:
+                pass
         return
 
     else:

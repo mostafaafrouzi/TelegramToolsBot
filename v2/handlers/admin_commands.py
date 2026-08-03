@@ -42,6 +42,7 @@ class AdminCommandDeps:
     get_usage_snapshot: Callable[[int], dict]
     set_state_preserving_menu: Callable[[int, dict], None]
     log_event: LogEventFn
+    delete_v2_user_prefs: Callable[[int], None] | None = None
 
 
 async def dispatch_admin_wizard(
@@ -126,6 +127,87 @@ async def dispatch_admin_wizard(
         message._admin_clear_state = True  # type: ignore[attr-defined]
         deps.log_event("admin_bonus_wizard_ok", admin_id=user_id, target=target, mb=mb)
         await message.reply_text(deps.tr(user_id, "admin_wizard_bonus_done", target=target, mb=mb), parse_mode=None)
+        return True
+
+    if step == "admin_payment_lookup_user":
+        try:
+            target = int(text.strip())
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "admin_wizard_need_user_id"), parse_mode=None)
+            return True
+        message._admin_clear_state = True  # type: ignore[attr-defined]
+        await _reply_payment_lookup(deps, user_id, target, message.reply_text, limit=15)
+        return True
+
+    if step == "admin_payment_status_id":
+        try:
+            payment_id = int(text.strip())
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "admin_wizard_payment_id_ask"), parse_mode=None)
+            return True
+        if not deps.get_v2_payment_by_id(payment_id):
+            await message.reply_text(deps.tr(user_id, "admin_wizard_payment_not_found", id=payment_id), parse_mode=None)
+            return True
+        message._admin_next_state = {  # type: ignore[attr-defined]
+            "step": "admin_payment_status_status",
+            "admin_payment_id": payment_id,
+        }
+        await message.reply_text(
+            deps.tr(user_id, "admin_wizard_payment_status_ask", statuses=", ".join(sorted(ALL_STATUSES))),
+            parse_mode=None,
+        )
+        return True
+
+    if step == "admin_payment_status_status":
+        payment_id = int(state.get("admin_payment_id") or 0)
+        parts = text.strip().split(maxsplit=1)
+        status = (parts[0] if parts else "").lower()
+        ref_id = parts[1].strip() if len(parts) >= 2 else None
+        if status not in ALL_STATUSES:
+            await message.reply_text(
+                deps.tr(user_id, "admin_wizard_payment_status_ask", statuses=", ".join(sorted(ALL_STATUSES))),
+                parse_mode=None,
+            )
+            return True
+        try:
+            deps.update_v2_payment_status(payment_id, status, ref_id)
+        except Exception as e:
+            await message.reply_text(f"DB error: {e}", parse_mode=None)
+            return True
+        granted = False
+        if status == PAID:
+            granted = bool(deps.maybe_grant_after_paid(payment_id))
+        message._admin_clear_state = True  # type: ignore[attr-defined]
+        deps.log_event("admin_payment_status_ok", admin_id=user_id, payment_id=payment_id, status=status)
+        await message.reply_text(
+            deps.tr(
+                user_id,
+                "admin_wizard_payment_status_done",
+                payment_id=payment_id,
+                status=status,
+                grant=" (+grant)" if granted else "",
+            ),
+            parse_mode=None,
+        )
+        return True
+
+    if step == "admin_clear_prefs_user":
+        try:
+            target = int(text.strip())
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "admin_wizard_need_user_id"), parse_mode=None)
+            return True
+        if not deps.delete_v2_user_prefs:
+            await message.reply_text("clear prefs not configured", parse_mode=None)
+            return True
+        try:
+            deps.delete_v2_user_prefs(target)
+        except Exception as e:
+            await message.reply_text(f"DB error: {e}", parse_mode=None)
+            return True
+        message._admin_clear_state = True  # type: ignore[attr-defined]
+        deps.log_event("admin_clear_prefs_ok", admin_id=user_id, target=target)
+        await message.reply_text(deps.tr(user_id, "admin_wizard_clear_prefs_done", target=target), parse_mode=None)
         return True
 
     return False

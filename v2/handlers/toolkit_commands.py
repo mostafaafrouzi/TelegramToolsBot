@@ -200,14 +200,19 @@ async def handle_google_search(deps: ToolkitCommandDeps, client: Any, message: M
         await message.reply_text(deps.tr(uid, "toolkit_network_disabled"), parse_mode=None)
         return
     text = message.text or ""
-    image = text.split(maxsplit=1)[0].lower().lstrip("/") == "gisearch"
+    cmd = text.split(maxsplit=1)[0].lower().lstrip("/") if text.strip() else "gsearch"
+    image = cmd == "gisearch"
     parts = text.split(maxsplit=1)
-    if len(parts) < 2:
-        await message.reply_text(deps.tr(uid, "toolkit_gsearch_usage"), parse_mode=None)
+    query = parts[1].strip() if len(parts) >= 2 else ""
+    if not query:
+        step = "await_toolkit_gisearch" if image else "await_toolkit_gsearch"
+        hint = "toolkit_gisearch_send_only" if image else "toolkit_gsearch_send_only"
+        deps.set_state_preserving_menu(uid, {"step": step})
+        await message.reply_text(deps.tr(uid, hint), parse_mode=None)
         return
     if not await _guard_toolkit_quota_try(deps, message, uid):
         return
-    ok, body = google_search(parts[1].strip(), image=image)
+    ok, body = google_search(query, image=image)
     if not ok:
         await message.reply_text(deps.tr(uid, "toolkit_gsearch_error", error=body), parse_mode=None)
         return

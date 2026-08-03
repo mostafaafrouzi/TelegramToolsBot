@@ -20,6 +20,7 @@ class PlanCommandDeps:
     usage_report_text: UsageReportFn
     stub_checkout_enabled: bool = False
     create_stub_checkout: Optional[Callable[[int], tuple[int, str]]] = None
+    create_gateway_checkout: Optional[Callable[[int], tuple[int, str, str]]] = None
 
 
 async def handle_usage(deps: PlanCommandDeps, client: Any, message: Message) -> None:
@@ -38,6 +39,26 @@ async def handle_plan(deps: PlanCommandDeps, client: Any, message: Message) -> N
 async def handle_purchase(deps: PlanCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.PLAN)
+    if deps.create_gateway_checkout:
+        try:
+            pid, authority, pay_url = deps.create_gateway_checkout(uid)
+        except Exception as e:
+            await message.reply_text(
+                deps.tr(uid, "purchase_gateway_error", error=str(e)[:400]),
+                parse_mode=None,
+            )
+            return
+        await message.reply_text(
+            deps.tr(
+                uid,
+                "purchase_gateway_started",
+                payment_id=pid,
+                authority=authority,
+                pay_url=pay_url or "-",
+            ),
+            parse_mode=None,
+        )
+        return
     if deps.stub_checkout_enabled and deps.create_stub_checkout:
         pid, authority = deps.create_stub_checkout(uid)
         await message.reply_text(

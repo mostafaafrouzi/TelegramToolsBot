@@ -97,6 +97,10 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         await deps.enqueue_rubika_text_message(message, text)
         return
 
+    if state.get("step") == "await_send_confirm" or state.get("pending_task"):
+        await message.reply_text(deps.tr(user_id, "confirm_use_buttons"), parse_mode=None)
+        return
+
     if await deps.dispatch_rubika_connect_wizard(
         message,
         user_id,
@@ -116,7 +120,28 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
         return
 
     state = deps.get_state(user_id)
-    if state.get("step") == "await_cloudflare_token":
+    step = str(state.get("step") or "")
+    cancel_text = (text or "").strip().lower()
+    if cancel_text in ("/cancel", "cancel", "لغو", "انصراف") and step.startswith(
+        ("await_", "admin_")
+    ):
+        deps.clear_state(user_id)
+        await message.reply_text(
+            deps.tr(user_id, "wizard_cancelled"),
+            reply_markup=deps.build_main_menu(user_id),
+            parse_mode=None,
+        )
+        return
+
+    if step in (
+        "await_ssh_put_file",
+        "await_drive_sa_json",
+        "await_ssh_add_key_file",
+    ):
+        await message.reply_text(deps.tr(user_id, "wizard_send_file_hint"), parse_mode=None)
+        return
+
+    if step.startswith("await_cloudflare") or step.startswith("await_cf_"):
         if await deps.dispatch_cloudflare_wizard(
             message,
             user_id,
@@ -445,6 +470,43 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
             body if ok else deps.tr(user_id, "toolkit_net_error", error=body),
             parse_mode=None,
         )
+        return
+
+    if state.get("step") == "await_drive_download_id":
+        file_id = (text or "").strip()
+        if not file_id:
+            await message.reply_text(deps.tr(user_id, "drive_download_send_only"), parse_mode=None)
+            return
+        deps.clear_state(user_id)
+        message.text = f"/drive_download {file_id}"
+        await deps.reply_route_deps.drive_download_handler(client, message)
+        return
+
+    if state.get("step") in ("await_toolkit_gsearch", "await_toolkit_gisearch"):
+        if not deps.toolkit_network_light_enabled:
+            deps.clear_state(user_id)
+            await message.reply_text(deps.tr(user_id, "toolkit_network_disabled"), parse_mode=None)
+            return
+        query = (text or "").strip()
+        image = state.get("step") == "await_toolkit_gisearch"
+        hint = "toolkit_gisearch_send_only" if image else "toolkit_gsearch_send_only"
+        if not query:
+            await message.reply_text(deps.tr(user_id, hint), parse_mode=None)
+            return
+        ok, quota_msg = deps.toolkit_quota_try(user_id)
+        if not ok:
+            deps.clear_state(user_id)
+            await message.reply_text(quota_msg, parse_mode=None)
+            return
+        from v2.toolkit.google_search_light import google_search
+
+        ok, body = google_search(query, image=image)
+        deps.clear_state(user_id)
+        if not ok:
+            await message.reply_text(deps.tr(user_id, "toolkit_gsearch_error", error=body), parse_mode=None)
+            return
+        deps.toolkit_quota_commit(user_id)
+        await message.reply_text(deps.tr(user_id, "toolkit_gsearch_result", data=body), parse_mode=None)
         return
 
     if await deps.handle_zip_password_text(message, user_id, text, deps.zip_password_deps):

@@ -12,9 +12,9 @@ from v2.core.nav import maybe_disable_direct_mode
 from v2.handlers.world_commands import (
     handle_calendar,
     handle_earthquakes,
-    list_rss_feeds,
+    start_age_wizard,
     start_currency_wizard,
-    start_rss_wizard,
+    start_timezone_wizard,
     start_weather_wizard,
 )
 
@@ -155,9 +155,17 @@ async def dispatch_inline_menu_callback(
         await callback_query.answer()
         await start_weather_wizard(deps.world_deps, msg)
         return True
+    if k == "time":
+        await callback_query.answer()
+        await start_timezone_wizard(deps.world_deps, msg)
+        return True
     if k == "calendar":
         await callback_query.answer()
         await handle_calendar(deps.world_deps, client, msg)
+        return True
+    if k == "age":
+        await callback_query.answer()
+        await start_age_wizard(deps.world_deps, msg)
         return True
     if k == "currency":
         await callback_query.answer()
@@ -176,11 +184,15 @@ async def dispatch_inline_menu_callback(
 
     if k == "rss":
         await callback_query.answer()
-        await start_rss_wizard(deps.world_deps, msg)
+        from v2.handlers.feed_reader_commands import start_add_feed_wizard
+
+        await start_add_feed_wizard(deps.feed_reader_deps, msg)
         return True
     if k == "rss_list":
         await callback_query.answer()
-        await list_rss_feeds(deps.world_deps, msg)
+        from v2.handlers.feed_reader_commands import list_feeds_inline
+
+        await list_feeds_inline(deps.feed_reader_deps, msg)
         return True
 
     if k in ("dm_rubika", "dm_bale", "dm_drive"):

@@ -1285,6 +1285,17 @@ class QueueDB:
             ).fetchone()
         return dict(row) if row else None
 
+    def get_v2_payment_by_authority(self, authority: str) -> Optional[dict]:
+        auth = (authority or "").strip()
+        if not auth:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM v2_payments WHERE authority = ? ORDER BY id DESC LIMIT 1",
+                (auth,),
+            ).fetchone()
+        return dict(row) if row else None
+
     def get_v2_payment_by_idempotency_key(self, key: str) -> Optional[dict]:
         with self._connect() as conn:
             row = conn.execute(
@@ -1367,6 +1378,30 @@ class QueueDB:
                 )
                 conn.commit()
 
+    def count_feeds(self, telegram_user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT COUNT(*) AS c FROM v2_feeds WHERE telegram_user_id = ?",
+                (int(telegram_user_id),),
+            ).fetchone()
+        return int(row["c"] if row else 0)
+
+    def find_feed_by_url(self, telegram_user_id: int, feed_url: str) -> Optional[dict]:
+        url = (feed_url or "").strip()
+        if not url:
+            return None
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT id, feed_url, label, push_enabled, last_content_hash, created_at
+                FROM v2_feeds
+                WHERE telegram_user_id = ? AND feed_url = ?
+                LIMIT 1
+                """,
+                (int(telegram_user_id), url),
+            ).fetchone()
+        return dict(row) if row else None
+
     def add_feed(
         self,
         telegram_user_id: int,
@@ -1375,10 +1410,24 @@ class QueueDB:
         label: str = "",
         push_enabled: bool = False,
     ) -> int:
+        """Insert feed or return existing id for same (user, url)."""
         now = int(time.time())
         url = (feed_url or "").strip()
+        existing = self.find_feed_by_url(telegram_user_id, url)
+        if existing:
+            return int(existing["id"])
         with self._lock:
             with self._connect() as conn:
+                # Re-check under lock
+                row = conn.execute(
+                    """
+                    SELECT id FROM v2_feeds
+                    WHERE telegram_user_id = ? AND feed_url = ? LIMIT 1
+                    """,
+                    (int(telegram_user_id), url),
+                ).fetchone()
+                if row:
+                    return int(row["id"])
                 cur = conn.execute(
                     """
                     INSERT INTO v2_feeds (

@@ -1,4 +1,4 @@
-"""Serve static mini-app HTML and optional OAuth callback routes."""
+"""Serve static mini-app HTML and optional OAuth / billing callback routes."""
 
 from __future__ import annotations
 
@@ -56,6 +56,35 @@ def start_miniapp_server(
                 self.send_header("Location", "/miniapp/index.html")
                 self.end_headers()
                 return
+            if path in ("/billing/zarinpal/callback", "/billing/zarinpal/callback/"):
+                qs = urllib.parse.parse_qs(parsed.query)
+                authority = (qs.get("Authority") or qs.get("authority") or [""])[0]
+                status = (qs.get("Status") or qs.get("status") or [""])[0]
+                try:
+                    from queue_db import QueueDB
+                    from v2.billing.zarinpal import process_zarinpal_callback
+
+                    ok, detail = process_zarinpal_callback(
+                        QueueDB(), authority=authority, status=status
+                    )
+                except Exception as e:
+                    self._html(500, "Payment error", str(e)[:500])
+                    return
+                if ok:
+                    self._html(
+                        200,
+                        "Payment successful",
+                        "پرداخت تأیید شد. می‌توانید این تب را ببندید و به تلگرام برگردید.\n"
+                        f"({detail})",
+                    )
+                else:
+                    self._html(
+                        400,
+                        "Payment failed",
+                        "پرداخت تأیید نشد. اگر مبلغ کسر شده با پشتیبانی تماس بگیرید.\n"
+                        f"({detail})",
+                    )
+                return
             if parsed.path.rstrip("/") == "/oauth/google/callback" and oauth_fn:
                 qs = urllib.parse.parse_qs(parsed.query)
                 code = (qs.get("code") or [""])[0]
@@ -87,7 +116,8 @@ def start_miniapp_server(
         def _html(self, status: int, title: str, body: str) -> None:
             content = (
                 f"<!DOCTYPE html><html><head><meta charset=utf-8>"
-                f"<title>{title}</title></head><body><h1>{title}</h1><p>{body}</p></body></html>"
+                f"<title>{title}</title></head><body><h1>{title}</h1>"
+                f"<p style='white-space:pre-wrap'>{body}</p></body></html>"
             ).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "text/html; charset=utf-8")

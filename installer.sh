@@ -452,6 +452,23 @@ st, ct, body = dispatch_miniapp_api('/miniapp/api/whois', 'q=127.0.0.1')
 assert st == 200 and b'\"ok\"' in body, (st, body[:200])
 print('miniapp-api-ok')
 " || warn "Mini App API smoke test failed (check v2/web/miniapp_api.py)"
+  # Mini App production readiness: HTTPS base URL when configured
+  if [[ -f "$dir/.env" ]]; then
+    local mini_base
+    mini_base="$(grep '^MINIAPP_BASE_URL=' "$dir/.env" 2>/dev/null | head -n1 | sed 's/^MINIAPP_BASE_URL=//' | tr -d '\r')"
+    if [[ -n "$mini_base" ]]; then
+      if [[ "$mini_base" != https://* ]]; then
+        warn "MINIAPP_BASE_URL should be HTTPS for Telegram WebApp (got: $mini_base)"
+      else
+        ok "MINIAPP_BASE_URL uses HTTPS"
+      fi
+      if ! grep -qE '^MINIAPP_SERVE_LOCAL=1' "$dir/.env" 2>/dev/null; then
+        info "MINIAPP_SERVE_LOCAL unset/0 — ensure nginx proxies /miniapp/api/ (see deploy/nginx/miniapp-location.conf.example)"
+      fi
+    else
+      info "MINIAPP_BASE_URL empty — Mini App buttons fall back to setup hints"
+    fi
+  fi
   return 0
 }
 
@@ -527,7 +544,7 @@ show_post_deploy_summary(){
   echo "  Rubika  /rubika_connect"
   echo "  Bale    /bale_connect"
   echo "  Drive   /drive_connect  (service-account JSON or Google OAuth)"
-  echo "  SSH     /ssh_add  (password or key:/path/to/id_rsa)"
+  echo "  SSH     menu «افزودن سرور» wizard (password / PEM paste / key file)"
   echo "  Link    menu «لینک / ویدیو» or /directmode"
   echo
   echo "Toolkit (TOOLKIT_*_LIGHT=1 by default): /dns /ping /whois /myip /miniapp …"
@@ -695,6 +712,8 @@ post_deploy_health_check(){
     "$dir/main.py" "$dir/telebot.py" "$dir/rub.py" "$dir/queue_db.py" "$dir/user_entitlements.py"
   run_cmd "python syntax smoke check (v2 package)" "$dir/venv/bin/python" -m compileall -q "$dir/v2" \
     || { err "v2 compileall failed"; return 1; }
+  run_cmd "unittest smoke" "$dir/venv/bin/python" -m unittest discover -s "$dir/tests" -p 'test_*.py' -q \
+    || { err "unittest smoke failed"; return 1; }
   [[ -d "$dir/web/miniapp" ]] || warn "Missing $dir/web/miniapp (Mini App static files)"
   verify_python_imports "$dir" || return 1
   # Ensure SQLite schema (e.g. v2_user_activity) exists before service handles messages.

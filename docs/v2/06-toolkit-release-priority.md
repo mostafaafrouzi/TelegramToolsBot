@@ -33,9 +33,9 @@ Score bands:
 - QR code generator/reader
 
 ### World
-- Weather (current)
-- Sunrise/sunset
-- Timezone now
+- Weather (current) — **shipped** (WMO labels, UV, 3-day forecast, AQI)
+- Sunrise/sunset — **shipped** (inside weather)
+- Timezone now — **shipped** (`/world_time`)
 
 ## Wave 2 (P1)
 ### Network/Security
@@ -64,10 +64,12 @@ Score bands:
 - Smarter alert rules (crossing, percentage move)
 
 ### World advanced
-- Air quality
-- Calendar converters (Persian/Gregorian)
-- Age calculator
-- Daily digest orchestration
+- Air quality — **shipped** (with weather)
+- Calendar converters (Persian/Gregorian) — **shipped**
+- Age calculator — **shipped** (`/world_age`)
+- Daily digest orchestration — **shipped** (push feeds, Tehran hour)
+- FX with IRR bridge — **shipped**
+- Feed Reader smart push (per-item) — **shipped**
 
 ### Sports and live modules
 - Football standings/schedules

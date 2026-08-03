@@ -34,6 +34,7 @@ class ReplyRouteDeps:
     drive_disconnect_handler: MessageHandler
     ssh_list_handler: MessageHandler
     ssh_add_wizard_handler: MessageHandler
+    ssh_op_wizard_handler: Callable[..., Awaitable[None]]
     new_batch_handler: MessageHandler
     done_batch_handler: MessageHandler
     clear_queue_handler: MessageHandler
@@ -72,6 +73,7 @@ class ReplyRouteDeps:
     b64_encode_handler: MessageHandler
     b64_decode_handler: MessageHandler
     bale_set_chat_handler: MessageHandler
+    drive_download_handler: MessageHandler
     drive_ls_handler: MessageHandler
     ssh_ls_handler: MessageHandler
     ssh_del_handler: MessageHandler
@@ -253,7 +255,7 @@ async def dispatch_reply_keyboard_route(
         await deps.drive_disconnect_handler(client, message)
         return True
     if mapped == "/drive_download_help":
-        await message.reply_text(tr(user_id, "drive_download_usage"), parse_mode=None)
+        await _run_slash(deps.drive_download_handler, client, message, "/drive_download")
         return True
     if mapped == "/drive_ls":
         await _run_slash(deps.drive_ls_handler, client, message, "/drive_ls")
@@ -265,16 +267,16 @@ async def dispatch_reply_keyboard_route(
         await deps.ssh_add_wizard_handler(client, message)
         return True
     if mapped == "/ssh_put_help":
-        await message.reply_text(tr(user_id, "ssh_put_usage"), parse_mode=None)
+        await deps.ssh_op_wizard_handler(client, message, "put")
         return True
     if mapped == "/ssh_get_help":
-        await message.reply_text(tr(user_id, "ssh_get_usage"), parse_mode=None)
+        await deps.ssh_op_wizard_handler(client, message, "get")
         return True
     if mapped == "/ssh_ls_help":
-        await message.reply_text(tr(user_id, "ssh_ls_usage"), parse_mode=None)
+        await deps.ssh_op_wizard_handler(client, message, "ls")
         return True
     if mapped == "/ssh_del_help":
-        await message.reply_text(tr(user_id, "ssh_del_usage"), parse_mode=None)
+        await deps.ssh_op_wizard_handler(client, message, "del")
         return True
 
     if mapped == "/dns":
@@ -351,20 +353,14 @@ async def dispatch_reply_keyboard_route(
     if mapped == "/admin_users_list":
         await deps.admin_users_list_handler(client, message)
         return True
-    if mapped == "/admin_tier_help":
-        await message.reply_text(tr(user_id, "admin_tier_usage"), parse_mode=None)
-        return True
-    if mapped == "/admin_bonus_help":
-        await message.reply_text(tr(user_id, "admin_bonus_usage"), parse_mode=None)
-        return True
-    if mapped == "/admin_tier_wizard":
+    if mapped in ("/admin_tier_help", "/admin_tier_wizard"):
         if user_id not in deps.admin_ids:
             await message.reply_text(tr(user_id, "admin_denied"))
             return True
         deps.set_state_preserving_menu(user_id, {"step": "admin_tier_user"})
         await message.reply_text(tr(user_id, "admin_wizard_user_ask"), parse_mode=None)
         return True
-    if mapped == "/admin_bonus_wizard":
+    if mapped in ("/admin_bonus_help", "/admin_bonus_wizard"):
         if user_id not in deps.admin_ids:
             await message.reply_text(tr(user_id, "admin_denied"))
             return True
@@ -372,13 +368,25 @@ async def dispatch_reply_keyboard_route(
         await message.reply_text(tr(user_id, "admin_wizard_user_ask"), parse_mode=None)
         return True
     if mapped == "/admin_clear_prefs_help":
-        await message.reply_text(tr(user_id, "admin_clear_prefs_hint"), parse_mode=None)
+        if user_id not in deps.admin_ids:
+            await message.reply_text(tr(user_id, "admin_denied"))
+            return True
+        deps.set_state_preserving_menu(user_id, {"step": "admin_clear_prefs_user"})
+        await message.reply_text(tr(user_id, "admin_wizard_user_ask"), parse_mode=None)
         return True
     if mapped == "/admin_payment_lookup_help":
-        await message.reply_text(tr(user_id, "admin_payment_lookup_hint"), parse_mode=None)
+        if user_id not in deps.admin_ids:
+            await message.reply_text(tr(user_id, "admin_denied"))
+            return True
+        deps.set_state_preserving_menu(user_id, {"step": "admin_payment_lookup_user"})
+        await message.reply_text(tr(user_id, "admin_wizard_user_ask"), parse_mode=None)
         return True
     if mapped == "/admin_payment_status_help":
-        await message.reply_text(tr(user_id, "admin_payment_status_hint"), parse_mode=None)
+        if user_id not in deps.admin_ids:
+            await message.reply_text(tr(user_id, "admin_denied"))
+            return True
+        deps.set_state_preserving_menu(user_id, {"step": "admin_payment_status_id"})
+        await message.reply_text(tr(user_id, "admin_wizard_payment_id_ask"), parse_mode=None)
         return True
     if mapped == "/cf_connect":
         await deps.cf_connect_handler(client, message)
@@ -390,7 +398,7 @@ async def dispatch_reply_keyboard_route(
         await deps.cf_zones_handler(client, message)
         return True
     if mapped == "/cf_dns_help":
-        await message.reply_text(tr(user_id, "cf_dns_usage"), parse_mode=None)
+        await deps.cf_dns_handler(client, message)
         return True
     if mapped == "/cf_disconnect":
         await deps.cf_disconnect_handler(client, message)

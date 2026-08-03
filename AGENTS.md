@@ -24,9 +24,9 @@ This is **TelegramToRubika (tele2rub)** — a Python Telegram bot that transfers
 
 ### Testing
 
-- **Existing tests:** `python -m v2.transfer.test_link_direct` (smoke tests, no pytest required).
+- **Existing tests:** `python -m unittest discover -s tests -p 'test_*.py'` and `python -m v2.transfer.test_link_direct` (stdlib unittest; no pytest required).
 - **Lint:** `python -m pyflakes *.py` or `python -m py_compile <file>` for syntax checks. There are a few pre-existing pyflakes warnings (unused imports in `telebot.py`) — these are cosmetic, not errors.
-- **No pytest/unittest suite** is present; the codebase uses manual smoke tests.
+
 
 ### Gotchas
 

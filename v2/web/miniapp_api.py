@@ -6,7 +6,13 @@ import json
 import urllib.parse
 from typing import Any
 
-from v2.toolkit.net_extra_light import http_headers_report, website_status_report
+from v2.toolkit.net_extra_light import (
+    http_headers_report,
+    port_check_report,
+    ssl_cert_report,
+    website_status_report,
+)
+from v2.toolkit.ping_light import smart_tcp_ping
 from v2.toolkit.whois_light import rdap_lookup
 
 
@@ -64,6 +70,37 @@ def dispatch_miniapp_api(path: str, query_string: str) -> tuple[int, str, bytes]
             status, body = _json_response(False, error="missing_query")
             return status, "application/json; charset=utf-8", body
         ok, detail = rdap_lookup(query)
+        status, body = _json_response(ok, text=detail if ok else "", error=detail if not ok else "")
+        return status, "application/json; charset=utf-8", body
+
+    if action == "ping":
+        host = _q(params, "host") or _q(params, "q")
+        if not host:
+            status, body = _json_response(False, error="missing_host")
+            return status, "application/json; charset=utf-8", body
+        port_s = _q(params, "port")
+        port = int(port_s) if port_s.isdigit() else None
+        ok, detail, used = smart_tcp_ping(host, port=port)
+        text = f"TCP ping {host}:{used} → {detail} ms" if ok else detail
+        status, body = _json_response(ok, text=text if ok else "", error=detail if not ok else "")
+        return status, "application/json; charset=utf-8", body
+
+    if action == "port":
+        host = _q(params, "host") or _q(params, "q")
+        port_s = _q(params, "port")
+        if not host or not port_s.isdigit():
+            status, body = _json_response(False, error="missing_host_or_port")
+            return status, "application/json; charset=utf-8", body
+        ok, detail = port_check_report(host, int(port_s))
+        status, body = _json_response(ok, text=detail if ok else "", error=detail if not ok else "")
+        return status, "application/json; charset=utf-8", body
+
+    if action == "ssl":
+        host = _q(params, "host") or _q(params, "q") or _q(params, "domain")
+        if not host:
+            status, body = _json_response(False, error="missing_host")
+            return status, "application/json; charset=utf-8", body
+        ok, detail = ssl_cert_report(host)
         status, body = _json_response(ok, text=detail if ok else "", error=detail if not ok else "")
         return status, "application/json; charset=utf-8", body
 

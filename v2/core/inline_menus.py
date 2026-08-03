@@ -134,7 +134,11 @@ def build_inline_world(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMar
     rows = [
         _row(
             InlineKeyboardButton(tr(uid, "btn_world_weather"), callback_data="imenu:weather"),
+            InlineKeyboardButton(tr(uid, "btn_world_time"), callback_data="imenu:time"),
+        ),
+        _row(
             InlineKeyboardButton(tr(uid, "btn_world_calendar"), callback_data="imenu:calendar"),
+            InlineKeyboardButton(tr(uid, "btn_world_age"), callback_data="imenu:age"),
         ),
         _row(
             InlineKeyboardButton(tr(uid, "btn_world_currency"), callback_data="imenu:currency"),
@@ -143,9 +147,6 @@ def build_inline_world(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMar
         _row(
             InlineKeyboardButton(tr(uid, "btn_feed_reader"), callback_data="imenu:feeds"),
             InlineKeyboardButton(tr(uid, "btn_world_rss"), callback_data="imenu:rss"),
-        ),
-        _row(
-            InlineKeyboardButton(tr(uid, "btn_world_rss_list"), callback_data="imenu:rss_list"),
         ),
         _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
     ]

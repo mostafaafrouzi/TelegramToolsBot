@@ -90,6 +90,8 @@ _TEXT_EXCLUDED_COMMANDS = [
     "world_calendar",
     "world_currency",
     "world_quake",
+    "world_time",
+    "world_age",
     "world_rss",
     "world_rss_list",
     "feeds",
@@ -138,6 +140,8 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.world_calendar_handler, priv & cmd("world_calendar"))
     mh(tb.world_currency_handler, priv & cmd("world_currency"))
     mh(tb.world_quake_handler, priv & cmd("world_quake"))
+    mh(tb.world_time_handler, priv & cmd("world_time"))
+    mh(tb.world_age_handler, priv & cmd("world_age"))
     mh(tb.world_rss_handler, priv & cmd("world_rss"))
     mh(tb.world_rss_list_handler, priv & cmd("world_rss_list"))
     mh(tb.show_feed_menu_handler, priv & cmd("feeds"))

@@ -87,6 +87,8 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_world_calendar": "/world_calendar",
     "btn_world_currency": "/world_currency",
     "btn_world_earthquake": "/world_quake",
+    "btn_world_time": "/world_time",
+    "btn_world_age": "/world_age",
     "btn_world_rss": "/world_rss",
     "btn_world_rss_list": "/world_rss_list",
     "btn_tool_md5": "/md5",
@@ -275,7 +277,6 @@ def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboa
         tr(user_id, "btn_main_toolkit"),
         tr(user_id, "btn_main_miniapp"),
         tr(user_id, "btn_main_world"),
-        tr(user_id, "btn_main_feed"),
         tr(user_id, "btn_main_ssh"),
         tr(user_id, "btn_main_cloudflare"),
         tr(user_id, "btn_main_plan_section"),
@@ -322,12 +323,13 @@ def build_world_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
         _grid(
             [
                 tr(user_id, "btn_world_weather"),
+                tr(user_id, "btn_world_time"),
                 tr(user_id, "btn_world_calendar"),
+                tr(user_id, "btn_world_age"),
                 tr(user_id, "btn_world_currency"),
                 tr(user_id, "btn_world_earthquake"),
                 tr(user_id, "btn_feed_reader"),
                 tr(user_id, "btn_world_rss"),
-                tr(user_id, "btn_world_rss_list"),
             ],
             3,
         )

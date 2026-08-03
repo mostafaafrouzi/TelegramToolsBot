@@ -36,7 +36,13 @@ class CallbackRouteDeps:
     handle_media_dest_callback: Callable[..., Awaitable[bool]]
     dispatch_inline_menu_callback: Callable[..., Awaitable[bool]]
     handle_feed_callback: Callable[..., Awaitable[bool]]
+    handle_fx_quick_callback: Callable[..., Awaitable[bool]]
     dispatch_cf_menu_callback: Callable[..., Awaitable[bool]]
+    handle_cf_dns_zone_callback: Callable[..., Awaitable[bool]]
+    handle_cf_dns_add_zone_callback: Callable[..., Awaitable[bool]]
+    handle_cf_dns_del_zone_callback: Callable[..., Awaitable[bool]]
+    handle_cf_dns_delete_callback: Callable[..., Awaitable[bool]]
+    handle_ssh_op_callback: Callable[..., Awaitable[bool]]
     dispatch_drive_auth_callback: Callable[..., Awaitable[bool]]
 
 
@@ -152,6 +158,14 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
         key = data.split(":", 1)[1]
         return await deps.dispatch_inline_menu_callback(client, callback_query, key)
 
+    if data.startswith("fxquick:"):
+        parts = data.split(":")
+        if len(parts) < 4:
+            return False
+        return await deps.handle_fx_quick_callback(
+            client, callback_query, parts[1], parts[2], parts[3]
+        )
+
     if data.startswith("feedview:"):
         try:
             feed_id = int(data.split(":", 1)[1])
@@ -201,15 +215,63 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
         action = data.split(":", 1)[1]
         return await deps.dispatch_cf_menu_callback(client, callback_query, action)
 
+    if data.startswith("cfdnsadd:"):
+        zone_id = data.split(":", 1)[1].strip()
+        if not zone_id:
+            return False
+        return await deps.handle_cf_dns_add_zone_callback(client, callback_query, zone_id)
+
+    if data.startswith("cfdnsdelz:"):
+        zone_id = data.split(":", 1)[1].strip()
+        if not zone_id:
+            return False
+        return await deps.handle_cf_dns_del_zone_callback(client, callback_query, zone_id)
+
+    if data.startswith("cfdnsdel:"):
+        record_id = data.split(":", 1)[1].strip()
+        if not record_id:
+            return False
+        return await deps.handle_cf_dns_delete_callback(client, callback_query, record_id)
+
+    if data.startswith("cfdns:"):
+        zone_id = data.split(":", 1)[1].strip()
+        if not zone_id:
+            return False
+        return await deps.handle_cf_dns_zone_callback(client, callback_query, zone_id)
+
+    if data.startswith("sshop:"):
+        parts = data.split(":")
+        if len(parts) < 3:
+            return False
+        op = parts[1].strip()
+        try:
+            server_id = int(parts[2])
+        except ValueError:
+            return False
+        return await deps.handle_ssh_op_callback(client, callback_query, op, server_id)
+
     if data.startswith("driveauth:"):
         action = data.split(":", 1)[1]
         return await deps.dispatch_drive_auth_callback(client, callback_query, action)
 
     if data == "cancel_send":
+        from pathlib import Path
+
         from v2.handlers.confirm_state import get_pending_confirm, pop_pending_confirm
 
         if not (state.get("step") == "await_send_confirm" or state.get("pending_task") or get_pending_confirm(user_id)):
             return False
+        task = state.get("pending_task") or get_pending_confirm(user_id) or {}
+        for key in ("path", "local_path", "file_path"):
+            raw = task.get(key) if isinstance(task, dict) else None
+            if not raw:
+                continue
+            try:
+                p = Path(str(raw))
+                if p.is_file():
+                    p.unlink()
+            except OSError:
+                pass
         pop_pending_confirm(user_id)
         deps.clear_state(user_id)
         deps.log_event("task_confirm_cancelled", user_id=user_id)

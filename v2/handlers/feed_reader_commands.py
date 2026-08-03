@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
@@ -22,6 +23,25 @@ class FeedReaderDeps:
     set_state_preserving_menu: Callable[..., None]
     clear_state: Callable[[int], None]
     extract_first_url: Callable[[str], Optional[str]]
+    get_user_tier: Callable[[int], str] | None = None
+
+
+def _feed_limit_for_user(deps: FeedReaderDeps, user_id: int) -> int:
+    try:
+        free_lim = int((os.getenv("WORLD_FEED_LIMIT_FREE") or "20").strip() or "20")
+    except ValueError:
+        free_lim = 20
+    try:
+        pro_lim = int((os.getenv("WORLD_FEED_LIMIT_PRO") or "50").strip() or "50")
+    except ValueError:
+        pro_lim = 50
+    tier = "free"
+    if deps.get_user_tier:
+        try:
+            tier = (deps.get_user_tier(user_id) or "free").lower()
+        except Exception:
+            tier = "free"
+    return pro_lim if tier == "pro" else free_lim
 
 
 def _feed_actions_keyboard(user_id: int, feed_id: int, push_on: bool, tr: TranslateFn) -> InlineKeyboardMarkup:
@@ -54,7 +74,7 @@ def _feeds_list_keyboard(user_id: int, rows: list[dict], tr: TranslateFn) -> Inl
 async def handle_show_feed_menu(deps: FeedReaderDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     await message.reply_text(
-        deps.tr(uid, "feed_menu_title"),
+        deps.tr(uid, "feed_menu_title") + "\n\n" + deps.tr(uid, "feed_digest_hint"),
         reply_markup=_feeds_list_keyboard(uid, deps.queue.list_feeds(uid), deps.tr),
         parse_mode=None,
     )
@@ -84,6 +104,23 @@ async def dispatch_feed_wizard(
     resolved, kind, hint = resolve_feed_url(raw)
     if not resolved:
         await message.reply_text(deps.tr(user_id, "rss_bad_url"), parse_mode=None)
+        return True
+
+    existing = deps.queue.find_feed_by_url(user_id, resolved)
+    if existing:
+        deps.clear_state(user_id)
+        push_on = bool(int(existing.get("push_enabled") or 0))
+        await message.reply_text(
+            deps.tr(user_id, "feed_already_added", feed_id=existing["id"]),
+            reply_markup=_feed_actions_keyboard(user_id, int(existing["id"]), push_on, deps.tr),
+            parse_mode=None,
+        )
+        return True
+
+    lim = _feed_limit_for_user(deps, user_id)
+    if deps.queue.count_feeds(user_id) >= lim:
+        deps.clear_state(user_id)
+        await message.reply_text(deps.tr(user_id, "feed_limit_reached", limit=lim), parse_mode=None)
         return True
 
     ok, body, h = await asyncio.to_thread(fetch_feed, resolved, 6)
@@ -157,6 +194,12 @@ async def handle_feed_callback(
         await callback_query.answer(
             deps.tr(uid, "rss_push_enabled" if new_val else "rss_push_disabled")
         )
+        try:
+            await callback_query.message.edit_reply_markup(
+                reply_markup=_feed_actions_keyboard(uid, feed_id, new_val, deps.tr)
+            )
+        except Exception:
+            pass
         return True
 
     if action == "view":

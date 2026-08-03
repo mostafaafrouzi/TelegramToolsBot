@@ -100,15 +100,26 @@ async def handle_bale_status(deps: TransferHubDeps, client: Any, message: Messag
     )
 
 
-async def handle_bale_set_chat(deps: TransferHubDeps, client: Any, message: Message) -> None:
+async def handle_bale_set_chat(
+    deps: TransferHubDeps,
+    client: Any,
+    message: Message,
+    *,
+    set_state_preserving_menu: Callable[..., None] | None = None,
+) -> None:
     uid = message.from_user.id
     token, _chat = deps.get_bale_credentials(uid)
     parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
-        await message.reply_text(deps.tr(uid, "bale_set_chat_usage"), parse_mode=None)
-        return
     if not token:
         await message.reply_text(deps.tr(uid, "bale_not_connected"), parse_mode=None)
+        return
+    if len(parts) < 2 or not parts[1].strip():
+        if set_state_preserving_menu:
+            deps.set_menu_section(uid, MenuSection.BALE)
+            set_state_preserving_menu(uid, {"step": "await_bale_chat_id"})
+            await message.reply_text(deps.tr(uid, "bale_ask_chat_id"), parse_mode=None)
+            return
+        await message.reply_text(deps.tr(uid, "bale_set_chat_usage"), parse_mode=None)
         return
     chat_id = parts[1].strip()
     ok, detail = validate_chat(token, chat_id)
@@ -312,15 +323,21 @@ async def handle_drive_download_command(
     message: Message,
     *,
     push_task_direct: Callable[..., Any],
+    set_state_preserving_menu: Callable[..., None] | None = None,
 ) -> None:
     uid = message.from_user.id
     parts = (message.text or "").split(maxsplit=1)
-    if len(parts) < 2 or not parts[1].strip():
-        await message.reply_text(deps.tr(uid, "drive_download_usage"), parse_mode=None)
-        return
     dc = load_drive_credentials(deps.queue, deps.base_dir, uid)
     if not dc.ready:
         await message.reply_text(deps.tr(uid, "drive_not_connected"), parse_mode=None)
+        return
+    if len(parts) < 2 or not parts[1].strip():
+        if set_state_preserving_menu:
+            deps.set_menu_section(uid, MenuSection.DRIVE)
+            set_state_preserving_menu(uid, {"step": "await_drive_download_id"})
+            await message.reply_text(deps.tr(uid, "drive_download_send_only"), parse_mode=None)
+            return
+        await message.reply_text(deps.tr(uid, "drive_download_usage"), parse_mode=None)
         return
     file_id = parts[1].strip()
     task = {

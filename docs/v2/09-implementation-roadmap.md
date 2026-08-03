@@ -2,7 +2,22 @@
 
 این سند **پیوند مستقیم** با فازهای پلن Greenfield دارد و هر بار که بخشی از پلن در کد یا معماری تحقق پیدا می‌کند، اینجا به‌روز می‌شود: **وضعیت، فایل‌های درگیر، و یادداشت فنی.**
 
-آخرین به‌روزرسانی سند: **2026-05-04**
+آخرین به‌روزرسانی سند: **2026-08-03**
+
+### به‌روزرسانی پایدارسازی (2026-08)
+
+انجام‌شده در کد (پس از triage لاگ production):
+
+- ویزاردهای toolkit net-extra در `text_entry`؛ SSH add تعاملی + ops (ls/put/get/del)؛ CF DNS zone picker
+- رفع Bale already-connected بدون `return`؛ `await_send_confirm` در متن؛ cleanup فایل روی cancel
+- Google search send-only؛ Drive download / Bale set-chat ویزارد؛ اسکلت درگاه Zarinpal (`v2/billing/zarinpal.py`)
+- تست دود: `python -m unittest tests.test_smoke`؛ چک HTTPS برای `MINIAPP_BASE_URL` در `installer.sh`
+
+### به‌روزرسانی جهان و زمان + Feed (2026-08-03)
+
+- منوی World: timezone، age، ارز با IRR، زلزله غنی‌تر، پیش‌بینی آب‌وهوا؛ حذف Feed تکراری از منوی اصلی؛ `MenuSection.WORLD`
+- Feed Reader: resolve یوتیوب `@handle`، push سطح آیتم، سقف/duplicate، digest روزانه تهران
+- تست: `tests/test_world.py`
 
 ---
 
@@ -344,7 +359,9 @@
   - `**paid`:** `[v2/billing/paid_entitlements.py](../../v2/billing/paid_entitlements.py)` — `**maybe_grant_plan_after_paid`** بعد از webhook `[apply_verified_payment_event](../../v2/billing/webhook.py)` یا `**/admin_payment_status … paid**` یک‌بار `**set_user_tier**` را صدا می‌زند (`entitlement_applied_at` برای جلوگیری از دوباره‌کاری).
   - **Reconcile:** `[v2/billing/reconcile.py](../../v2/billing/reconcile.py)` — `**run_reconcile`** ردیف‌های `**pending` / `initiated**` قدیمی را `**expired**` می‌کند؛ با `**BILLING_RECONCILE_ENABLE=1**` از `[v2/bot/startup.py](../../v2/bot/startup.py)` دوره‌ای اجرا می‌شود؛ `**/admin_reconcile_billing**` همان منطق را یک‌بار اجرا می‌کند.
   - `**[.env.example](../../.env.example)**`: متغیرهای `**BILLING_***`.
-- **بک‌لاگ (خارج از MVP فاز ۲):** آداپتر درگاه ایرانی (Zarinpal / …)، verify امضای PSP، polling وضعیت تراکنش، پنل billing خارج از تلگرام.
+- **به‌روزرسانی 2026-08-03:** اسکلت Zarinpal + مسیر callback مرورگر `GET /billing/zarinpal/callback` → `process_zarinpal_callback` → verify + `apply_verified_payment_event` (نیاز به `ZARINPAL_MERCHANT_ID` و `ZARINPAL_CALLBACK_URL` HTTPS).
+- **بک‌لاگ باقی‌مانده:** polling وضعیت تراکنش، پنل billing خارج از تلگرام، sandbox/test merchant automation.
+
 
 ---
 

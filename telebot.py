@@ -87,10 +87,12 @@ from v2.handlers.world_commands import (
     dispatch_world_wizard,
     handle_calendar,
     handle_earthquakes,
-    list_rss_feeds,
+    handle_fx_quick_callback,
+    maybe_send_daily_digest,
     poll_rss_pushes,
+    start_age_wizard,
     start_currency_wizard,
-    start_rss_wizard,
+    start_timezone_wizard,
     start_weather_wizard,
 )
 from v2.handlers.batch_commands import BatchCommandDeps, handle_done_batch, handle_new_batch
@@ -158,13 +160,23 @@ from v2.handlers.toolkit_net_extra_commands import (
     handle_subnet_calc,
     handle_website_status,
 )
-from v2.handlers.ssh_wizard import SshWizardDeps, dispatch_ssh_wizard, start_ssh_add_wizard
+from v2.handlers.ssh_wizard import (
+    SshWizardDeps,
+    dispatch_ssh_wizard,
+    handle_ssh_op_callback,
+    start_ssh_add_wizard,
+    start_ssh_op_wizard,
+)
 from v2.handlers.cloudflare_commands import (
     CloudflareCommandDeps,
     dispatch_cloudflare_wizard,
     handle_cf_connect,
     handle_cf_disconnect,
     handle_cf_dns,
+    handle_cf_dns_add_zone_callback,
+    handle_cf_dns_del_zone_callback,
+    handle_cf_dns_delete_callback,
+    handle_cf_dns_zone_callback,
     handle_cf_status,
     handle_cf_zones,
     handle_show_cloudflare_menu,
@@ -556,12 +568,12 @@ I18N = {
         "link_download_failed": "دانلود ناموفق: {error}",
         "link_download_done_queue": "دانلود شد؛ در صف ارسال…",
         "link_media_hint": "در بخش لینک/ویدیو باید لینک بفرستی. برای ارسال فایل از «📁 انتقال فایل» مقصد را انتخاب کن.",
-        "cf_menu_title": "☁️ Cloudflare\nاتصال per-user با API Token. فعلاً عملیات امن read-only: وضعیت، دامنه‌ها، DNS records.",
+        "cf_menu_title": "☁️ Cloudflare\nاتصال per-user با API Token. مشاهده و ایجاد/حذف DNS با تأیید.",
         "cf_ask_token": (
             "📖 راهنمای اتصال Cloudflare:\n\n"
             "1️⃣ به dash.cloudflare.com/profile/api-tokens بروید\n"
             "2️⃣ روی Create Token کلیک کنید\n"
-            "3️⃣ قالب «Read all resources» یا دسترسی Zone/DNS Read را انتخاب کنید\n"
+            "3️⃣ دسترسی Zone/DNS Read و Edit را انتخاب کنید\n"
             "4️⃣ توکن ساخته‌شده را همینجا بفرستید"
         ),
         "cf_token_invalid": "توکن Cloudflare نامعتبر است: {detail}",
@@ -571,10 +583,27 @@ I18N = {
         "cf_status_ok": "Cloudflare OK ✅ {detail}",
         "cf_status_bad": "Cloudflare نامعتبر است: {detail}",
         "cf_zones_result": "دامنه‌ها:\n{detail}",
-        "cf_dns_usage": "استفاده: `/cf_dns <zone_id> [record-name]`\nابتدا «دامنه‌ها» را بزن و zone_id را بردار.",
+        "cf_dns_usage": "استفاده: `/cf_dns <zone_id> [record-name]`\nیا از دکمه DNS یک دامنه را انتخاب کن.",
+        "cf_dns_pick_zone": "دامنه را برای مشاهده رکوردهای DNS انتخاب کن:",
+        "cf_dns_pick_zone_add": "دامنه را برای ایجاد رکورد DNS انتخاب کن:",
+        "cf_dns_pick_zone_del": "دامنه را برای حذف رکورد DNS انتخاب کن:",
+        "cf_dns_pick_record_del": "رکوردی که باید حذف شود را انتخاب کن:",
+        "cf_dns_ask_type": "نوع رکورد را بفرست (A, AAAA, CNAME, TXT, MX, …) یا /cancel",
+        "cf_dns_ask_name": "نام رکورد را بفرست (مثلاً www یا @):",
+        "cf_dns_ask_content": "مقدار رکورد را بفرست (IP، هدف CNAME، متن TXT، …):",
+        "cf_dns_confirm_create": "ایجاد `{type}` `{name}` → `{content}`؟\nبله / خیر",
+        "cf_dns_write_ok": "DNS: {detail}",
+        "cf_dns_empty": "رکوردی برای حذف پیدا نشد.",
+        "cf_dns_del_need_zone": "ابتدا دامنه را از منوی حذف DNS انتخاب کن.",
+        "btn_cf_dns_add": "➕ DNS جدید",
+        "btn_cf_dns_del": "🗑 حذف DNS",
+        "cf_zones_empty": "هیچ دامنه‌ای روی این توکن پیدا نشد.",
         "cf_dns_result": "DNS records:\n{detail}",
         "cf_error": "خطای Cloudflare: {error}",
         "cf_media_hint": "در منوی Cloudflare فقط توکن API (متن) می‌پذیریم. برای ارسال فایل به «تنظیمات» یا «انتقال فایل» برو.",
+        "wizard_cancelled": "ویزارد لغو شد.",
+        "wizard_send_file_hint": "در این مرحله یک فایل/سند بفرست (نه متن). برای لغو: /cancel",
+        "bale_ask_chat_id": "شناسه چت مقصد بله را بفرست (مثلاً عددی یا @channel):",
         "newbatch_ok": (
             "جلسه فایل ZIP فعال شد.\n"
             "فایل‌ها را ارسال کن. بعد از اتمام، «پایان فایل ZIP» یا `/done` را بزن."
@@ -676,6 +705,8 @@ I18N = {
         "ssh_wizard_ask_key_file": "فایل کلید خصوصی (`.pem` یا `.key`) را به‌صورت **سند** بفرست (نه عکس).",
         "ssh_wizard_bad_port": "پورت باید عدد بین ۱ تا ۶۵۵۳۵ باشد.",
         "ssh_wizard_key_invalid": "کلید نامعتبر: {error}",
+        "ssh_op_pick_server": "سرور را برای عملیات `{op}` انتخاب کن:",
+        "ssh_op_ask_path": "مسیر remote را برای `{op}` بفرست (مثلاً `/home` یا `.`):",
         "ssh_add_ok": "سرور `{label}` ({host}:{port}) ذخیره شد.",
         "ssh_put_usage": "استفاده: `/ssh_put <server_id> <remote_path>` سپس فایل را بفرست",
         "ssh_ls_usage": "استفاده: `/ssh_ls <server_id> [remote_path]`",
@@ -689,6 +720,7 @@ I18N = {
         "bale_active_hint": "پس از `/bale_connect`، همین‌جا فایل بفرست تا با ربات بله خودت ارسال شود (~۲۰ مگ).",
         "drive_active_hint": "پس از `/drive_connect`، فایل بفرست تا در Drive خودت آپلود شود. دانلود: `/drive_download <id>`",
         "drive_download_usage": "استفاده: `/drive_download <google_drive_file_id>`",
+        "drive_download_send_only": "شناسه فایل Google Drive را بفرست:",
         "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "راهنمای سریع:\n\n"
@@ -854,6 +886,7 @@ I18N = {
         "failed_detail_title": "آخرین خطاهای ثبت‌شده برای نشست شما:",
         "confirm_cancelled": "ارسال لغو شد.",
         "confirm_already_handled": "این درخواست قبلاً پردازش شده است.",
+        "confirm_use_buttons": "برای تأیید یا لغو ارسال، از دکمه‌های زیر همان پیام استفاده کن.",
         "cleanup_done": "پاکسازی `downloads/`: {n} فایل، حدود {mb} MB آزاد شد.",
         "direct_need_rubika": "برای حالت مستقیم اول `/rubika_connect` بزن.",
         "file_too_large": "فایل از سقف مجاز بزرگ‌تر است (حداکثر ~`{max_mb}` مگابایت با توجه به پلن و `MAX_FILE_MB`). حجم این فایل: ~`{size_mb}` مگابایت.",
@@ -878,6 +911,11 @@ I18N = {
         "admin_payment_lookup_empty": "هیچ ردیف پرداختی برای این کاربر نیست.",
         "admin_payment_lookup_title": "پرداخت‌ها (جدیدترین اول):\n",
         "admin_payment_status_hint": "به‌روزرسانی وضعیت یک ردیف: `/admin_payment_status <payment_id> <status> [ref_id]`",
+        "admin_wizard_payment_id_ask": "شناسه عددی payment_id را بفرست:",
+        "admin_wizard_payment_not_found": "پرداخت `{id}` پیدا نشد.",
+        "admin_wizard_payment_status_ask": "وضعیت را بفرست ({statuses}) و اختیاری ref_id:",
+        "admin_wizard_payment_status_done": "OK: payment `{payment_id}` → `{status}`{grant}",
+        "admin_wizard_clear_prefs_done": "prefs کاربر `{target}` پاک شد.",
         "admin_reconcile_billing_hint": "انقضای ردیف‌های قدیمی pending/initiated: `/admin_reconcile_billing`",
         "admin_reconcile_billing_result": "Reconcile: منقضی‌شده `{expired}`، اسکن‌شده `{scanned}`.",
         "purchase_stub_started": (
@@ -888,6 +926,14 @@ I18N = {
             "برای اعمال پلن پرو بعد از پرداخت موفق، وضعیت را `paid` کنید:\n"
             "وب‌هوک `POST …/v2_payment_event` یا `/admin_payment_status <id> paid`."
         ),
+        "purchase_gateway_started": (
+            "💳 پرداخت زرین‌پال\n\n"
+            "• payment_id: `{payment_id}`\n"
+            "• authority: `{authority}`\n"
+            "• لینک پرداخت: {pay_url}\n\n"
+            "پس از پرداخت موفق، وضعیت ردیف به `paid` به‌روز می‌شود."
+        ),
+        "purchase_gateway_error": "خطای درگاه پرداخت: {error}",
         "toolkit_network_disabled": "ابزارهای شبکه با env (`TOOLKIT_NETWORK_LIGHT`) خاموش است.",
         "toolkit_utility_disabled": "ابزارهای متنی با env (`TOOLKIT_UTILITY_LIGHT`) خاموش است.",
         "toolkit_quota_exceeded": (
@@ -911,6 +957,8 @@ I18N = {
         "toolkit_whois_error": "whois/RDAP ناموفق: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
         "toolkit_gsearch_usage": "استفاده: `/gsearch <query>` یا `/gisearch <query>`\nنیازمند env: `GOOGLE_CSE_API_KEYS` و `GOOGLE_CSE_ID`",
+        "toolkit_gsearch_send_only": "عبارت جستجو را بفرست:",
+        "toolkit_gisearch_send_only": "عبارت جستجوی تصویر را بفرست:",
         "toolkit_gsearch_result": "{data}",
         "toolkit_gsearch_error": "جستجوی گوگل ناموفق: {error}",
         "toolkit_md5_usage": "استفاده: `/md5 <متن>` — MD5 روی UTF-8",
@@ -959,39 +1007,47 @@ I18N = {
         "inline_world_menu": "🌍 جهان",
         "inline_world_title": "ابزارهای جهان و زمان",
         "btn_world_weather": "🌤 آب‌وهوا",
+        "btn_world_time": "🕒 ساعت جهانی",
         "btn_world_calendar": "📅 تقویم",
+        "btn_world_age": "🎂 سن",
         "btn_world_currency": "💱 ارز",
         "btn_world_earthquake": "🌋 زلزله",
-        "btn_world_rss": "➕ RSS",
+        "btn_world_rss": "➕ افزودن فید",
         "btn_world_rss_list": "📋 فیدها",
         "weather_ask_city": "نام شهر را بفرست (مثلاً Tehran):",
-        "currency_ask_amount": "مبلغ را بفرست (عدد):",
-        "currency_ask_pair": "از و به را بفرست، مثلاً: `USD IRR`",
+        "timezone_ask_place": "نام شهر یا منطقه زمانی را بفرست (مثلاً Tehran یا Asia/Tehran):",
+        "age_ask_date": "تاریخ تولد را بفرست (YYYY/MM/DD میلادی یا شمسی):",
+        "currency_ask_amount": "مبلغ را بفرست (عدد) یا از دکمه‌های سریع استفاده کن:",
+        "currency_ask_pair": "از و به را بفرست، مثلاً: `USD IRR` یا `EUR USD`",
         "currency_bad_amount": "مبلغ نامعتبر است.",
         "rss_ask_url": "آدرس فید RSS/Atom را بفرست:",
         "rss_bad_url": "آدرس http/https معتبر بفرست.",
         "rss_added": "فید #{feed_id} ذخیره شد.",
-        "rss_push_ask": "اعلان خودکار برای فید جدید؟",
+        "rss_push_ask": "اعلان فوری برای آیتم‌های جدید؟ (digest روزانه هم برای فیدهای با پوش فعال است)",
         "rss_push_on": "🔔 اعلان روشن",
         "rss_push_off": "🔕 اعلان خاموش",
         "rss_view_now": "👁 مشاهده",
         "rss_push_enabled": "اعلان فعال شد.",
         "rss_push_disabled": "اعلان غیرفعال شد.",
         "rss_not_found": "فید پیدا نشد.",
-        "rss_list_empty": "فیدی ثبت نشده. از «➕ RSS» استفاده کن.",
+        "rss_list_empty": "فیدی ثبت نشده. از «➕ افزودن فید» یا مدیریت فیدها استفاده کن.",
         "rss_list_title": "فیدهای شما:",
-        "rss_push_new": "📰 به‌روزرسانی: {label}",
+        "rss_push_new": "📰 آیتم جدید: {label}",
         "world_error": "خطا: {detail}",
+        "world_digest_title": "📰 خلاصه روزانه فیدها — {date}",
         "btn_main_feed": "📰 Feed Reader",
         "btn_feed_reader": "📰 مدیریت فیدها",
         "feed_menu_title": "📰 Feed Reader\nRSS · YouTube · X/Twitter\nافزودن فید، اعلان push، یا مشاهده دستی.",
+        "feed_digest_hint": "پوش = اعلان فوری آیتم جدید · digest روزانه خودکار صبح تهران برای همان فیدها.",
         "feed_ask_url": (
             "آدرس فید یا صفحه را بفرست:\n"
             "• RSS/Atom مستقیم\n"
-            "• `youtube.com/channel/UC…` یا پلی‌لیست\n"
+            "• `youtube.com/@handle` یا `channel/UC…` یا پلی‌لیست\n"
             "• `x.com/username` یا `twitter.com/username`"
         ),
         "feed_added": "فید #{feed_id} ({kind}) ذخیره شد.",
+        "feed_already_added": "این فید از قبل ذخیره شده (#{feed_id}).",
+        "feed_limit_reached": "سقف تعداد فید ({limit}) پر شده. یکی را حذف کن یا پلن را ارتقا بده.",
         "feed_fetch_failed": "فید باز نشد: {detail}\nURL: {url}",
         "feed_delete": "🗑 حذف فید",
         "feed_deleted": "فید حذف شد.",
@@ -1225,8 +1281,8 @@ I18N = {
         "link_download_failed": "Download failed: {error}",
         "link_download_done_queue": "Downloaded; queuing upload…",
         "link_media_hint": "This section expects a link/video URL. To send a file, open File transfer and choose a destination.",
-        "cf_menu_title": "☁️ Cloudflare\nPer-user API Token. Safe read-only actions for now: status, zones, DNS records.",
-        "cf_ask_token": "Send your Cloudflare API token. Recommended permissions: Zone/DNS Read.",
+        "cf_menu_title": "☁️ Cloudflare\nPer-user API Token. List and create/delete DNS with confirmation.",
+        "cf_ask_token": "Send your Cloudflare API token. Recommended: Zone/DNS Read + Edit.",
         "cf_token_invalid": "Invalid Cloudflare token: {detail}",
         "cf_connected_ok": "Cloudflare linked ✅ token status: {detail}",
         "cf_disconnected": "Cloudflare disconnected.",
@@ -1234,10 +1290,27 @@ I18N = {
         "cf_status_ok": "Cloudflare OK ✅ {detail}",
         "cf_status_bad": "Cloudflare invalid: {detail}",
         "cf_zones_result": "Zones:\n{detail}",
-        "cf_dns_usage": "Usage: `/cf_dns <zone_id> [record-name]`\nTap Zones first to get zone_id.",
+        "cf_dns_usage": "Usage: `/cf_dns <zone_id> [record-name]`\nOr tap DNS and pick a zone.",
+        "cf_dns_pick_zone": "Pick a zone to list DNS records:",
+        "cf_dns_pick_zone_add": "Pick a zone to create a DNS record:",
+        "cf_dns_pick_zone_del": "Pick a zone to delete a DNS record:",
+        "cf_dns_pick_record_del": "Pick the DNS record to delete:",
+        "cf_dns_ask_type": "Send record type (A, AAAA, CNAME, TXT, MX, …) or /cancel",
+        "cf_dns_ask_name": "Send record name (e.g. www or @):",
+        "cf_dns_ask_content": "Send record content (IP, CNAME target, TXT, …):",
+        "cf_dns_confirm_create": "Create `{type}` `{name}` → `{content}`?\nyes / no",
+        "cf_dns_write_ok": "DNS: {detail}",
+        "cf_dns_empty": "No records to delete.",
+        "cf_dns_del_need_zone": "Pick a zone from the delete DNS menu first.",
+        "btn_cf_dns_add": "➕ Add DNS",
+        "btn_cf_dns_del": "🗑 Delete DNS",
+        "cf_zones_empty": "No zones found for this token.",
         "cf_dns_result": "DNS records:\n{detail}",
         "cf_error": "Cloudflare error: {error}",
         "cf_media_hint": "In Cloudflare menu send only your API token as text. For file uploads use Settings or Transfer.",
+        "wizard_cancelled": "Wizard cancelled.",
+        "wizard_send_file_hint": "Send a file/document in this step (not text). Cancel: /cancel",
+        "bale_ask_chat_id": "Send the Bale destination chat id (numeric or @channel):",
         "newbatch_ok": (
             "ZIP batch started.\n"
             "Send files, then tap «End ZIP» or `/done`."
@@ -1333,6 +1406,8 @@ I18N = {
         "ssh_wizard_ask_key_file": "Send the private key file (`.pem` or `.key`) as a **document** (not a photo).",
         "ssh_wizard_bad_port": "Port must be a number from 1 to 65535.",
         "ssh_wizard_key_invalid": "Invalid key: {error}",
+        "ssh_op_pick_server": "Pick a server for `{op}`:",
+        "ssh_op_ask_path": "Send the remote path for `{op}` (e.g. `/home` or `.`):",
         "ssh_add_ok": "Saved server `{label}` ({host}:{port}).",
         "ssh_put_usage": "Usage: `/ssh_put <server_id> <remote_path>` then send the file",
         "ssh_ls_usage": "Usage: `/ssh_ls <server_id> [remote_path]`",
@@ -1346,6 +1421,7 @@ I18N = {
         "bale_active_hint": "After `/bale_connect`, send a file here to upload via your Bale bot (~20 MB max).",
         "drive_active_hint": "After `/drive_connect`, send a file to upload to your Drive. Download: `/drive_download <id>`",
         "drive_download_usage": "Usage: `/drive_download <google_drive_file_id>`",
+        "drive_download_send_only": "Send a Google Drive file id:",
         "ssh_get_usage": "Usage: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
             "Quick help:\n\n"
@@ -1511,6 +1587,7 @@ I18N = {
         "failed_detail_title": "Recent failures for your Rubika session:",
         "confirm_cancelled": "Send cancelled.",
         "confirm_already_handled": "This request was already handled.",
+        "confirm_use_buttons": "Use the Confirm / Cancel buttons under that message to finish sending.",
         "cleanup_done": "Cleaned `downloads/`: {n} files, ~{mb} MB freed.",
         "direct_need_rubika": "Link Rubika first: `/rubika_connect`",
         "file_too_large": "File exceeds the limit (max ~`{max_mb}` MB from plan + `MAX_FILE_MB`). This file is ~`{size_mb}` MB.",
@@ -1535,6 +1612,11 @@ I18N = {
         "admin_payment_lookup_empty": "No payment rows for this user.",
         "admin_payment_lookup_title": "Payments (newest first):\n",
         "admin_payment_status_hint": "Set one payment row status: `/admin_payment_status <payment_id> <status> [ref_id]`",
+        "admin_wizard_payment_id_ask": "Send numeric payment_id:",
+        "admin_wizard_payment_not_found": "Payment `{id}` not found.",
+        "admin_wizard_payment_status_ask": "Send status ({statuses}) and optional ref_id:",
+        "admin_wizard_payment_status_done": "OK: payment `{payment_id}` → `{status}`{grant}",
+        "admin_wizard_clear_prefs_done": "Cleared prefs for user `{target}`.",
         "admin_reconcile_billing_hint": "Expire stale pending/initiated payments: `/admin_reconcile_billing`",
         "admin_reconcile_billing_result": "Reconcile: expired `{expired}`, scanned `{scanned}`.",
         "purchase_stub_started": (
@@ -1545,6 +1627,14 @@ I18N = {
             "To grant Pro after success, set status to `paid`:\n"
             "`POST …/v2_payment_event` or `/admin_payment_status <id> paid`."
         ),
+        "purchase_gateway_started": (
+            "💳 Zarinpal checkout\n\n"
+            "• payment_id: `{payment_id}`\n"
+            "• authority: `{authority}`\n"
+            "• pay URL: {pay_url}\n\n"
+            "After successful payment the row should become `paid`."
+        ),
+        "purchase_gateway_error": "Payment gateway error: {error}",
         "toolkit_network_disabled": "Network toolkit is off (set `TOOLKIT_NETWORK_LIGHT`).",
         "toolkit_utility_disabled": "Text/encoding toolkit is off (set `TOOLKIT_UTILITY_LIGHT`).",
         "toolkit_quota_exceeded": "Daily toolkit quota reached ({used}/{limit}). Try again tomorrow.",
@@ -1566,6 +1656,8 @@ I18N = {
         "toolkit_whois_error": "whois/RDAP failed: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
         "toolkit_gsearch_usage": "Usage: `/gsearch <query>` or `/gisearch <query>`\nRequires env: `GOOGLE_CSE_API_KEYS` and `GOOGLE_CSE_ID`",
+        "toolkit_gsearch_send_only": "Send a search query:",
+        "toolkit_gisearch_send_only": "Send an image search query:",
         "toolkit_gsearch_result": "{data}",
         "toolkit_gsearch_error": "Google search failed: {error}",
         "toolkit_md5_usage": "Usage: `/md5 <text>` — MD5 (UTF-8)",
@@ -1614,39 +1706,47 @@ I18N = {
         "inline_world_menu": "🌍 World",
         "inline_world_title": "World & time tools",
         "btn_world_weather": "🌤 Weather",
+        "btn_world_time": "🕒 World clock",
         "btn_world_calendar": "📅 Calendar",
+        "btn_world_age": "🎂 Age",
         "btn_world_currency": "💱 Currency",
         "btn_world_earthquake": "🌋 Earthquakes",
-        "btn_world_rss": "➕ RSS",
+        "btn_world_rss": "➕ Add feed",
         "btn_world_rss_list": "📋 Feeds",
         "weather_ask_city": "Send a city name (e.g. London):",
-        "currency_ask_amount": "Send an amount (number):",
-        "currency_ask_pair": "Send from/to, e.g. `USD EUR`",
+        "timezone_ask_place": "Send a city or IANA zone (e.g. London or Europe/London):",
+        "age_ask_date": "Send birth date as YYYY/MM/DD (Gregorian or Solar Hijri):",
+        "currency_ask_amount": "Send an amount (number) or use a quick button:",
+        "currency_ask_pair": "Send from/to, e.g. `USD IRR` or `EUR USD`",
         "currency_bad_amount": "Invalid amount.",
         "rss_ask_url": "Send an RSS/Atom feed URL:",
         "rss_bad_url": "Send a valid http(s) URL.",
         "rss_added": "Feed #{feed_id} saved.",
-        "rss_push_ask": "Enable push notifications for this feed?",
+        "rss_push_ask": "Enable instant push for new items? (daily digest also runs for push-enabled feeds)",
         "rss_push_on": "🔔 Push on",
         "rss_push_off": "🔕 Push off",
         "rss_view_now": "👁 View now",
         "rss_push_enabled": "Push enabled.",
         "rss_push_disabled": "Push disabled.",
         "rss_not_found": "Feed not found.",
-        "rss_list_empty": "No feeds yet. Use «➕ RSS».",
+        "rss_list_empty": "No feeds yet. Use «➕ Add feed» or Manage feeds.",
         "rss_list_title": "Your feeds:",
-        "rss_push_new": "📰 Update: {label}",
+        "rss_push_new": "📰 New items: {label}",
         "world_error": "Error: {detail}",
+        "world_digest_title": "📰 Daily feed digest — {date}",
         "btn_main_feed": "📰 Feed Reader",
         "btn_feed_reader": "📰 Manage feeds",
         "feed_menu_title": "📰 Feed Reader\nRSS · YouTube · X/Twitter\nAdd feeds, push alerts, or view on demand.",
+        "feed_digest_hint": "Push = instant new-item alerts · daily digest runs each Tehran morning for those feeds.",
         "feed_ask_url": (
             "Send a feed URL or profile page:\n"
             "• Direct RSS/Atom\n"
-            "• `youtube.com/channel/UC…` or playlist\n"
+            "• `youtube.com/@handle`, `channel/UC…`, or playlist\n"
             "• `x.com/username`"
         ),
         "feed_added": "Feed #{feed_id} ({kind}) saved.",
+        "feed_already_added": "This feed is already saved (#{feed_id}).",
+        "feed_limit_reached": "Feed limit reached ({limit}). Delete one or upgrade your plan.",
         "feed_fetch_failed": "Could not load feed: {detail}\nURL: {url}",
         "feed_delete": "🗑 Delete feed",
         "feed_deleted": "Feed deleted.",
@@ -2830,16 +2930,20 @@ async def payment_reconcile_loop():
 
 
 async def rss_poll_loop():
-    """Notify users when push-enabled RSS feeds change."""
+    """Notify users when push-enabled RSS feeds change; also daily digest."""
     await asyncio.sleep(120)
     while True:
         await asyncio.sleep(RSS_POLL_INTERVAL_SEC)
         if not RSS_POLL_ENABLE:
             continue
         try:
-            await poll_rss_pushes(app, queue, tr)
+            await poll_rss_pushes(app, queue, tr, log_event=log_event)
         except Exception as e:
             log_event("rss_poll_error", error=str(e))
+        try:
+            await maybe_send_daily_digest(app, queue, tr, log_event=log_event)
+        except Exception as e:
+            log_event("world_digest_error", error=str(e))
 
 
 def _create_stub_purchase_checkout(user_id: int) -> tuple[int, str]:
@@ -2853,6 +2957,26 @@ def _create_stub_purchase_checkout(user_id: int) -> tuple[int, str]:
         metadata={"grant_tier": "pro", "grant_days": 30, "stub_checkout": True},
     )
     return r.payment_id, (r.authority or "")
+
+
+def _create_gateway_purchase_checkout(user_id: int) -> tuple[int, str, str]:
+    from v2.billing import build_payment_gateway, zarinpal_configured
+    from v2.billing.zarinpal import zarinpal_startpay_url
+
+    if not zarinpal_configured():
+        raise RuntimeError("ZARINPAL_MERCHANT_ID not set")
+    amount = int((os.getenv("ZARINPAL_PLAN_AMOUNT_IRR") or "500000").strip() or "500000")
+    gw = build_payment_gateway(queue)
+    r = gw.create_payment_intent(
+        user_id,
+        amount,
+        currency="IRR",
+        metadata={"grant_tier": "pro", "grant_days": 30, "description": "tele2rub pro 30d"},
+    )
+    pay_url = ""
+    if r.authority and not str(r.authority).startswith("pending-callback-"):
+        pay_url = zarinpal_startpay_url(r.authority)
+    return r.payment_id, (r.authority or ""), pay_url
 
 
 BASIC_COMMAND_DEPS = BasicCommandDeps(
@@ -2895,12 +3019,19 @@ LINK_DIRECT_COMMAND_DEPS = LinkDirectCommandDeps(
     build_link_direct_menu=build_link_direct_menu,
 )
 
+def _gateway_checkout_or_none():
+    from v2.billing import zarinpal_configured
+
+    return _create_gateway_purchase_checkout if zarinpal_configured() else None
+
+
 PLAN_COMMAND_DEPS = PlanCommandDeps(
     tr=tr,
     set_menu_section=set_menu_section,
     usage_report_text=usage_report_text,
     stub_checkout_enabled=BILLING_STUB_CHECKOUT,
     create_stub_checkout=_create_stub_purchase_checkout,
+    create_gateway_checkout=_gateway_checkout_or_none(),
 )
 
 
@@ -2950,16 +3081,12 @@ TOOLKIT_NET_EXTRA_DEPS = ToolkitNetExtraDeps(
     toolkit_quota_commit=_toolkit_quota_commit,
 )
 
-SSH_WIZARD_DEPS = SshWizardDeps(
-    tr=tr,
-    base_dir=BASE_DIR,
-    get_state=get_state,
-    set_menu_section=set_menu_section,
-    set_state_preserving_menu=set_state_preserving_menu,
-    clear_state=clear_state,
-    ssh_add_server=queue.add_ssh_server,
-    build_ssh_menu=build_ssh_menu,
-)
+async def safe_delete_user_message(message: Message):
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
 
 WORLD_COMMAND_DEPS = WorldCommandDeps(
     tr=tr,
@@ -2968,6 +3095,9 @@ WORLD_COMMAND_DEPS = WorldCommandDeps(
     set_state_preserving_menu=set_state_preserving_menu,
     clear_state=clear_state,
     extract_first_url=extract_first_url,
+    get_lang=get_lang,
+    log_event=log_event,
+    set_menu_section=set_menu_section,
 )
 
 FEED_READER_DEPS = FeedReaderDeps(
@@ -2977,6 +3107,7 @@ FEED_READER_DEPS = FeedReaderDeps(
     set_state_preserving_menu=set_state_preserving_menu,
     clear_state=clear_state,
     extract_first_url=extract_first_url,
+    get_user_tier=lambda uid: str(get_usage_snapshot(uid).get("tier") or "free"),
 )
 
 TOOLKIT_EXTRA_DEPS = ToolkitExtraDeps(
@@ -3021,6 +3152,7 @@ CLOUDFLARE_COMMAND_DEPS = CloudflareCommandDeps(
     set_menu_section=set_menu_section,
     set_state_preserving_menu=set_state_preserving_menu,
     clear_state=clear_state,
+    get_state=get_state,
     get_token=queue.get_cloudflare_api_token,
     upsert_token=_upsert_cloudflare_token_persist,
     clear_token=_clear_cloudflare_token_persist,
@@ -3087,7 +3219,12 @@ async def bale_status_handler(client: Client, message: Message):
 
 
 async def bale_set_chat_handler(client: Client, message: Message):
-    await handle_bale_set_chat(TRANSFER_HUB_DEPS, client, message)
+    await handle_bale_set_chat(
+        TRANSFER_HUB_DEPS,
+        client,
+        message,
+        set_state_preserving_menu=set_state_preserving_menu,
+    )
 
 
 async def bale_connect_handler(client: Client, message: Message):
@@ -3126,17 +3263,33 @@ async def ssh_add_wizard_handler(client: Client, message: Message):
     await start_ssh_add_wizard(SSH_WIZARD_DEPS, message)
 
 
+async def ssh_op_wizard_handler(client: Client, message: Message, op: str = "ls"):
+    await start_ssh_op_wizard(SSH_WIZARD_DEPS, message, op)
+
+
 async def ssh_ls_handler(client: Client, message: Message):
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        await start_ssh_op_wizard(SSH_WIZARD_DEPS, message, "ls")
+        return
     await handle_ssh_ls(TRANSFER_HUB_DEPS, client, message)
 
 
 async def ssh_del_handler(client: Client, message: Message):
+    parts = (message.text or "").split()
+    if len(parts) < 2:
+        await start_ssh_op_wizard(SSH_WIZARD_DEPS, message, "del")
+        return
     await handle_ssh_del(TRANSFER_HUB_DEPS, client, message)
 
 
 async def ssh_put_handler(client: Client, message: Message):
     from v2.handlers.transfer_hub_commands import handle_ssh_put_command
 
+    parts = (message.text or "").split()
+    if len(parts) < 3:
+        await start_ssh_op_wizard(SSH_WIZARD_DEPS, message, "put")
+        return
     await handle_ssh_put_command(
         TRANSFER_HUB_DEPS,
         client,
@@ -3153,12 +3306,17 @@ async def drive_download_handler(client: Client, message: Message):
         client,
         message,
         push_task_direct=push_task_direct,
+        set_state_preserving_menu=set_state_preserving_menu,
     )
 
 
 async def ssh_get_handler(client: Client, message: Message):
     from v2.handlers.transfer_hub_commands import handle_ssh_get_command
 
+    parts = (message.text or "").split()
+    if len(parts) < 3:
+        await start_ssh_op_wizard(SSH_WIZARD_DEPS, message, "get")
+        return
     await handle_ssh_get_command(
         TRANSFER_HUB_DEPS,
         client,
@@ -3290,6 +3448,7 @@ ADMIN_COMMAND_DEPS = AdminCommandDeps(
     get_user_info=queue.get_user_info,
     get_usage_snapshot=get_usage_snapshot,
     log_event=log_event,
+    delete_v2_user_prefs=queue.delete_v2_user_prefs,
 )
 
 QUEUE_COMMAND_DEPS = QueueCommandDeps(
@@ -3496,11 +3655,21 @@ async def push_task_direct(
     return True
 
 
-async def safe_delete_user_message(message: Message):
-    try:
-        await message.delete()
-    except Exception:
-        pass
+SSH_WIZARD_DEPS = SshWizardDeps(
+    tr=tr,
+    base_dir=BASE_DIR,
+    get_state=get_state,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    ssh_add_server=queue.add_ssh_server,
+    build_ssh_menu=build_ssh_menu,
+    list_ssh_servers=queue.list_ssh_servers,
+    get_ssh_server=queue.get_ssh_server,
+    ssh_delete_server=queue.delete_ssh_server,
+    push_task_direct=push_task_direct,
+    safe_delete_user_message=safe_delete_user_message,
+)
 
 
 async def edit_wizard(chat_id: int, wizard_message_id: int, text: str):
@@ -3600,7 +3769,7 @@ async def ssl_check_handler(client: Client, message: Message):
 
 async def show_world_menu_handler(client: Client, message: Message):
     uid = message.from_user.id
-    set_menu_section(uid, MenuSection.MAIN)
+    set_menu_section(uid, MenuSection.WORLD)
     await message.reply_text(
         tr(uid, "inline_world_title"),
         reply_markup=build_world_menu(uid),
@@ -3624,8 +3793,16 @@ async def world_quake_handler(client: Client, message: Message):
     await handle_earthquakes(WORLD_COMMAND_DEPS, client, message)
 
 
+async def world_time_handler(client: Client, message: Message):
+    await start_timezone_wizard(WORLD_COMMAND_DEPS, message)
+
+
+async def world_age_handler(client: Client, message: Message):
+    await start_age_wizard(WORLD_COMMAND_DEPS, message)
+
+
 async def world_rss_handler(client: Client, message: Message):
-    await start_rss_wizard(WORLD_COMMAND_DEPS, message)
+    await start_add_feed_wizard(FEED_READER_DEPS, message)
 
 
 async def world_rss_list_handler(client: Client, message: Message):
@@ -3849,9 +4026,11 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     drive_status_handler=drive_status_handler,
     drive_connect_handler=drive_connect_handler,
     drive_disconnect_handler=drive_disconnect_handler,
+    drive_download_handler=drive_download_handler,
     drive_ls_handler=drive_ls_handler,
     ssh_list_handler=ssh_list_handler,
     ssh_add_wizard_handler=ssh_add_wizard_handler,
+    ssh_op_wizard_handler=ssh_op_wizard_handler,
     ssh_ls_handler=ssh_ls_handler,
     ssh_del_handler=ssh_del_handler,
     new_batch_handler=new_batch_handler,
@@ -3916,6 +4095,8 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
         "/world_calendar": world_calendar_handler,
         "/world_currency": world_currency_handler,
         "/world_quake": world_quake_handler,
+        "/world_time": world_time_handler,
+        "/world_age": world_age_handler,
         "/world_rss": world_rss_handler,
         "/world_rss_list": world_rss_list_handler,
         "/show_feed_menu": show_feed_menu_handler,
@@ -4122,7 +4303,25 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     handle_media_dest_callback=_media_dest_callback_route,
     dispatch_inline_menu_callback=_imenu_callback_route,
     handle_feed_callback=_feed_callback_route,
+    handle_fx_quick_callback=lambda c, cq, a, fc, tc: handle_fx_quick_callback(
+        WORLD_COMMAND_DEPS, c, cq, a, fc, tc
+    ),
     dispatch_cf_menu_callback=_cf_menu_callback_route,
+    handle_cf_dns_zone_callback=lambda c, cq, zid: handle_cf_dns_zone_callback(
+        CLOUDFLARE_COMMAND_DEPS, c, cq, zid
+    ),
+    handle_cf_dns_add_zone_callback=lambda c, cq, zid: handle_cf_dns_add_zone_callback(
+        CLOUDFLARE_COMMAND_DEPS, c, cq, zid
+    ),
+    handle_cf_dns_del_zone_callback=lambda c, cq, zid: handle_cf_dns_del_zone_callback(
+        CLOUDFLARE_COMMAND_DEPS, c, cq, zid
+    ),
+    handle_cf_dns_delete_callback=lambda c, cq, rid: handle_cf_dns_delete_callback(
+        CLOUDFLARE_COMMAND_DEPS, c, cq, rid
+    ),
+    handle_ssh_op_callback=lambda c, cq, op, sid: handle_ssh_op_callback(
+        SSH_WIZARD_DEPS, c, cq, op, sid
+    ),
     dispatch_drive_auth_callback=_drive_auth_callback_route,
 )
 

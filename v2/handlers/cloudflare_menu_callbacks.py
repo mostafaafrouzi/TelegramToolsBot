@@ -7,9 +7,9 @@ from typing import Any
 from v2.handlers.cloudflare_commands import (
     CloudflareCommandDeps,
     handle_cf_disconnect,
-    handle_cf_dns,
     handle_cf_status,
     handle_cf_zones,
+    prompt_cf_dns_zone_picker,
 )
 
 
@@ -32,9 +32,17 @@ async def dispatch_cf_menu_callback(
         await callback_query.answer()
         await handle_cf_zones(deps, client, msg)
         return True
-    if action == "dns_hint":
+    if action in ("dns_hint", "dns"):
         await callback_query.answer()
-        await msg.reply_text(deps.tr(uid, "cf_dns_usage"), parse_mode=None)
+        await prompt_cf_dns_zone_picker(deps, msg, mode="list")
+        return True
+    if action in ("dns_add", "add"):
+        await callback_query.answer()
+        await prompt_cf_dns_zone_picker(deps, msg, mode="add")
+        return True
+    if action in ("dns_del", "del"):
+        await callback_query.answer()
+        await prompt_cf_dns_zone_picker(deps, msg, mode="del")
         return True
     if action == "disconnect":
         await callback_query.answer()
