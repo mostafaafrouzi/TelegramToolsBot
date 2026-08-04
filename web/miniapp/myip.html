@@ -8,29 +8,33 @@
   <link rel="stylesheet" href="common.css" />
 </head>
 <body>
-  <div id="hdr"></div>
-  <div class="card">
-    <h2 id="h-ip"></h2>
-    <pre id="ip-out" class="mono"></pre>
-    <div id="ip-actions"></div>
-  </div>
-  <div class="card">
-    <h2 id="h-geo"></h2>
-    <pre id="geo-out" class="mono"></pre>
-  </div>
-  <div class="card">
-    <h2 id="h-ping"></h2>
-    <pre id="ping-out" class="mono">—</pre>
-    <button type="button" class="btn" id="btn-ping"></button>
+  <div id="app" class="app-shell">
+    <div id="hdr"></div>
+    <div id="badge-slot"></div>
+    <div class="card">
+      <h2 id="h-ip"></h2>
+      <div class="ip-hero" id="ip-out">…</div>
+      <div id="ip-actions" class="btn-row"></div>
+    </div>
+    <div class="card">
+      <h2 id="h-geo"></h2>
+      <div id="geo-out"></div>
+    </div>
+    <div class="card">
+      <h2 id="h-ping"></h2>
+      <div id="ping-out" class="result">—</div>
+      <button type="button" class="btn" id="btn-ping"></button>
+    </div>
   </div>
   <script src="common.js"></script>
   <script>
     T2R.initApp();
     const en = T2R.lang() === "en";
-    document.getElementById("hdr").appendChild(T2R.header(en ? "My IP" : "IP من", "index.html"));
+    T2R.shell(en ? "My IP" : "IP من", "index.html");
+    document.getElementById("badge-slot").appendChild(T2R.badge("device"));
     document.getElementById("h-ip").textContent = en ? "Public IP" : "IP عمومی";
     document.getElementById("h-geo").textContent = en ? "Location & ISP" : "موقعیت و ISP";
-    document.getElementById("h-ping").textContent = en ? "Latency (browser)" : "تأخیر (مرورگر)";
+    document.getElementById("h-ping").textContent = en ? "Quick latency" : "تأخیر سریع";
     document.getElementById("btn-ping").textContent = en ? "Test latency" : "تست تأخیر";
 
     const ipOut = document.getElementById("ip-out");
@@ -39,31 +43,47 @@
     const ipActions = document.getElementById("ip-actions");
     let currentIp = "";
 
+    function kv(k, v) {
+      return (
+        '<div class="kv"><span class="k">' +
+        k +
+        '</span><span class="v">' +
+        (v || "—") +
+        "</span></div>"
+      );
+    }
+
     async function load() {
-      ipOut.textContent = T2R.t("loading");
-      geoOut.textContent = "…";
+      ipOut.textContent = "…";
+      geoOut.innerHTML = '<p class="muted">' + T2R.t("loading") + "</p>";
       try {
         currentIp = await T2R.publicIp();
         ipOut.textContent = currentIp;
+        ipActions.innerHTML = "";
         T2R.addCopyButton(ipActions, () => currentIp);
         const d = await T2R.ipDetails(currentIp);
-        const lines = [
-          (en ? "Country" : "کشور") + ": " + (d.country || "—") + " " + (d.country_code || ""),
-          (en ? "Region" : "استان") + ": " + (d.region || "—"),
-          (en ? "City" : "شهر") + ": " + (d.city || "—"),
-          "ISP: " + (d.connection && d.connection.isp ? d.connection.isp : d.isp || "—"),
-          (en ? "Timezone" : "منطقه زمانی") + ": " + (d.timezone && d.timezone.id ? d.timezone.id : d.timezone || "—"),
-        ];
-        if (d.latitude != null) lines.push("Lat/Lon: " + d.latitude + ", " + d.longitude);
-        geoOut.textContent = lines.join("\n");
+        const isp =
+          (d.connection && d.connection.isp) || d.isp || "—";
+        const asn =
+          (d.connection && (d.connection.asn || d.connection.org)) || d.asn || "—";
+        geoOut.innerHTML =
+          kv(en ? "Country" : "کشور", (d.country || "—") + " " + (d.country_code || "")) +
+          kv(en ? "Region" : "استان", d.region || "—") +
+          kv(en ? "City" : "شهر", d.city || "—") +
+          kv("ISP", isp) +
+          kv("ASN", String(asn)) +
+          kv(en ? "Timezone" : "منطقه زمانی", (d.timezone && d.timezone.id) || d.timezone || "—") +
+          (d.latitude != null
+            ? kv("Lat/Lon", d.latitude + ", " + d.longitude)
+            : "");
       } catch (e) {
-        ipOut.textContent = T2R.t("error") + ": " + e;
-        geoOut.textContent = "—";
+        ipOut.textContent = "—";
+        geoOut.innerHTML = '<p class="status-err">' + T2R.t("error") + ": " + e + "</p>";
       }
     }
 
     document.getElementById("btn-ping").onclick = async () => {
-      pingOut.textContent = T2R.t("loading");
+      T2R.setResult(pingOut, T2R.t("loading"), "loading");
       const targets = [
         { name: "Cloudflare", url: "https://1.1.1.1" },
         { name: "Google", url: "https://www.google.com/generate_204" },
@@ -71,13 +91,14 @@
       const lines = [];
       for (const t of targets) {
         try {
-          const ms = await T2R.latencyMs(t.url, 10000);
-          lines.push(t.name + ": ~" + ms + " ms");
+          lines.push(t.name + ": ~" + (await T2R.latencyMs(t.url, 10000)) + " ms");
         } catch (e) {
           lines.push(t.name + ": " + (en ? "failed" : "ناموفق"));
         }
       }
-      pingOut.textContent = lines.join("\n") + "\n\n" + (en ? "(from your device, not the bot server)" : "(از دستگاه شما، نه سرور ربات)");
+      lines.push("");
+      lines.push(T2R.t("not_icmp"));
+      T2R.setResult(pingOut, lines.join("\n"), "ok");
     };
 
     load();

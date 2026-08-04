@@ -487,9 +487,18 @@ I18N = {
         ),
         "toolkit_network_menu_title": (
             "🌐 ابزار شبکه\n\n"
-            "DNS، پینگ، Whois، IP، SSL، پورت، بلک‌لیست و …\n"
-            "بعد از انتخاب دکمه، مقدار را بفرست (یا مثل `/dns google.com`)."
+            "• Mini App = از دستگاه/شبکهٔ شما (IP واقعی، تأخیر، DoH)\n"
+            "• دکمه‌های کیبورد = از سرور ربات (پینگ TCP، SSL، پورت، …)\n"
+            "بعد از انتخاب دکمهٔ سرور، مقدار را بفرست (مثل `/dns google.com`)."
         ),
+        "toolkit_network_miniapp_hint": (
+            "📱 میان‌بر Mini App — ابزارهایی که روی دستگاه شما اجرا می‌شوند:\n"
+            "(IP واقعی، دسترسی/پینگ مرورگر، DNS DoH، ابزارک‌ها)\n"
+            "برای پینگ TCP / SSL / پورت از سرور ربات از کیبورد پایین یا دکمهٔ «Ping سرور» استفاده کن."
+        ),
+        "btn_miniapp_reach_device": "📡 پینگ دستگاه",
+        "btn_miniapp_reach_server": "🖥 پینگ سرور",
+        "btn_miniapp_utils": "🧰 ابزارک‌ها",
         "toolkit_crypto_menu_title": (
             "🔐 هش و Base64\n\n"
             "MD5 / SHA256 / Base64 / رمز تصادفی / تایم‌استمپ / لورم.\n"
@@ -1526,7 +1535,20 @@ I18N = {
             "Separate from file transfer — pick a category:\n"
             "🌐 Network & IP · 🔐 Hash & Base64 · 🧮 Calculators"
         ),
-        "toolkit_network_menu_title": "🌐 Network tools\nThen send command + value (e.g. `/dns google.com`).",
+        "toolkit_network_menu_title": (
+            "🌐 Network tools\n\n"
+            "• Mini App = from your device/network (real IP, latency, DoH)\n"
+            "• Keyboard buttons = from bot server (TCP ping, SSL, port, …)\n"
+            "After picking a server tool, send the value (e.g. `/dns google.com`)."
+        ),
+        "toolkit_network_miniapp_hint": (
+            "📱 Mini App shortcuts — tools that run on your device:\n"
+            "(real IP, browser reach/ping, DoH DNS, utilities)\n"
+            "For TCP ping / SSL / port from the bot VPS use the reply keyboard or «Server ping»."
+        ),
+        "btn_miniapp_reach_device": "📡 Device ping",
+        "btn_miniapp_reach_server": "🖥 Server ping",
+        "btn_miniapp_utils": "🧰 Utilities",
         "toolkit_crypto_menu_title": "🔐 Hash & Base64\ne.g. `/md5 text` or `/b64e hello`",
         "toolkit_zip_menu_title": "📦 Create ZIP file\nSend files, then ZIP and send to destination.",
         "rubika_menu_title": "💬 Rubika\nConnect and check your account.",
@@ -4080,6 +4102,7 @@ TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
     build_calc_math_menu=build_calc_math_menu,
     build_calc_text_menu=build_calc_text_menu,
     build_calc_other_menu=build_calc_other_menu,
+    miniapp_base_url=MINIAPP_BASE_URL,
 )
 
 CALC_KIT_DEPS = CalcKitDeps(

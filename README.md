@@ -13,7 +13,7 @@ Repository: [github.com/mostafaafrouzi/telegramtorubika](https://github.com/most
 | **Transfer** | Per-user Rubika (`/rubika_connect`), Bale bot, Google Drive (service account or Google OAuth), SSH upload/download |
 | **Queue** | SQLite queue, batch ZIP/split, direct URL download, confirm/cancel before send |
 | **Toolkit** | DNS, ping, whois, IP info, HTTP headers, port check, subnet, SSL, blacklist, MAC vendor, email check, MD5/SHA256/Base64, password, … |
-| **Mini App** | WebApp hub: My IP + geo, DNS (Cloudflare DoH), latency test, password/timestamp/subnet/Base64/SHA-256 — runs in **the user’s browser**, not the server |
+| **Mini App** | Redesigned WebApp hub: My IP + geo, reachability (device HTTP RTT vs server TCP ping), rich DoH DNS, whois/headers/SSL via API, utilities (MD5/SHA-256/Base64/…) — labels **your device** vs **bot server** |
 | **World** | Weather, calendar, currency, earthquakes, RSS/feed reader with push poll |
 | **Admin** | Plans/quotas, `/admin`, logs, billing stub |
 | **Installer** | `installer.sh` install/update/backup on Linux (systemd) |
@@ -141,17 +141,21 @@ The Mini App lives in `web/miniapp/`:
 
 | Page | Purpose |
 |------|---------|
-| `index.html` | Hub / launcher |
-| `myip.html` | Public IP, geo/ISP, latency |
-| `dns.html` | DNS A / AAAA / MX (Cloudflare DoH) |
-| `whois.html` | IP/domain WHOIS (via bot API) |
-| `headers.html` | HTTP headers & site status (via bot API) |
-| `network.html` | Multi-host latency from the user’s browser |
-| `utils.html` | Password, timestamp, subnet, Base64, SHA-256 |
+| `index.html` | Brand hub / launcher |
+| `myip.html` | Public IP, geo/ISP/ASN, quick latency (**from your device**) |
+| `reach.html` | Reachability: browser HTTP RTT, server TCP ping/port/SSL, side-by-side compare |
+| `dns.html` | DoH A/AAAA/MX/NS/TXT/CNAME/SOA + optional compare with server resolve |
+| `whois.html` | IP/domain WHOIS via bot API (**from bot server**) |
+| `headers.html` | HTTP headers & site status via bot API |
+| `utils.html` | Password, timestamp, subnet, Base64, MD5, SHA-256 (**from your device**) |
+| `network.html` | Redirect → `reach.html?mode=device` |
+| `servertools.html` | Redirect → `reach.html?mode=server` |
 
-**Server API** (`/miniapp/api/headers`, `/whois`, `/status`): runs in the bot HTTP thread when `MINIAPP_SERVE_LOCAL=1`, or proxy that path to `MINIAPP_PORT` in nginx (see `deploy/nginx/miniapp-location.conf.example`). Pure-static nginx **without** this proxy will not power whois/headers pages.
+**Server API** (`/miniapp/api/headers`, `/whois`, `/status`, `/ping`, `/port`, `/ssl`, `/dns`): runs in the bot HTTP thread when `MINIAPP_SERVE_LOCAL=1`, or proxy that path to `MINIAPP_PORT` in nginx (see `deploy/nginx/miniapp-location.conf.example`). Pure-static nginx **without** this proxy will not power server-side tools.
 
-Bot commands: `/myip`, `/miniapp` (opens WebApp buttons). Main menu button: **Mini App** (when `MINIAPP_BASE_URL` is set, opens hub). Glass menu: **Toolkit** → **Mini App hub** (when configured).
+Bot commands: `/myip`, `/miniapp` (opens WebApp buttons). Main menu: **Mini App**. Network menu shows Mini App shortcuts (device tools) plus reply-keyboard server tools. Glass menu: **Toolkit** → network → WebApp buttons when configured.
+
+**Note:** Browser “ping” is HTTP(S) round-trip timing, not ICMP. Use server TCP ping in Mini App or `/ping` in the bot for VPS-side checks.
 
 ### 1) Choose how to host static files
 

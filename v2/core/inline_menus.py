@@ -71,47 +71,87 @@ def build_inline_toolkit(uid: int, tr: Translator, *, webapp_url: str = "") -> t
 
 def build_inline_toolkit_network(uid: int, tr: Translator, *, webapp_url: str = "") -> tuple[str, InlineKeyboardMarkup]:
     body = tr(uid, "toolkit_network_menu_title")
-    myip_btn: InlineKeyboardButton
+    rows: list[list[InlineKeyboardButton]] = []
+
     if webapp_url:
         from pyrogram.types import WebAppInfo
 
-        myip_btn = InlineKeyboardButton(
-            tr(uid, "btn_tool_myip"),
-            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "myip.html")),
+        hub = miniapp_page_url(webapp_url, "index.html")
+        reach_dev = miniapp_page_url(webapp_url, "reach.html") + "?mode=device"
+        reach_srv = miniapp_page_url(webapp_url, "reach.html") + "?mode=server"
+        rows.append(
+            _row(
+                InlineKeyboardButton(
+                    tr(uid, "btn_open_miniapp_hub"),
+                    web_app=WebAppInfo(url=hub),
+                )
+            )
         )
-        dns_btn = InlineKeyboardButton(
-            tr(uid, "btn_tool_dns"),
-            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "dns.html")),
+        rows.append(
+            _row(
+                InlineKeyboardButton(
+                    tr(uid, "btn_tool_myip"),
+                    web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "myip.html")),
+                ),
+                InlineKeyboardButton(
+                    tr(uid, "btn_miniapp_reach_device"),
+                    web_app=WebAppInfo(url=reach_dev),
+                ),
+            )
         )
-        whois_btn = InlineKeyboardButton(
-            tr(uid, "btn_tool_whois"),
-            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "whois.html")),
+        rows.append(
+            _row(
+                InlineKeyboardButton(
+                    tr(uid, "btn_tool_dns"),
+                    web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "dns.html")),
+                ),
+                InlineKeyboardButton(
+                    tr(uid, "btn_miniapp_utils"),
+                    web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "utils.html")),
+                ),
+            )
         )
-        headers_btn = InlineKeyboardButton(
-            tr(uid, "btn_tool_http_headers"),
-            web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "headers.html")),
+        rows.append(
+            _row(
+                InlineKeyboardButton(
+                    tr(uid, "btn_tool_whois"),
+                    web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "whois.html")),
+                ),
+                InlineKeyboardButton(
+                    tr(uid, "btn_tool_http_headers"),
+                    web_app=WebAppInfo(url=miniapp_page_url(webapp_url, "headers.html")),
+                ),
+            )
+        )
+        rows.append(
+            _row(
+                InlineKeyboardButton(
+                    tr(uid, "btn_miniapp_reach_server"),
+                    web_app=WebAppInfo(url=reach_srv),
+                ),
+                InlineKeyboardButton(tr(uid, "btn_tool_ping"), callback_data="imenu:ping"),
+            )
         )
     else:
-        myip_btn = InlineKeyboardButton(tr(uid, "btn_tool_myip"), callback_data="imenu:myip_hint")
-        dns_btn = InlineKeyboardButton(tr(uid, "btn_tool_dns"), callback_data="imenu:dns")
-        whois_btn = InlineKeyboardButton(tr(uid, "btn_tool_whois"), callback_data="imenu:whois")
-        headers_btn = None
+        rows.append(
+            _row(
+                InlineKeyboardButton(tr(uid, "btn_tool_myip"), callback_data="imenu:myip_hint"),
+                InlineKeyboardButton(tr(uid, "btn_tool_dns"), callback_data="imenu:dns"),
+            )
+        )
+        rows.append(
+            _row(
+                InlineKeyboardButton(tr(uid, "btn_tool_ping"), callback_data="imenu:ping"),
+                InlineKeyboardButton(tr(uid, "btn_tool_whois"), callback_data="imenu:whois"),
+            )
+        )
 
-    rows = [
-        _row(myip_btn, dns_btn),
+    rows.append(
         _row(
-            InlineKeyboardButton(tr(uid, "btn_tool_ping"), callback_data="imenu:ping"),
             InlineKeyboardButton(tr(uid, "btn_tool_ipinfo"), callback_data="imenu:ipinfo"),
-        ),
-        _row(
-            whois_btn,
-            headers_btn
-            if headers_btn
-            else InlineKeyboardButton(tr(uid, "btn_tool_myid"), callback_data="imenu:myid"),
-        ),
-    ]
-    if headers_btn:
-        rows.append(_row(InlineKeyboardButton(tr(uid, "btn_tool_myid"), callback_data="imenu:myid")))
+            InlineKeyboardButton(tr(uid, "btn_tool_myid"), callback_data="imenu:myid"),
+        )
+    )
     rows.append(_row(InlineKeyboardButton(tr(uid, "btn_back_toolkit"), callback_data="imenu:toolkit")))
     return body, _kb(rows)
 

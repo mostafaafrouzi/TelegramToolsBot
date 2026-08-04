@@ -27,6 +27,7 @@ class ToolkitMenuDeps:
     build_calc_math_menu: MenuBuilder | None = None
     build_calc_text_menu: MenuBuilder | None = None
     build_calc_other_menu: MenuBuilder | None = None
+    miniapp_base_url: str = ""
 
 
 async def handle_show_toolkit_menu(deps: ToolkitMenuDeps, client: Any, message: Message) -> None:
@@ -45,6 +46,16 @@ async def handle_show_toolkit_network_menu(deps: ToolkitMenuDeps, client: Any, m
         deps.tr(uid, "toolkit_network_menu_title"),
         reply_markup=deps.build_toolkit_network_menu(uid),
     )
+    base = (deps.miniapp_base_url or "").strip()
+    if base:
+        from v2.core.inline_menus import build_inline_toolkit_network
+
+        _body, kb = build_inline_toolkit_network(uid, deps.tr, webapp_url=base)
+        await message.reply_text(
+            deps.tr(uid, "toolkit_network_miniapp_hint"),
+            reply_markup=kb,
+            parse_mode=None,
+        )
 
 
 async def handle_show_toolkit_crypto_menu(deps: ToolkitMenuDeps, client: Any, message: Message) -> None:

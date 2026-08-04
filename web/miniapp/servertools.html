@@ -1,96 +1,12 @@
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Server tools</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
-  <link rel="stylesheet" href="common.css" />
+  <meta http-equiv="refresh" content="0; url=reach.html?mode=server" />
+  <title>Redirect</title>
+  <script>location.replace("reach.html?mode=server");</script>
 </head>
 <body>
-  <div id="hdr"></div>
-  <p class="muted" id="hint"></p>
-  <div class="tabs" id="tabs"></div>
-
-  <div class="card panel active" id="panel-ping">
-    <h2 id="t-ping"></h2>
-    <input id="ping-host" type="text" placeholder="example.com" />
-    <input id="ping-port" type="text" placeholder="443" />
-    <button type="button" class="btn" id="btn-ping"></button>
-    <pre id="ping-out" class="mono" style="margin-top:12px">—</pre>
-  </div>
-
-  <div class="card panel" id="panel-port">
-    <h2 id="t-port"></h2>
-    <input id="port-host" type="text" placeholder="example.com" />
-    <input id="port-num" type="text" placeholder="22" />
-    <button type="button" class="btn" id="btn-port"></button>
-    <pre id="port-out" class="mono" style="margin-top:12px">—</pre>
-  </div>
-
-  <div class="card panel" id="panel-ssl">
-    <h2 id="t-ssl"></h2>
-    <input id="ssl-host" type="text" placeholder="example.com" />
-    <button type="button" class="btn" id="btn-ssl"></button>
-    <pre id="ssl-out" class="mono" style="margin-top:12px">—</pre>
-  </div>
-
-  <script src="common.js"></script>
-  <script>
-    T2R.initApp();
-    const en = T2R.lang() === "en";
-    document.getElementById("hdr").appendChild(T2R.header(en ? "Server tools" : "ابزار سرور", "index.html"));
-    document.getElementById("hint").textContent = en
-      ? "Runs on the bot server (TCP ping / port / SSL), not in your browser."
-      : "از سرور ربات اجرا می‌شود (پینگ TCP / پورت / SSL)، نه از مرورگر شما.";
-
-    const tabDefs = [
-      { id: "ping", fa: "Ping", en: "Ping" },
-      { id: "port", fa: "پورت", en: "Port" },
-      { id: "ssl", fa: "SSL", en: "SSL" },
-    ];
-    const tabsEl = document.getElementById("tabs");
-    tabDefs.forEach((td, i) => {
-      const b = document.createElement("button");
-      b.type = "button";
-      b.className = "tab" + (i === 0 ? " active" : "");
-      b.textContent = en ? td.en : td.fa;
-      b.onclick = () => {
-        tabsEl.querySelectorAll(".tab").forEach((x, j) => x.classList.toggle("active", j === i));
-        document.querySelectorAll(".panel").forEach((p, j) => p.classList.toggle("active", j === i));
-      };
-      tabsEl.appendChild(b);
-    });
-
-    document.getElementById("t-ping").textContent = en ? "TCP ping" : "پینگ TCP";
-    document.getElementById("t-port").textContent = en ? "Port check" : "بررسی پورت";
-    document.getElementById("t-ssl").textContent = en ? "SSL certificate" : "گواهی SSL";
-    document.getElementById("btn-ping").textContent = en ? "Run" : "اجرا";
-    document.getElementById("btn-port").textContent = en ? "Check" : "بررسی";
-    document.getElementById("btn-ssl").textContent = en ? "Inspect" : "مشاهده";
-
-    async function run(action, params, outEl) {
-      outEl.textContent = T2R.t("loading");
-      try {
-        const j = await T2R.miniappApi(action, params);
-        outEl.textContent = j.ok ? (j.text || "OK") : (j.error || T2R.t("error"));
-      } catch (e) {
-        outEl.textContent = String(e.message || e);
-      }
-    }
-
-    document.getElementById("btn-ping").onclick = () =>
-      run("ping", {
-        host: document.getElementById("ping-host").value,
-        port: document.getElementById("ping-port").value,
-      }, document.getElementById("ping-out"));
-    document.getElementById("btn-port").onclick = () =>
-      run("port", {
-        host: document.getElementById("port-host").value,
-        port: document.getElementById("port-num").value,
-      }, document.getElementById("port-out"));
-    document.getElementById("btn-ssl").onclick = () =>
-      run("ssl", { host: document.getElementById("ssl-host").value }, document.getElementById("ssl-out"));
-  </script>
+  <p><a href="reach.html?mode=server">Server tools</a></p>
 </body>
 </html>

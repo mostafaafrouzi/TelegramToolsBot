@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Reachability</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <link rel="stylesheet" href="common.css" />
+</head>
+<body>
+  <div id="app" class="app-shell">
+    <div id="hdr"></div>
+    <div id="seg"></div>
+    <p class="muted" id="hint"></p>
+
+    <div class="card" id="card-main">
+      <label class="field" id="lbl-host" for="host"></label>
+      <input id="host" type="text" placeholder="example.com / 1.1.1.1" autocomplete="off" />
+      <label class="field" id="lbl-port" for="port"></label>
+      <input id="port" type="text" placeholder="443" inputmode="numeric" />
+      <div class="btn-row">
+        <button type="button" class="btn" id="btn-run"></button>
+        <button type="button" class="btn secondary" id="btn-cdn"></button>
+      </div>
+      <div id="out" class="result" aria-live="polite">—</div>
+      <div id="copy-wrap"></div>
+    </div>
+
+    <div class="card" id="card-extra">
+      <h2 id="extra-title"></h2>
+      <div class="tabs" id="tabs">
+        <button type="button" class="tab active" data-panel="panel-port"></button>
+        <button type="button" class="tab" data-panel="panel-ssl"></button>
+      </div>
+      <div class="panel active" id="panel-port">
+        <input id="port-host" type="text" placeholder="example.com" />
+        <input id="port-num" type="text" placeholder="22" inputmode="numeric" />
+        <button type="button" class="btn" id="btn-port"></button>
+        <div id="port-out" class="result">—</div>
+      </div>
+      <div class="panel" id="panel-ssl">
+        <input id="ssl-host" type="text" placeholder="example.com" />
+        <button type="button" class="btn" id="btn-ssl"></button>
+        <div id="ssl-out" class="result">—</div>
+      </div>
+    </div>
+  </div>
+  <script src="common.js"></script>
+  <script>
+    T2R.initApp();
+    const en = T2R.lang() === "en";
+    T2R.shell(en ? "Reach / Ping" : "دسترسی / پینگ", "index.html");
+
+    const hint = document.getElementById("hint");
+    const hostEl = document.getElementById("host");
+    const portEl = document.getElementById("port");
+    const out = document.getElementById("out");
+    const copyWrap = document.getElementById("copy-wrap");
+    const lblPort = document.getElementById("lbl-port");
+    const extra = document.getElementById("card-extra");
+
+    document.getElementById("lbl-host").textContent = en ? "Host or IP" : "دامنه یا IP";
+    lblPort.textContent = en ? "Port (server mode)" : "پورت (حالت سرور)";
+    document.getElementById("btn-run").textContent = en ? "Run test" : "اجرای تست";
+    document.getElementById("btn-cdn").textContent = en ? "CDN board" : "تابلو CDN";
+    document.getElementById("extra-title").textContent = en
+      ? "Server extras"
+      : "ابزارهای سرور";
+    document.querySelector('#tabs .tab[data-panel="panel-port"]').textContent = en ? "Port" : "پورت";
+    document.querySelector('#tabs .tab[data-panel="panel-ssl"]').textContent = "SSL";
+    document.getElementById("btn-port").textContent = en ? "Check port" : "بررسی پورت";
+    document.getElementById("btn-ssl").textContent = en ? "Inspect SSL" : "بررسی SSL";
+
+    let mode = "device";
+    const params = new URLSearchParams(location.search);
+    if (params.get("mode") === "server") mode = "server";
+    if (params.get("mode") === "compare") mode = "compare";
+    if (params.get("host")) hostEl.value = params.get("host");
+
+    function syncUi() {
+      if (mode === "device") {
+        hint.textContent = T2R.t("not_icmp");
+        lblPort.style.display = "none";
+        portEl.style.display = "none";
+        extra.style.display = "none";
+      } else if (mode === "server") {
+        hint.textContent = T2R.t("from_vps");
+        lblPort.style.display = "";
+        portEl.style.display = "";
+        extra.style.display = "";
+      } else {
+        hint.textContent = en
+          ? "Runs browser HTTP RTT and server TCP ping side by side."
+          : "RTT مرورگر و پینگ TCP سرور را کنار هم نشان می‌دهد.";
+        lblPort.style.display = "";
+        portEl.style.display = "";
+        extra.style.display = "none";
+      }
+    }
+
+    T2R.segmented(
+      document.getElementById("seg"),
+      [
+        { id: "device", label: T2R.t("device") },
+        { id: "server", label: T2R.t("server") },
+        { id: "compare", label: T2R.t("compare") },
+      ],
+      (id) => {
+        mode = id;
+        syncUi();
+      },
+      mode
+    );
+    syncUi();
+
+    // Tabs for port/ssl
+    const tabs = document.querySelectorAll("#tabs .tab");
+    tabs.forEach((tab) => {
+      tab.onclick = () => {
+        tabs.forEach((t) => t.classList.remove("active"));
+        tab.classList.add("active");
+        document.querySelectorAll("#card-extra .panel").forEach((p) => p.classList.remove("active"));
+        document.getElementById(tab.dataset.panel).classList.add("active");
+      };
+    });
+
+    function formatClient(r) {
+      const lines = [
+        (en ? "Target" : "هدف") + ": " + r.host,
+        (en ? "Avg" : "میانگین") + ": ~" + r.avg + " ms",
+        (en ? "Min / Max" : "حداقل / حداکثر") + ": " + r.min + " / " + r.max + " ms",
+        (en ? "Samples ok" : "نمونه‌های موفق") + ": " + r.ok + "/" + (r.ok + r.fail),
+        "",
+        T2R.t("not_icmp"),
+      ];
+      return lines.join("\n");
+    }
+
+    async function runDevice(host) {
+      const r = await T2R.clientReach(host, 3, 10000);
+      return formatClient(r);
+    }
+
+    async function runServer(host, port) {
+      const j = await T2R.miniappApi("ping", { host, port: port || "443" });
+      if (!j.ok) throw new Error(j.error || T2R.t("error"));
+      return j.text + "\n\n" + T2R.t("from_vps");
+    }
+
+    async function runCdnBoard() {
+      const hosts = [
+        { label: "Telegram", url: "https://telegram.org" },
+        { label: "Cloudflare", url: "https://1.1.1.1" },
+        { label: "Google", url: "https://www.google.com/generate_204" },
+        { label: "Quad9", url: "https://9.9.9.9" },
+      ];
+      const lines = [(en ? "CDN latency (your device)" : "تأخیر CDN (دستگاه شما)")];
+      for (const h of hosts) {
+        try {
+          const ms = await T2R.latencyMs(h.url, 12000);
+          lines.push(h.label + ": ~" + ms + " ms");
+        } catch (e) {
+          lines.push(h.label + ": " + (en ? "fail" : "ناموفق"));
+        }
+      }
+      return lines.join("\n");
+    }
+
+    function afterResult(text, ok) {
+      T2R.setResult(out, text, ok ? "ok" : "error");
+      copyWrap.innerHTML = "";
+      if (ok && text) T2R.addCopyButton(copyWrap, () => text);
+    }
+
+    document.getElementById("btn-run").onclick = async () => {
+      const host = hostEl.value.trim();
+      const port = portEl.value.trim() || "443";
+      if (!host && mode !== "device") {
+        /* allow empty only for cdn via other btn */
+      }
+      if (!host) {
+        afterResult(en ? "Enter a host or IP." : "دامنه یا IP را وارد کنید.", false);
+        return;
+      }
+      T2R.setResult(out, T2R.t("loading"), "loading");
+      copyWrap.innerHTML = "";
+      try {
+        if (mode === "device") {
+          afterResult(await runDevice(host), true);
+        } else if (mode === "server") {
+          afterResult(await runServer(host, port), true);
+        } else {
+          let clientTxt = "";
+          let serverTxt = "";
+          let cErr = null;
+          let sErr = null;
+          try {
+            clientTxt = await runDevice(host);
+          } catch (e) {
+            cErr = String(e.message || e);
+          }
+          try {
+            serverTxt = await runServer(host, port);
+          } catch (e) {
+            sErr = String(e.message || e);
+          }
+          const html =
+            '<div class="compare-grid">' +
+            '<div class="compare-col"><h3>' +
+            T2R.t("device") +
+            "</h3><pre class=\"mono\">" +
+            (clientTxt || cErr || "—").replace(/</g, "&lt;") +
+            "</pre></div>" +
+            '<div class="compare-col"><h3>' +
+            T2R.t("server") +
+            "</h3><pre class=\"mono\">" +
+            (serverTxt || sErr || "—").replace(/</g, "&lt;") +
+            "</pre></div></div>";
+          T2R.setResultHtml(out, html, cErr && sErr ? "error" : "ok");
+          const plain =
+            "DEVICE\n" +
+            (clientTxt || cErr) +
+            "\n\nSERVER\n" +
+            (serverTxt || sErr);
+          copyWrap.innerHTML = "";
+          T2R.addCopyButton(copyWrap, () => plain);
+        }
+      } catch (e) {
+        afterResult(String(e.message || e), false);
+      }
+    };
+
+    document.getElementById("btn-cdn").onclick = async () => {
+      T2R.setResult(out, T2R.t("loading"), "loading");
+      try {
+        afterResult(await runCdnBoard(), true);
+      } catch (e) {
+        afterResult(String(e.message || e), false);
+      }
+    };
+
+    async function apiRun(action, params, el) {
+      T2R.setResult(el, T2R.t("loading"), "loading");
+      try {
+        const j = await T2R.miniappApi(action, params);
+        T2R.setResult(el, j.ok ? j.text : j.error || T2R.t("error"), j.ok ? "ok" : "error");
+      } catch (e) {
+        T2R.setResult(el, T2R.t("api_fail") + "\n" + e, "error");
+      }
+    }
+
+    document.getElementById("btn-port").onclick = () =>
+      apiRun(
+        "port",
+        {
+          host: document.getElementById("port-host").value || hostEl.value,
+          port: document.getElementById("port-num").value,
+        },
+        document.getElementById("port-out")
+      );
+    document.getElementById("btn-ssl").onclick = () =>
+      apiRun(
+        "ssl",
+        { host: document.getElementById("ssl-host").value || hostEl.value },
+        document.getElementById("ssl-out")
+      );
+  </script>
+</body>
+</html>

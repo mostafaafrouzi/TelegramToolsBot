@@ -8,45 +8,47 @@
   <link rel="stylesheet" href="common.css" />
 </head>
 <body>
-  <div id="hdr"></div>
-  <p class="muted" id="hint"></p>
-  <div class="card">
-    <input id="url" type="url" placeholder="https://example.com" />
-    <div class="btn-row">
-      <button type="button" class="btn" id="btn-h"></button>
-      <button type="button" class="btn secondary" id="btn-s"></button>
+  <div id="app" class="app-shell">
+    <div id="hdr"></div>
+    <div id="badge-slot"></div>
+    <p class="muted" id="hint"></p>
+    <div class="card">
+      <label class="field" for="url" id="lbl"></label>
+      <input id="url" type="url" placeholder="https://example.com" />
+      <div class="btn-row">
+        <button type="button" class="btn" id="btn-h"></button>
+        <button type="button" class="btn secondary" id="btn-s"></button>
+      </div>
+      <div id="out" class="result">—</div>
+      <div id="copy-wrap"></div>
     </div>
-    <pre id="out" class="mono" style="margin-top:10px">—</pre>
-    <div id="copy-wrap"></div>
   </div>
   <script src="common.js"></script>
   <script>
     T2R.initApp();
     const en = T2R.lang() === "en";
-    document.getElementById("hdr").appendChild(T2R.header(en ? "HTTP Headers" : "هدرهای HTTP", "index.html"));
-    document.getElementById("hint").textContent = en
-      ? "Fetched from the bot server (enable MINIAPP_SERVE_LOCAL or proxy /miniapp/api/ to the bot)."
-      : "از سرور ربات گرفته می‌شود (MINIAPP_SERVE_LOCAL=1 یا پروکسی /miniapp/api/).";
+    T2R.shell(en ? "HTTP Headers" : "هدرهای HTTP", "index.html");
+    document.getElementById("badge-slot").appendChild(T2R.badge("server"));
+    document.getElementById("hint").textContent = T2R.t("from_vps");
+    document.getElementById("lbl").textContent = en ? "URL" : "آدرس";
     document.getElementById("btn-h").textContent = en ? "Headers" : "هدرها";
     document.getElementById("btn-s").textContent = en ? "Site status" : "وضعیت سایت";
     const out = document.getElementById("out");
-    const urlEl = document.getElementById("url");
 
     async function run(action) {
-      const url = urlEl.value.trim();
+      const url = document.getElementById("url").value.trim();
       if (!url) {
-        out.textContent = en ? "Enter a URL." : "آدرس را وارد کنید.";
+        T2R.setResult(out, en ? "Enter a URL." : "آدرس را وارد کنید.", "error");
         return;
       }
-      out.textContent = T2R.t("loading");
+      T2R.setResult(out, T2R.t("loading"), "loading");
       try {
         const j = await T2R.miniappApi(action, { url });
-        out.textContent = j.ok ? j.text : (en ? "Error: " : "خطا: ") + (j.error || "?");
+        T2R.setResult(out, j.ok ? j.text : j.error || "?", j.ok ? "ok" : "error");
         document.getElementById("copy-wrap").innerHTML = "";
         if (j.ok) T2R.addCopyButton(document.getElementById("copy-wrap"), () => out.textContent);
       } catch (e) {
-        out.textContent = (en ? "API unavailable. " : "API در دسترس نیست. ") + e +
-          (en ? "\n\nServe static + proxy /miniapp/api/ or set MINIAPP_SERVE_LOCAL=1." : "\n\nMINIAPP_SERVE_LOCAL=1 یا پروکسی nginx.");
+        T2R.setResult(out, T2R.t("api_fail") + "\n" + e, "error");
       }
     }
 

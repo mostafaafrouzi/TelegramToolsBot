@@ -9,6 +9,7 @@ import urllib.parse
 from collections import defaultdict, deque
 from typing import Any
 
+from v2.toolkit.dns_light import resolve_hostname
 from v2.toolkit.net_extra_light import (
     http_headers_report,
     port_check_report,
@@ -145,6 +146,18 @@ def dispatch_miniapp_api(path: str, query_string: str) -> tuple[int, str, bytes]
             return status, "application/json; charset=utf-8", body
         ok, detail = ssl_cert_report(host)
         status, body = _json_response(ok, text=detail if ok else "", error=detail if not ok else "")
+        return status, "application/json; charset=utf-8", body
+
+    if action == "dns":
+        host = _q(params, "q") or _q(params, "host") or _q(params, "name")
+        if not host:
+            status, body = _json_response(False, error="missing_host")
+            return status, "application/json; charset=utf-8", body
+        # Server-side A/AAAA via getaddrinfo (type param accepted for API symmetry)
+        ok, detail = resolve_hostname(host)
+        rtype = (_q(params, "type") or "A").upper()
+        text = f"{rtype} (server resolve) {host}\n{detail}" if ok else detail
+        status, body = _json_response(ok, text=text if ok else "", error=detail if not ok else "")
         return status, "application/json; charset=utf-8", body
 
     err = json.dumps({"ok": False, "error": "unknown_action"}).encode("utf-8")

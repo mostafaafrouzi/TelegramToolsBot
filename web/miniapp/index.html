@@ -3,42 +3,98 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Tele2Rub Tools</title>
+  <title>Tele2Rub</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <link rel="stylesheet" href="common.css" />
 </head>
 <body>
-  <header class="app-header">
-    <h1 id="title">Tele2Rub</h1>
-  </header>
-  <p class="muted" id="subtitle"></p>
-  <nav class="grid" id="nav"></nav>
-  <div class="card muted" id="note"></div>
+  <div id="app" class="app-shell">
+    <section class="hero">
+      <h1 class="hero-brand" id="brand">Tele2Rub</h1>
+      <p class="hero-sub" id="subtitle"></p>
+      <div class="chip-row">
+        <span class="chip" id="chip-device"></span>
+        <span class="chip" id="chip-server"></span>
+      </div>
+    </section>
+    <nav class="grid" id="nav"></nav>
+    <p class="footnote" id="note"></p>
+  </div>
   <script src="common.js"></script>
   <script>
     T2R.initApp();
-    const isEn = T2R.lang() === "en";
-    document.getElementById("title").textContent = isEn ? "Tele2Rub Tools" : "ابزارهای Tele2Rub";
+    const en = T2R.lang() === "en";
+    document.getElementById("brand").textContent = "Tele2Rub";
     document.getElementById("subtitle").textContent = T2R.t("home_sub");
-    document.getElementById("note").textContent = isEn
-      ? "Tip: set MINIAPP_BASE_URL on your server and open this hub from /myip or /imenu."
-      : "نکته: MINIAPP_BASE_URL را روی سرور تنظیم کنید و از /myip یا منوی شیشه‌ای باز کنید.";
+    document.getElementById("chip-device").textContent = en ? "Your network" : "شبکهٔ شما";
+    document.getElementById("chip-server").textContent = en ? "Bot server" : "سرور ربات";
+    document.getElementById("note").textContent = en
+      ? "Tip: open tools from the Network menu in the bot for one-tap access."
+      : "نکته: از منوی شبکهٔ ربات هم می‌توانی همین ابزارها را یک‌ضرب باز کنی.";
 
     const pages = [
-      { href: "myip.html", icon: "📍", fa: "IP من", en: "My IP" },
-      { href: "dns.html", icon: "🌐", fa: "DNS", en: "DNS lookup" },
-      { href: "whois.html", icon: "🔍", fa: "Whois", en: "Whois" },
-      { href: "headers.html", icon: "📬", fa: "HTTP / وضعیت", en: "HTTP / Status" },
-      { href: "network.html", icon: "📡", fa: "تأخیر شبکه", en: "Latency" },
-      { href: "servertools.html", icon: "🖥", fa: "ابزار سرور", en: "Server tools" },
-      { href: "utils.html", icon: "🧰", fa: "ابزارها", en: "Utilities" },
+      {
+        href: "myip.html",
+        icon: "📍",
+        fa: "IP من",
+        en: "My IP",
+        dfa: "IP واقعی دستگاه شما",
+        den: "Your real public IP",
+      },
+      {
+        href: "reach.html",
+        icon: "📡",
+        fa: "دسترسی / پینگ",
+        en: "Reach / Ping",
+        dfa: "دستگاه شما یا سرور ربات",
+        den: "Your device or bot server",
+      },
+      {
+        href: "dns.html",
+        icon: "🌐",
+        fa: "DNS",
+        en: "DNS",
+        dfa: "DoH از شبکهٔ شما",
+        den: "DoH from your network",
+      },
+      {
+        href: "whois.html",
+        icon: "🔍",
+        fa: "Whois",
+        en: "Whois",
+        dfa: "RDAP از سرور",
+        den: "RDAP via server",
+      },
+      {
+        href: "headers.html",
+        icon: "📬",
+        fa: "HTTP / وضعیت",
+        en: "HTTP / Status",
+        dfa: "هدر و وضعیت سایت",
+        den: "Headers & site status",
+      },
+      {
+        href: "utils.html",
+        icon: "🧰",
+        fa: "ابزارک‌ها",
+        en: "Utilities",
+        dfa: "رمز، هش، Base64…",
+        den: "Password, hash, Base64…",
+      },
     ];
     const nav = document.getElementById("nav");
     pages.forEach((p) => {
       const a = document.createElement("a");
       a.className = "tile";
       a.href = p.href;
-      a.innerHTML = '<span class="icon">' + p.icon + '</span><span class="label">' + (isEn ? p.en : p.fa) + "</span>";
+      a.innerHTML =
+        '<span class="icon">' +
+        p.icon +
+        '</span><span class="label">' +
+        (en ? p.en : p.fa) +
+        '</span><span class="desc">' +
+        (en ? p.den : p.dfa) +
+        "</span>";
       nav.appendChild(a);
     });
   </script>
