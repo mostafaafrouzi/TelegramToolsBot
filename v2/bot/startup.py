@@ -23,6 +23,7 @@ def run_bot() -> None:
     tb.app.loop.create_task(tb.payment_reconcile_loop())
     tb.app.loop.create_task(tb.payment_notify_loop())
     tb.app.loop.create_task(tb.rss_poll_loop())
+    tb.app.loop.create_task(tb.alert_poll_loop())
     serve_local = getattr(tb, "MINIAPP_SERVE_LOCAL", False)
     miniapp_url = (getattr(tb, "MINIAPP_BASE_URL", None) or "").strip()
     if serve_local or miniapp_url:

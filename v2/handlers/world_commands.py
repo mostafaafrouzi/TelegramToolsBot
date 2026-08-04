@@ -9,7 +9,8 @@ from typing import Any, Callable, Optional
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.toolkit.calendar_light import age_report, calendar_report
-from v2.core.msg_format import reply_html
+from v2.core.msg_format import reply_html, reply_plain
+from v2.toolkit.fx_calculator import calculate_report
 from v2.toolkit.fx_light import currency_convert, market_quotes_report
 from v2.toolkit.timezone_light import timezone_report
 from v2.toolkit.weather_light import air_quality_report, recent_earthquakes, weather_report
@@ -88,13 +89,26 @@ async def handle_markets(deps: WorldCommandDeps, client: Any, message: Message, 
         _commit_world(deps, uid)
         from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+        board_cb = section if section in ("gold", "usd", "eur", "gbp", "jpy", "majors", "hub") else "hub"
         kb = InlineKeyboardMarkup(
-            [[InlineKeyboardButton(deps.tr(uid, "btn_world_currency"), callback_data="imenu:currency")]]
+            [
+                [
+                    InlineKeyboardButton(
+                        deps.tr(uid, "btn_world_currency"), callback_data="imenu:currency"
+                    )
+                ],
+                [
+                    InlineKeyboardButton(
+                        "🔄 تازه‌سازی" if _lang(deps, uid) != "en" else "🔄 Refresh",
+                        callback_data=f"imenu:{board_cb}",
+                    )
+                ],
+            ]
         )
         if "<b>" in body:
             await reply_html(message, body, reply_markup=kb)
         else:
-            await message.reply_text(body, reply_markup=kb, parse_mode=None)
+            await reply_plain(message, body, reply_markup=kb)
         return
     await message.reply_text(deps.tr(uid, "world_error", detail=body), parse_mode=None)
 
@@ -146,15 +160,51 @@ async def dispatch_world_wizard(
         if ok:
             _commit_world(deps, user_id)
         deps.clear_state(user_id)
-        await message.reply_text("\n\n".join(parts), parse_mode=None)
+        body = "\n\n".join(parts)
+        if "<b>" in body:
+            await reply_html(message, body)
+        else:
+            await reply_plain(message, body)
+        return True
+
+    if step == "await_fx_calc":
+        raw = text.strip()
+        if not raw:
+            await reply_plain(message, deps.tr(user_id, "fx_calc_ask"))
+            return True
+        if not await _guard_world(deps, user_id, message):
+            deps.clear_state(user_id)
+            return True
+        ok, body = await asyncio.to_thread(calculate_report, raw, lang=lang)
+        if ok:
+            _commit_world(deps, user_id)
+            # keep wizard open for another conversion
+            deps.set_state_preserving_menu(user_id, {"step": "await_fx_calc"})
+            await reply_html(message, body)
+        else:
+            await reply_plain(message, deps.tr(user_id, "world_error", detail=body))
         return True
 
     if step == "await_currency_amount":
-        amount_s = text.strip()
+        # Free-form calculator path when text looks like amount+unit
+        raw = text.strip()
+        if any(ch.isalpha() or "\u0600" <= ch <= "\u06FF" for ch in raw):
+            if not await _guard_world(deps, user_id, message):
+                deps.clear_state(user_id)
+                return True
+            ok, body = await asyncio.to_thread(calculate_report, raw, lang=lang)
+            if ok:
+                _commit_world(deps, user_id)
+                deps.set_state_preserving_menu(user_id, {"step": "await_fx_calc"})
+                await reply_html(message, body)
+            else:
+                await reply_plain(message, deps.tr(user_id, "world_error", detail=body))
+            return True
+        amount_s = raw
         try:
-            float(amount_s.replace(",", ""))
+            float(amount_s.replace(",", "").replace("٬", ""))
         except ValueError:
-            await message.reply_text(deps.tr(user_id, "currency_bad_amount"), parse_mode=None)
+            await reply_plain(message, deps.tr(user_id, "currency_bad_amount"))
             return True
         await _after_currency_amount(deps, user_id, amount_s, message)
         return True
@@ -270,22 +320,26 @@ async def start_currency_wizard(deps: WorldCommandDeps, message: Message) -> Non
     from v2.core.menu_sections import MenuSection
 
     uid = message.from_user.id
-    deps.set_state_preserving_menu(uid, {"step": "await_currency_amount"})
+    deps.set_state_preserving_menu(uid, {"step": "await_fx_calc"})
     kb = InlineKeyboardMarkup(
         [
             [
-                InlineKeyboardButton("USD→IRR", callback_data="fxquick:1:USD:IRR"),
-                InlineKeyboardButton("EUR→IRR", callback_data="fxquick:1:EUR:IRR"),
+                InlineKeyboardButton("۱۰۰٬۰۰۰ تومان", callback_data="fxcalc:100000 IRT"),
+                InlineKeyboardButton("۱ دلار", callback_data="fxcalc:1 USD"),
             ],
             [
-                InlineKeyboardButton("100 USD→IRR", callback_data="fxquick:100:USD:IRR"),
-                InlineKeyboardButton("1 USDT→IRT", callback_data="fxquick:1:USDT:IRT"),
+                InlineKeyboardButton("۱ یورو", callback_data="fxcalc:1 EUR"),
+                InlineKeyboardButton("۱ سکه امامی", callback_data="fxcalc:1 SEKEE"),
+            ],
+            [
+                InlineKeyboardButton("۱ گرم طلا", callback_data="fxcalc:1 GOLD18"),
+                InlineKeyboardButton("۱۰٬۰۰۰٬۰۰۰ ریال", callback_data="fxcalc:10000000 IRR"),
             ],
         ]
     )
     if deps.set_menu_section:
         deps.set_menu_section(uid, MenuSection.WORLD)
-    await message.reply_text(deps.tr(uid, "currency_ask_amount"), reply_markup=kb, parse_mode=None)
+    await reply_plain(message, deps.tr(uid, "fx_calc_ask"), reply_markup=kb)
 
 
 # After amount, go to from-code (not combined pair)
@@ -340,8 +394,36 @@ async def handle_fx_quick_callback(
     if ok:
         _commit_world(deps, uid)
     deps.clear_state(uid)
-    await callback_query.message.reply_text(
-        body if ok else deps.tr(uid, "world_error", detail=body),
-        parse_mode=None,
-    )
+    msg = callback_query.message
+    if ok and "<b>" in body:
+        await reply_html(msg, body)
+    else:
+        await reply_plain(msg, body if ok else deps.tr(uid, "world_error", detail=body))
+    return True
+
+
+async def handle_fx_calc_callback(
+    deps: WorldCommandDeps,
+    client: Any,
+    callback_query: Any,
+    payload: str,
+) -> bool:
+    uid = callback_query.from_user.id
+    if deps.world_quota_try:
+        ok_q, msg = deps.world_quota_try(uid)
+        if not ok_q:
+            await callback_query.answer(msg[:180] if msg else "quota", show_alert=True)
+            return True
+    await callback_query.answer()
+    lang = _lang(deps, uid)
+    ok, body = await asyncio.to_thread(calculate_report, payload, lang=lang)
+    if ok:
+        _commit_world(deps, uid)
+        deps.set_state_preserving_menu(uid, {"step": "await_fx_calc"})
+        await reply_html(callback_query.message, body)
+    else:
+        await reply_plain(
+            callback_query.message,
+            deps.tr(uid, "world_error", detail=body),
+        )
     return True

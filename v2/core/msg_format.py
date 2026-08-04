@@ -5,6 +5,8 @@ from __future__ import annotations
 import html
 from typing import Any, Optional, Sequence
 
+from pyrogram.enums import ParseMode
+
 
 def escape(s: Any) -> str:
     return html.escape("" if s is None else str(s), quote=False)
@@ -22,8 +24,9 @@ def section(text: str) -> str:
     return f"\n<b>{escape(text)}</b>"
 
 
-def kv(key: str, value: Any, *, bullet: str = "•") -> str:
-    return f"{bullet} <b>{escape(key)}</b>: {escape(value)}"
+def kv(key: str, value: Any, *, bullet: str = "•", icon: str = "") -> str:
+    prefix = f"{icon} " if icon else ""
+    return f"{bullet} {prefix}<b>{escape(key)}</b>: {escape(value)}"
 
 
 def line(text: str, *, bullet: str = "•") -> str:
@@ -48,23 +51,26 @@ def change_line(
     if d is None and dp is None:
         return ""
     arrow = "─"
+    icon = "📊"
     dt_l = (dt or "").lower()
     if dt_l == "high" or (d is not None and d > 0) or (dp is not None and dp > 0):
         arrow = "▲"
+        icon = "📈"
     elif dt_l == "low" or (d is not None and d < 0) or (dp is not None and dp < 0):
         arrow = "▼"
+        icon = "📉"
     parts = [arrow]
     if d is not None:
         parts.append(f"{d:+,.4g}" if abs(d) < 1000 else f"{d:+,.0f}")
     if dp is not None:
         parts.append(f"({dp:+.2f}%)")
     label = "Day change" if lang == "en" else "تغییر روز"
-    return kv(label, " ".join(parts))
+    return kv(label, " ".join(parts), icon=icon)
 
 
 def updated_line(ts: str, *, lang: str = "fa") -> str:
     label = "Updated" if lang == "en" else "به‌روزرسانی"
-    return kv(label, ts or "—")
+    return kv(label, ts or "—", icon="🕒")
 
 
 def pre_table(headers: Sequence[str], rows: Sequence[Sequence[str]]) -> str:
@@ -97,20 +103,50 @@ def join(*blocks: str) -> str:
     return "\n".join(b for b in blocks if b)
 
 
+def strip_html(body: str) -> str:
+    plain = (
+        body.replace("<b>", "")
+        .replace("</b>", "")
+        .replace("<i>", "")
+        .replace("</i>", "")
+        .replace("<code>", "")
+        .replace("</code>", "")
+        .replace("<pre>", "")
+        .replace("</pre>", "")
+    )
+    return html.unescape(plain)
+
+
+async def _track(message: Any, sent: Any) -> Any:
+    try:
+        from v2.core.bot_messages import track_message
+
+        uid = message.from_user.id if getattr(message, "from_user", None) else 0
+        chat_id = message.chat.id if getattr(message, "chat", None) else 0
+        mid = getattr(sent, "id", None)
+        if uid and chat_id and mid:
+            track_message(uid, chat_id, int(mid))
+    except Exception:
+        pass
+    return sent
+
+
 async def reply_html(message: Any, body: str, *, reply_markup: Any = None) -> Any:
     """Send HTML body; fall back to plain if Telegram rejects entities."""
     try:
-        return await message.reply_text(body, parse_mode="html", reply_markup=reply_markup)
-    except Exception:
-        plain = (
-            body.replace("<b>", "")
-            .replace("</b>", "")
-            .replace("<i>", "")
-            .replace("</i>", "")
-            .replace("<code>", "")
-            .replace("</code>", "")
-            .replace("<pre>", "")
-            .replace("</pre>", "")
+        sent = await message.reply_text(
+            body, parse_mode=ParseMode.HTML, reply_markup=reply_markup
         )
-        plain = html.unescape(plain)
-        return await message.reply_text(plain, parse_mode=None, reply_markup=reply_markup)
+    except Exception:
+        sent = await message.reply_text(
+            strip_html(body), parse_mode=ParseMode.DISABLED, reply_markup=reply_markup
+        )
+    return await _track(message, sent)
+
+
+async def reply_plain(message: Any, body: str, *, reply_markup: Any = None) -> Any:
+    """Send plain text without Markdown/HTML parsing (avoids client default MARKDOWN)."""
+    sent = await message.reply_text(
+        body, parse_mode=ParseMode.DISABLED, reply_markup=reply_markup
+    )
+    return await _track(message, sent)

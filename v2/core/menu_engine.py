@@ -106,6 +106,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_calc_square": "/calc_square",
     "btn_calc_case": "/calc_case",
     "btn_calc_wordcount": "/calc_wordcount",
+    "btn_calc_digits": "/calc_digits",
     "btn_world_markets": "/world_markets",
     "btn_world_gold": "/world_gold",
     "btn_world_usd": "/world_usd",
@@ -136,6 +137,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_world_weather": "/world_weather",
     "btn_world_calendar": "/world_calendar",
     "btn_world_currency": "/world_currency",
+    "btn_world_alerts": "/world_alerts",
     "btn_world_earthquake": "/world_quake",
     "btn_world_time": "/world_time",
     "btn_world_age": "/world_age",
@@ -157,6 +159,7 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_plan_usage": "/usage",
     "btn_plan_buy": "/purchase",
     "btn_plan_compare": "/plan_compare",
+    "btn_clear_chat": "/clear_chat",
     "btn_admin_panel": "/admin",
     "btn_cf_connect": "/cf_connect",
     "btn_cf_status": "/cf_status",
@@ -394,6 +397,7 @@ def build_plan_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_plan_usage"),
                 tr(user_id, "btn_plan_buy"),
                 tr(user_id, "btn_plan_compare"),
+                tr(user_id, "btn_clear_chat"),
                 tr(user_id, "btn_queue"),
             ],
             3,
@@ -441,6 +445,7 @@ def build_world_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_world_calendar"),
                 tr(user_id, "btn_world_age"),
                 tr(user_id, "btn_world_currency"),
+                tr(user_id, "btn_world_alerts"),
                 tr(user_id, "btn_world_gold"),
                 tr(user_id, "btn_world_usd"),
                 tr(user_id, "btn_world_eur"),
@@ -663,7 +668,7 @@ def build_calc_text_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _calc_cat_menu(
         user_id,
         tr,
-        ["btn_calc_case", "btn_calc_wordcount"],
+        ["btn_calc_case", "btn_calc_wordcount", "btn_calc_digits"],
     )
 
 

@@ -143,6 +143,9 @@ _TEXT_EXCLUDED_COMMANDS = [
     "calc_linear",
     "calc_quadratic",
     "calc_add_days",
+    "calc_digits",
+    "clear_chat",
+    "world_alerts",
 ]
 
 _MEDIA_FILTER = filters.private & (
@@ -235,6 +238,9 @@ def register_handlers(app: Client, *, group: int = 0) -> None:
     mh(tb.calc_linear_handler, priv & cmd("calc_linear"))
     mh(tb.calc_quadratic_handler, priv & cmd("calc_quadratic"))
     mh(tb.calc_add_days_handler, priv & cmd("calc_add_days"))
+    mh(tb.calc_digits_handler, priv & cmd("calc_digits"))
+    mh(tb.clear_chat_handler, priv & cmd("clear_chat"))
+    mh(tb.world_alerts_handler, priv & cmd("world_alerts"))
     mh(tb.rubika_status_handler, priv & cmd("rubika_status"))
     mh(tb.rubika_connect_handler, priv & cmd("rubika_connect"))
     mh(tb.direct_mode_handler, priv & cmd("directmode"))

@@ -19,5 +19,7 @@ def build_bot_client(
         api_hash=api_hash,
         bot_token=bot_token,
     )
-    app.set_parse_mode(ParseMode.MARKDOWN)
+    # DISABLED: most bot replies are plain/HTML-explicit. MARKDOWN default made
+    # parse_mode=None render raw HTML tags from formatters.
+    app.set_parse_mode(ParseMode.DISABLED)
     return app

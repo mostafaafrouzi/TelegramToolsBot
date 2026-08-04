@@ -57,6 +57,7 @@ _SINGLE = frozenset(
         "wordcount",
         "mean",
         "log",
+        "digits",
     }
 )
 
@@ -369,6 +370,8 @@ def _eval_calc(tool: str, payload: str) -> tuple[bool, str]:
         if days is None:
             return False, "تعداد روز نامعتبر"
         return add_days(parts[0], int(days), lang="fa")
+    if t == "digits":
+        return ck.convert_digits(payload)
     return False, "unknown_tool"
 
 
@@ -393,6 +396,7 @@ async def start_calc_tool(deps: CalcKitDeps, message: Message, tool: str) -> Non
             "wordcount": "متن را بفرست:",
             "mean": "اعداد را با فاصله بفرست:",
             "log": "عدد و در صورت نیاز مبنا را بفرست (مثال: ۱۰۰ یا ۱۰۰ ۲):",
+            "digits": "متن دارای عدد را بفرست (ارقام فارسی↔انگلیسی):",
         }
         await message.reply_text(hints.get(tool, "مقدار را بفرست:"), parse_mode=None)
         return

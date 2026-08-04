@@ -183,7 +183,36 @@ def get_entitlement_row(user_id: int) -> Optional[sqlite3.Row]:
         ).fetchone()
 
 
+def _admin_ids() -> set[int]:
+    raw = (os.getenv("ADMIN_IDS") or os.getenv("ADMIN_ID") or "").strip()
+    out: set[int] = set()
+    for part in raw.replace(";", ",").split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            out.add(int(part))
+        except ValueError:
+            pass
+    return out
+
+
 def resolved_limits(user_id: int) -> ResolvedLimits:
+    # Admins always receive top-tier (star) limits.
+    if int(user_id) in _admin_ids():
+        base = TIER_LIMITS["star"]
+        return ResolvedLimits(
+            tier="star",
+            quota_day_mb=base["quota_day_mb"],
+            quota_month_mb=base["quota_month_mb"],
+            max_file_mb=base["max_file_mb"],
+            max_parallel=base["max_parallel"],
+            toolkit_daily_cmds=int(base.get("toolkit_daily_cmds", 0)),
+            world_daily_cmds=int(base.get("world_daily_cmds", 0)),
+            feed_max=int(base.get("feed_max", 100)),
+            feed_push_allowed=True,
+            expires_at=0,
+        )
     row = get_entitlement_row(user_id)
     tier = _effective_tier(row)
     base = TIER_LIMITS.get(tier, TIER_LIMITS["free"])

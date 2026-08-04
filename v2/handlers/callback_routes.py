@@ -47,7 +47,11 @@ class CallbackRouteDeps:
     handle_cta_callback: Callable[..., Awaitable[bool]] | None = None
     handle_calc_mode_callback: Callable[..., Awaitable[bool]] | None = None
     handle_fx_from_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_fx_calc_callback: Callable[..., Awaitable[bool]] | None = None
     handle_ssh_auth_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_clear_chat_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_alert_kind_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_alert_schedule_callback: Callable[..., Awaitable[bool]] | None = None
 
 
 async def dispatch_callback_route(client: Any, callback_query: Any, deps: CallbackRouteDeps) -> bool:
@@ -181,8 +185,28 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
     if data.startswith("fxfrom:") and deps.handle_fx_from_callback:
         return await deps.handle_fx_from_callback(client, callback_query, data.split(":", 1)[1])
 
+    if data.startswith("fxcalc:") and deps.handle_fx_calc_callback:
+        return await deps.handle_fx_calc_callback(
+            client, callback_query, data.split(":", 1)[1]
+        )
+
     if data.startswith("sshauth:") and deps.handle_ssh_auth_callback:
         return await deps.handle_ssh_auth_callback(
+            client, callback_query, data.split(":", 1)[1]
+        )
+
+    if data.startswith("clearchat:") and deps.handle_clear_chat_callback:
+        return await deps.handle_clear_chat_callback(
+            client, callback_query, data.split(":", 1)[1]
+        )
+
+    if data.startswith("alertkind:") and deps.handle_alert_kind_callback:
+        return await deps.handle_alert_kind_callback(
+            client, callback_query, data.split(":", 1)[1]
+        )
+
+    if data.startswith("alertsch:") and deps.handle_alert_schedule_callback:
+        return await deps.handle_alert_schedule_callback(
             client, callback_query, data.split(":", 1)[1]
         )
 

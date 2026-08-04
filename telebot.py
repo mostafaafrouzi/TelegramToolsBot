@@ -113,6 +113,7 @@ from v2.handlers.world_commands import (
     handle_calendar,
     handle_markets,
     handle_earthquakes,
+    handle_fx_calc_callback,
     handle_fx_quick_callback,
     start_age_wizard,
     start_currency_wizard,
@@ -129,6 +130,14 @@ from v2.handlers.session_settings_commands import (
     handle_rubika_status,
 )
 from v2.handlers.direct_send_commands import DirectSendCommandDeps, handle_direct_mode
+from v2.handlers.clear_chat_commands import ClearChatDeps, handle_clear_chat_callback, handle_clear_chat_prompt
+from v2.handlers.alert_commands import (
+    AlertCommandDeps,
+    dispatch_alert_wizard,
+    handle_alert_kind_callback,
+    handle_alert_schedule_callback,
+    start_alert_wizard,
+)
 from v2.handlers.link_direct_commands import LinkDirectCommandDeps, handle_show_link_direct_menu
 from v2.handlers.link_direct_handler import (
     LinkDirectHandlerDeps,
@@ -768,6 +777,27 @@ I18N = {
         "link_type_magnet": "تورنت",
         "link_pick_dest": "مقصد را انتخاب کن:",
         "link_pick_quality": "کیفیت را انتخاب کن:",
+        "link_dest_telegram": "تلگرام (همین چت)",
+        "link_sending_telegram": "در حال ارسال فایل در همین چت…",
+        "btn_clear_chat": "🧹 پاک کردن چت",
+        "clear_chat_confirm": "پیام‌های ربات در این چت پاک می‌شوند.\nاشتراک و تنظیماتت حفظ می‌شود.\nبرای تایید دکمه زیر را بزن.",
+        "clear_chat_done": "چت پاک شد ✅ ({n} پیام ربات حذف شد). اشتراک و تنظیمات دست‌نخورده ماند.",
+        "clear_chat_none": "پیام قابل حذفی پیدا نشد (بعد از این آپدیت پیام‌های جدید ربات قابل پاک‌سازی‌اند).",
+        "btn_world_alerts": "🔔 هشدارها",
+        "alerts_paid_only": "هشدارهای زمان‌بندی فقط برای پلن Pro/Star است.",
+        "alerts_pick_kind": "نوع هشدار را انتخاب کن:",
+        "alerts_ask_fx_asset": "کد ارز را بفرست (مثل USD یا EUR):",
+        "alerts_ask_gold_asset": "دارایی طلا را بفرست (مثل SEKEE یا GOLD18 یا سکه امامی):",
+        "alerts_ask_weather_city": "نام شهر را برای آب‌وهوا بفرست:",
+        "alerts_ask_quake_city": "نام شهر/منطقه برای فیلتر زلزله بفرست (یا `همه`):",
+        "alerts_ask_schedule": "بازه ارسال را انتخاب کن:",
+        "alerts_ask_spike": "آستانه جهش٪ را بفرست (مثلاً ۳). برای بدون شرط جهش `-` بفرست:",
+        "alerts_added_ok": "هشدار ثبت شد ✅",
+        "alerts_add_fail": "ثبت هشدار نشد: {detail}",
+        "alerts_empty": "هنوز هشداری ثبت نکرده‌ای.",
+        "alerts_list_title": "هشدارهای فعال:",
+        "btn_calc_digits": "۱۲۳ ارقام FA/EN",
+        "calc_ask_digits": "متن دارای عدد را بفرست تا ارقام فارسی↔انگلیسی تبدیل شوند:",
         "link_dest_rubika": "روبیکا",
         "link_dest_bale": "بله",
         "link_dest_drive": "Google Drive",
@@ -1205,11 +1235,11 @@ I18N = {
         "toolkit_ping_result": "TCP `{host}:{port}` ≈ `{ms}` ms",
         "toolkit_ping_error": "`{host}:{port}` — {error}",
         "toolkit_ipinfo_usage": "استفاده: `/ipinfo <ip>`",
-        "toolkit_ipinfo_send_only": "IP یا آدرس را بفرست (یا مستقیم `/ipinfo <ip>` ارسال کن).",
+        "toolkit_ipinfo_send_only": "IP یا آدرس را بفرست:",
         "toolkit_ipinfo_result": "{data}",
         "toolkit_ipinfo_error": "IP info ناموفق: {error}",
         "toolkit_whois_usage": "استفاده: `/whois <domain-or-ip>`",
-        "toolkit_whois_send_only": "آدرس/دومین (یا IP) را بفرست (یا `/whois <domain-or-ip>` ارسال کن).",
+        "toolkit_whois_send_only": "آدرس/دامین یا IP را بفرست:",
         "toolkit_whois_result": "{data}",
         "toolkit_whois_error": "whois/RDAP ناموفق: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
@@ -1229,7 +1259,7 @@ I18N = {
         "toolkit_b64d_result": "{data}",
         "toolkit_b64d_error": "decode ناموفق: {error}",
         "toolkit_input_truncated": "(ورودی به سقف ۱۲۰۰۰ نویسه بریده شد.)",
-        "toolkit_dns_send_only": "نام دامنه یا IP را بفرست (یا `/dns <host>`).",
+        "toolkit_dns_send_only": "نام دامنه یا IP را بفرست:",
         "toolkit_ping_send_only": "هاست را بفرست (پورت اختیاری است؛ پیش‌فرض 443 و 80).",
         "btn_tool_http_headers": "📬 HTTP Headers",
         "btn_tool_website_status": "🌐 وضعیت سایت",
@@ -1275,13 +1305,14 @@ I18N = {
         "btn_world_time": "🕒 ساعت جهانی",
         "btn_world_calendar": "📅 تقویم",
         "btn_world_age": "🎂 سن",
-        "btn_world_currency": "💱 ارز",
+        "btn_world_currency": "🧮 ماشین‌حساب ارز",
         "btn_world_earthquake": "🌋 زلزله",
         "btn_world_rss": "➕ افزودن فید",
         "btn_world_rss_list": "📋 فیدها",
         "weather_ask_city": "نام شهر را بفرست (مثلاً Tehran):",
         "timezone_ask_place": "نام شهر یا منطقه زمانی را بفرست (مثلاً Tehran یا Asia/Tehran):",
         "age_ask_date": "تاریخ تولد را بفرست (YYYY/MM/DD میلادی یا شمسی):",
+        "fx_calc_ask": "مبلغ را با واحد بفرست:\nمثال: ۱۰۰۰۰۰ تومان · ۵۰۰۰۰۰۰ ریال · ۵۰ دلار · ۱ سکه امامی\nیا از دکمه‌های زیر استفاده کن:",
         "currency_ask_amount": "مبلغ را بفرست (عدد) یا از دکمه‌های سریع استفاده کن:",
         "currency_ask_pair": "ارز مبدأ و مقصد را مرحله‌به‌مرحله می‌گیریم.",
         "currency_bad_amount": "مبلغ نامعتبر است.",
@@ -1741,6 +1772,27 @@ I18N = {
         "link_type_magnet": "torrent",
         "link_pick_dest": "Choose destination:",
         "link_pick_quality": "Choose quality:",
+        "link_dest_telegram": "Telegram (this chat)",
+        "link_sending_telegram": "Sending file in this chat…",
+        "btn_clear_chat": "🧹 Clear chat",
+        "clear_chat_confirm": "Bot messages in this chat will be deleted.\nYour plan and settings stay intact.\nTap the button below to confirm.",
+        "clear_chat_done": "Chat cleared ✅ ({n} bot messages deleted). Plan/settings unchanged.",
+        "clear_chat_none": "No deletable bot messages found yet (new bot replies after this update are tracked).",
+        "btn_world_alerts": "🔔 Alerts",
+        "alerts_paid_only": "Scheduled alerts are Pro/Star only.",
+        "alerts_pick_kind": "Pick an alert type:",
+        "alerts_ask_fx_asset": "Send FX code (e.g. USD or EUR):",
+        "alerts_ask_gold_asset": "Send gold asset (e.g. SEKEE or GOLD18):",
+        "alerts_ask_weather_city": "Send city name for weather:",
+        "alerts_ask_quake_city": "Send city/region filter for quakes (or `all`):",
+        "alerts_ask_schedule": "Pick a schedule:",
+        "alerts_ask_spike": "Send spike threshold % (e.g. 3). Send `-` for schedule-only:",
+        "alerts_added_ok": "Alert saved ✅",
+        "alerts_add_fail": "Could not save alert: {detail}",
+        "alerts_empty": "No alerts yet.",
+        "alerts_list_title": "Active alerts:",
+        "btn_calc_digits": "123 Digits FA/EN",
+        "calc_ask_digits": "Send text with numbers to convert Persian↔English digits:",
         "link_dest_rubika": "Rubika",
         "link_dest_bale": "Bale",
         "link_dest_drive": "Google Drive",
@@ -2157,11 +2209,11 @@ I18N = {
         "toolkit_ping_result": "TCP `{host}:{port}` ~ `{ms}` ms",
         "toolkit_ping_error": "`{host}:{port}` — {error}",
         "toolkit_ipinfo_usage": "Usage: `/ipinfo <ip>`",
-        "toolkit_ipinfo_send_only": "Send an IP/host (or use `/ipinfo <ip>`).",
+        "toolkit_ipinfo_send_only": "Send an IP or host:",
         "toolkit_ipinfo_result": "{data}",
         "toolkit_ipinfo_error": "IP info failed: {error}",
         "toolkit_whois_usage": "Usage: `/whois <domain-or-ip>`",
-        "toolkit_whois_send_only": "Send a domain/IP (or use `/whois <domain-or-ip>`).",
+        "toolkit_whois_send_only": "Send a domain or IP:",
         "toolkit_whois_result": "{data}",
         "toolkit_whois_error": "whois/RDAP failed: {error}",
         "toolkit_myid_result": "User ID: `{user_id}`\nUsername: `{username}`\nChat ID: `{chat_id}`",
@@ -2181,7 +2233,7 @@ I18N = {
         "toolkit_b64d_result": "{data}",
         "toolkit_b64d_error": "Decode failed: {error}",
         "toolkit_input_truncated": "(Input truncated to 12000 characters.)",
-        "toolkit_dns_send_only": "Send a hostname or IP (or use `/dns <host>`).",
+        "toolkit_dns_send_only": "Send a hostname or IP:",
         "toolkit_ping_send_only": "Send host (port optional; tries 443 then 80).",
         "btn_tool_http_headers": "📬 HTTP Headers",
         "btn_tool_website_status": "🌐 Website status",
@@ -2227,13 +2279,14 @@ I18N = {
         "btn_world_time": "🕒 World clock",
         "btn_world_calendar": "📅 Calendar",
         "btn_world_age": "🎂 Age",
-        "btn_world_currency": "💱 Currency",
+        "btn_world_currency": "🧮 FX calculator",
         "btn_world_earthquake": "🌋 Earthquakes",
         "btn_world_rss": "➕ Add feed",
         "btn_world_rss_list": "📋 Feeds",
         "weather_ask_city": "Send a city name (e.g. London):",
         "timezone_ask_place": "Send a city or IANA zone (e.g. London or Europe/London):",
         "age_ask_date": "Send birth date as YYYY/MM/DD (Gregorian or Solar Hijri):",
+        "fx_calc_ask": "Send amount with unit:\ne.g. 100000 toman · 50 USD · 1 sekkee\nor tap a quick button:",
         "currency_ask_amount": "Send an amount (number) or use a quick button:",
         "currency_ask_pair": "We will ask source and target step by step.",
         "currency_bad_amount": "Invalid amount.",
@@ -3665,6 +3718,11 @@ async def payment_notify_loop():
             log_event("payment_expiry_loop_error", error=str(e)[:200])
 
 
+async def alert_poll_loop():
+    from v2.alerts.poller import alert_poll_loop as _loop
+    await _loop(app, is_paid=_is_paid_user, interval=120.0)
+
+
 async def rss_poll_loop():
     """Notify users when push-enabled RSS feeds change; also daily digest."""
     await asyncio.sleep(120)
@@ -3770,6 +3828,39 @@ SESSION_SETTINGS_COMMAND_DEPS = SessionSettingsCommandDeps(
     build_main_menu=build_main_menu,
     network_file=NETWORK_FILE,
 )
+
+
+def _is_paid_user(uid: int) -> bool:
+    try:
+        from user_entitlements import resolved_limits
+        return resolved_limits(uid).tier in ("pro", "star")
+    except Exception:
+        return uid in ADMIN_IDS
+
+
+CLEAR_CHAT_DEPS = ClearChatDeps(tr=tr, set_menu_section=set_menu_section)
+
+ALERT_COMMAND_DEPS = AlertCommandDeps(
+    tr=tr,
+    set_menu_section=set_menu_section,
+    set_state_preserving_menu=set_state_preserving_menu,
+    clear_state=clear_state,
+    get_state=get_state,
+    is_paid_user=_is_paid_user,
+)
+
+
+async def clear_chat_handler(client: Client, message: Message):
+    await handle_clear_chat_prompt(CLEAR_CHAT_DEPS, client, message)
+
+
+async def world_alerts_handler(client: Client, message: Message):
+    await start_alert_wizard(ALERT_COMMAND_DEPS, message)
+
+
+async def calc_digits_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "digits")
+
 
 DIRECT_SEND_COMMAND_DEPS = DirectSendCommandDeps(
     tr=tr,
@@ -5591,7 +5682,11 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     handle_cta_callback=_cta_callback_route,
     handle_calc_mode_callback=_calc_mode_callback_route,
     handle_fx_from_callback=_fx_from_callback_route,
+    handle_fx_calc_callback=lambda c, cq, p: handle_fx_calc_callback(WORLD_COMMAND_DEPS, c, cq, p),
     handle_ssh_auth_callback=lambda c, cq, m: handle_ssh_auth_callback(SSH_WIZARD_DEPS, c, cq, m),
+    handle_clear_chat_callback=lambda c, cq, a: handle_clear_chat_callback(CLEAR_CHAT_DEPS, c, cq, a),
+    handle_alert_kind_callback=lambda c, cq, k: handle_alert_kind_callback(ALERT_COMMAND_DEPS, c, cq, k),
+    handle_alert_schedule_callback=lambda c, cq, s: handle_alert_schedule_callback(ALERT_COMMAND_DEPS, c, cq, s),
 )
 
 
@@ -5652,6 +5747,8 @@ TEXT_ENTRY_DEPS = TextEntryDeps(
     build_main_menu=build_main_menu,
     dispatch_world_wizard=dispatch_world_wizard,
     dispatch_calc_wizard=dispatch_calc_wizard,
+    dispatch_alert_wizard=dispatch_alert_wizard,
+    alert_command_deps=ALERT_COMMAND_DEPS,
     calc_kit_deps=CALC_KIT_DEPS,
     dispatch_feed_wizard=dispatch_feed_wizard,
     feed_reader_deps=FEED_READER_DEPS,

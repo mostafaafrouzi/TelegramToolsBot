@@ -62,6 +62,29 @@ class CalcKitTests(unittest.TestCase):
         self.assertIn("2020-01-11", body)
 
 
+class FxCalculatorTests(unittest.TestCase):
+    def test_parse_toman_and_usd(self):
+        from v2.toolkit.fx_calculator import parse_amount_unit
+
+        ok, amount, code = parse_amount_unit("100000 تومان")
+        self.assertTrue(ok)
+        self.assertEqual(code, "IRT")
+        self.assertEqual(amount, 100000.0)
+        ok, amount, code = parse_amount_unit("50 USD")
+        self.assertTrue(ok)
+        self.assertEqual(code, "USD")
+
+    def test_reply_html_uses_enum(self):
+        import inspect
+
+        from pyrogram.enums import ParseMode
+        from v2.core import msg_format as mf
+
+        src = inspect.getsource(mf.reply_html)
+        self.assertIn("ParseMode.HTML", src)
+        self.assertNotEqual(ParseMode.HTML, "html")
+
+
 class MarketBoardTests(unittest.TestCase):
     def test_report_hub_and_gold_no_third_party_brand(self):
         from v2.toolkit import fx_light

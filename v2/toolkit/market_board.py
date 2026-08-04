@@ -223,15 +223,20 @@ def format_board(
         name = labels.get(code, code)
         blocks.append(mf.section(name))
         if q.unit == "USD":
-            blocks.append(mf.kv("Price" if lang == "en" else "قیمت", f"{q.price:,.2f} USD"))
-        else:
-            toman = q.price / 10.0
             blocks.append(
                 mf.kv(
                     "Price" if lang == "en" else "قیمت",
-                    f"{q.price:,.0f} IRR ≈ {toman:,.0f} toman",
+                    f"{q.price:,.2f} USD",
+                    icon="💵",
                 )
             )
+        else:
+            toman = q.price / 10.0
+            if lang == "en":
+                price_txt = f"{q.price:,.0f} rial ≈ {toman:,.0f} toman"
+            else:
+                price_txt = f"{q.price:,.0f} ریال ≈ {toman:,.0f} تومان"
+            blocks.append(mf.kv("Price" if lang == "en" else "قیمت", price_txt, icon="💰"))
         ch = mf.change_line(q.d, q.dp, q.dt, lang=lang)
         if ch:
             blocks.append(ch)
@@ -239,8 +244,18 @@ def format_board(
         if hist:
             blocks.append(hist)
         if q.ts:
-            blocks.append(mf.kv("Asset time" if lang == "en" else "زمان نرخ", q.ts))
-    tip = "Use Convert in World menu" if lang == "en" else "برای تبدیل از منوی جهان → تبدیل ارز استفاده کن"
+            blocks.append(
+                mf.kv(
+                    "Asset time" if lang == "en" else "زمان نرخ",
+                    q.ts,
+                    icon="🕒",
+                )
+            )
+    tip = (
+        "Use FX calculator in World menu"
+        if lang == "en"
+        else "برای تبدیل از منوی جهان → ماشین‌حساب ارز استفاده کن"
+    )
     blocks.append("")
     blocks.append(mf.italic(tip))
     return mf.join(*blocks)

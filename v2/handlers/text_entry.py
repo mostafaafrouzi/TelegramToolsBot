@@ -85,6 +85,8 @@ class TextEntryDeps:
     dispatch_admin_ops_wizard: AsyncWizardFn | None = None
     admin_ops_deps: Any = None
     dispatch_calc_wizard: AsyncWizardFn | None = None
+    dispatch_alert_wizard: AsyncWizardFn | None = None
+    alert_command_deps: Any = None
     calc_kit_deps: Any = None
 
 
@@ -176,6 +178,9 @@ async def handle_text_entry(deps: TextEntryDeps, client: Any, message: Message) 
 
     if deps.dispatch_calc_wizard and deps.calc_kit_deps:
         if await deps.dispatch_calc_wizard(deps.calc_kit_deps, message, user_id, text):
+            return
+    if deps.dispatch_alert_wizard and deps.alert_command_deps:
+        if await deps.dispatch_alert_wizard(deps.alert_command_deps, message, user_id, text):
             return
 
     if await deps.dispatch_zip_batch_wizard(

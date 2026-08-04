@@ -43,6 +43,9 @@ def _dest_keyboard(user_id: int, tr: TranslateFn) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         [
             [
+                InlineKeyboardButton(tr(user_id, "link_dest_telegram"), callback_data="linkdest:telegram"),
+            ],
+            [
                 InlineKeyboardButton(tr(user_id, "link_dest_rubika"), callback_data="linkdest:rubika"),
                 InlineKeyboardButton(tr(user_id, "link_dest_bale"), callback_data="linkdest:bale"),
             ],
@@ -121,6 +124,8 @@ def verify_destination(
             "drive_oauth_path": str(drive.oauth_token_path) if drive.oauth_token_path else "",
             "drive_folder_id": drive.folder_id,
         }
+    if dest == "telegram":
+        return True, "", {}
     return False, "link_dest_invalid", {}
 
 
@@ -180,6 +185,36 @@ async def enqueue_downloaded_file(
         "source_url": meta.url,
         **extra,
     }
+
+    if dest == "telegram":
+        # Deliver file into this Telegram chat (no transfer queue).
+        await message.reply_text(deps.tr(user_id, "link_sending_telegram"), parse_mode=None)
+        try:
+            name_l = local_path.name.lower()
+            if name_l.endswith((".mp4", ".mkv", ".webm", ".mov")):
+                await message.reply_video(str(local_path), caption=meta.title or local_path.name)
+            elif name_l.endswith((".mp3", ".m4a", ".ogg", ".opus", ".wav")):
+                await message.reply_audio(str(local_path), caption=meta.title or local_path.name)
+            else:
+                await message.reply_document(str(local_path), caption=meta.title or local_path.name)
+        except Exception as e:
+            await message.reply_text(
+                deps.tr(user_id, "link_download_failed", error=str(e)[:300]),
+                parse_mode=None,
+            )
+        finally:
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
+        deps.log_event(
+            "link_direct_telegram_sent",
+            user_id=user_id,
+            file_name=local_path.name if local_path else "",
+            file_size=file_size,
+            url=meta.url,
+        )
+        return
 
     if dest == "rubika":
         task["type"] = "local_file"

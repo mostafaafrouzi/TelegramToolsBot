@@ -123,6 +123,25 @@ def rial_toman(amount: float, *, to: str) -> tuple[bool, str]:
     return False, "مقصد را rial یا toman بفرست."
 
 
+_FA_TO_EN = str.maketrans("۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩", "01234567890123456789")
+_EN_TO_FA = str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹")
+
+
+def convert_digits(text: str, *, to: str = "both") -> tuple[bool, str]:
+    """Convert Persian/Arabic digits ↔ English. to=en|fa|both."""
+    raw = text or ""
+    if not raw.strip():
+        return False, "متن خالی است."
+    en = raw.translate(_FA_TO_EN)
+    fa = raw.translate(_EN_TO_FA)
+    mode = (to or "both").lower()
+    if mode in ("en", "eng", "english", "انگلیسی"):
+        return True, en
+    if mode in ("fa", "per", "persian", "فارسی"):
+        return True, fa
+    return True, f"انگلیسی:\n{en}\n\nفارسی:\n{fa}"
+
+
 def word_count(text: str) -> tuple[bool, str]:
     words = re.findall(r"\S+", text or "")
     chars = len(text or "")
