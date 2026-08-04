@@ -182,11 +182,11 @@ async def dispatch_inline_menu_callback(
         return True
     if k == "markets":
         await callback_query.answer()
-        await handle_markets(deps.world_deps, client, msg, board="hub")
+        await handle_markets(deps.world_deps, client, msg, board="hub", edit=True)
         return True
     if k in ("gold", "usd", "eur", "gbp", "jpy", "majors"):
         await callback_query.answer()
-        await handle_markets(deps.world_deps, client, msg, board=k)
+        await handle_markets(deps.world_deps, client, msg, board=k, edit=True)
         return True
     if k == "toolkit_calc":
         await callback_query.answer()

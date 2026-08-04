@@ -77,17 +77,19 @@ async def process_alerts_once(
             elif kind == "quake":
                 if not schedule_due and spike is None:
                     continue
-                ok, q = await asyncio.to_thread(recent_earthquakes, lang="fa")
+                min_mag = float(spike) if spike is not None else 4.5
+                ok, q = await asyncio.to_thread(
+                    recent_earthquakes, lang="fa", min_mag=min_mag
+                )
                 if not ok:
                     continue
-                # Optional city filter: mention in body if asset set
+                # Optional place filter in asset text
                 if asset and asset not in q and not schedule_due:
                     continue
-                if asset and asset not in q:
-                    # schedule still sends full board; spike path skipped if no match
-                    if not schedule_due:
-                        continue
-                body = f"🌍 زلزله\nفیلتر: {asset or 'همه'}\n\n{q}"
+                body = (
+                    f"🌍 زلزله (حداقل {min_mag:g} ریشتر)\n"
+                    f"فیلتر مکان: {asset or 'همه'}\n\n{q}"
+                )
             else:
                 continue
         except Exception as e:

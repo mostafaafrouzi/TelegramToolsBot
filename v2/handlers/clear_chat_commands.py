@@ -54,29 +54,52 @@ async def handle_clear_chat_callback(
     if action != "confirm":
         return True
     ids = list_message_ids(uid, chat_id, limit=500)
-    deleted = 0
-    # Telegram allows deleting own messages; batch in chunks of 100 where possible
+    deleted_bot = 0
+    deleted_user = 0
     for mid in ids:
         try:
             ok = await client.delete_messages(chat_id, mid)
             if ok:
-                deleted += 1
+                deleted_bot += 1
         except Exception:
             pass
-    # Also try deleting the confirmation message itself
+    # Best-effort: delete nearby user messages if Bot API allows (private chats often do)
+    nearby: set[int] = set()
+    base = ids[:]
+    try:
+        base.append(int(callback_query.message.id))
+    except Exception:
+        pass
+    for mid in base:
+        for d in range(-2, 3):
+            nearby.add(mid + d)
+    for mid in sorted(nearby - set(ids)):
+        if mid <= 0:
+            continue
+        try:
+            ok = await client.delete_messages(chat_id, mid)
+            if ok:
+                deleted_user += 1
+        except Exception:
+            pass
     try:
         await callback_query.message.delete()
     except Exception:
         pass
     clear_tracked(uid, chat_id)
-    # Send a fresh confirmation (will be tracked for next clear)
     try:
-        await client.send_message(
-            chat_id,
-            deps.tr(uid, "clear_chat_done", n=deleted)
-            if deleted
-            else deps.tr(uid, "clear_chat_none"),
-        )
+        if deleted_bot or deleted_user:
+            await client.send_message(
+                chat_id,
+                deps.tr(
+                    uid,
+                    "clear_chat_done_full",
+                    n=deleted_bot,
+                    u=deleted_user,
+                ),
+            )
+        else:
+            await client.send_message(chat_id, deps.tr(uid, "clear_chat_none"))
     except Exception:
         pass
     return True

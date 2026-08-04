@@ -23,6 +23,7 @@ class BasicCommandDeps:
     app_version: str
     clear_state: Callable[[int], None] | None = None
     connection_checklist: Callable[[int], str] | None = None
+    is_admin: Callable[[int], bool] | None = None
 
 
 def _clear_wizard(deps: BasicCommandDeps, uid: int) -> None:
@@ -105,7 +106,12 @@ async def handle_lang(deps: BasicCommandDeps, client: Any, message: Message) -> 
 
 async def handle_help(deps: BasicCommandDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
-    await message.reply_text(deps.tr(uid, "help_short"))
+    body = deps.tr(uid, "help_short")
+    if deps.is_admin and deps.is_admin(uid):
+        extra = deps.tr(uid, "help_short_admin_extra")
+        if extra and extra != "help_short_admin_extra":
+            body = f"{body}\n\n{extra}"
+    await message.reply_text(body, parse_mode=None)
 
 
 async def handle_log_help(deps: BasicCommandDeps, client: Any, message: Message) -> None:

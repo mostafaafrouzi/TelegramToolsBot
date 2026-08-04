@@ -6,12 +6,16 @@ import asyncio
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from pyrogram.enums import ParseMode
+from pyrogram.errors import MessageNotModified
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.toolkit.calendar_light import age_report, calendar_report
-from v2.core.msg_format import reply_html, reply_plain
+from v2.core.msg_format import reply_html, reply_plain, strip_html
 from v2.toolkit.fx_calculator import calculate_report
+from v2.toolkit import fx_recent
 from v2.toolkit.fx_light import currency_convert, market_quotes_report
+from v2.toolkit.market_board import board_page_count
 from v2.toolkit.timezone_light import timezone_report
 from v2.toolkit.weather_light import air_quality_report, recent_earthquakes, weather_report
 
@@ -73,7 +77,15 @@ def _commit_world(deps: WorldCommandDeps, uid: int) -> None:
             pass
 
 
-async def handle_markets(deps: WorldCommandDeps, client: Any, message: Message, *, board: str = "") -> None:
+async def handle_markets(
+    deps: WorldCommandDeps,
+    client: Any,
+    message: Message,
+    *,
+    board: str = "",
+    edit: bool = False,
+    page: int = 0,
+) -> None:
     uid = message.from_user.id
     if not await _guard_world(deps, uid, message):
         return
@@ -84,33 +96,70 @@ async def handle_markets(deps: WorldCommandDeps, client: Any, message: Message, 
             section = parts[1].strip().lower()
         else:
             section = "hub"
-    ok, body = await asyncio.to_thread(market_quotes_report, lang=_lang(deps, uid), section=section)
+    ok, body = await asyncio.to_thread(
+        market_quotes_report, lang=_lang(deps, uid), section=section, page=page
+    )
     if ok:
         _commit_world(deps, uid)
-        from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
         board_cb = section if section in ("gold", "usd", "eur", "gbp", "jpy", "majors", "hub") else "hub"
-        kb = InlineKeyboardMarkup(
+        rows: list[list[InlineKeyboardButton]] = [
             [
-                [
-                    InlineKeyboardButton(
-                        deps.tr(uid, "btn_world_currency"), callback_data="imenu:currency"
+                InlineKeyboardButton(
+                    deps.tr(uid, "btn_world_currency"), callback_data="imenu:currency"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "🔄 تازه‌سازی" if _lang(deps, uid) != "en" else "🔄 Refresh",
+                    callback_data=f"imenu:{board_cb}"
+                    if board_cb != "majors"
+                    else f"mktpage:majors:{page}",
+                )
+            ],
+        ]
+        if board_cb == "majors":
+            pages = board_page_count("majors")
+            nav: list[InlineKeyboardButton] = []
+            if page > 0:
+                nav.append(
+                    InlineKeyboardButton("◀️", callback_data=f"mktpage:majors:{page - 1}")
+                )
+            if page + 1 < pages:
+                nav.append(
+                    InlineKeyboardButton("▶️", callback_data=f"mktpage:majors:{page + 1}")
+                )
+            if nav:
+                rows.insert(1, nav)
+        kb = InlineKeyboardMarkup(rows)
+        if edit:
+            try:
+                if "<b>" in body:
+                    await message.edit_text(body, parse_mode=ParseMode.HTML, reply_markup=kb)
+                else:
+                    await message.edit_text(
+                        body, parse_mode=ParseMode.DISABLED, reply_markup=kb
                     )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "🔄 تازه‌سازی" if _lang(deps, uid) != "en" else "🔄 Refresh",
-                        callback_data=f"imenu:{board_cb}",
-                    )
-                ],
-            ]
-        )
+            except MessageNotModified:
+                pass
+            except Exception:
+                if "<b>" in body:
+                    await reply_html(message, body, reply_markup=kb)
+                else:
+                    await reply_plain(message, body, reply_markup=kb)
+            return
         if "<b>" in body:
             await reply_html(message, body, reply_markup=kb)
         else:
             await reply_plain(message, body, reply_markup=kb)
         return
-    await message.reply_text(deps.tr(uid, "world_error", detail=body), parse_mode=None)
+    err = deps.tr(uid, "world_error", detail=body)
+    if edit:
+        try:
+            await message.edit_text(strip_html(err), parse_mode=ParseMode.DISABLED)
+            return
+        except Exception:
+            pass
+    await message.reply_text(err, parse_mode=None)
 
 
 async def handle_calendar(deps: WorldCommandDeps, client: Any, message: Message) -> None:
@@ -122,11 +171,37 @@ async def handle_calendar(deps: WorldCommandDeps, client: Any, message: Message)
     await message.reply_text(body, parse_mode=None)  # plain calendar is fine
 
 
-async def handle_earthquakes(deps: WorldCommandDeps, client: Any, message: Message) -> None:
+async def handle_earthquakes(
+    deps: WorldCommandDeps,
+    client: Any,
+    message: Message,
+    *,
+    min_mag: float | None = None,
+    pick: bool = False,
+) -> None:
     uid = message.from_user.id
+    if pick or min_mag is None:
+        kb = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("≥ ۴", callback_data="quake:4"),
+                    InlineKeyboardButton("≥ ۴.۵", callback_data="quake:4.5"),
+                    InlineKeyboardButton("≥ ۵", callback_data="quake:5"),
+                ],
+                [
+                    InlineKeyboardButton("≥ ۵.۵", callback_data="quake:5.5"),
+                    InlineKeyboardButton("≥ ۶", callback_data="quake:6"),
+                    InlineKeyboardButton("همه (≥۳)", callback_data="quake:3"),
+                ],
+            ]
+        )
+        await reply_plain(message, deps.tr(uid, "quake_pick_mag"), reply_markup=kb)
+        return
     if not await _guard_world(deps, uid, message):
         return
-    ok, body = await asyncio.to_thread(recent_earthquakes, lang=_lang(deps, uid))
+    ok, body = await asyncio.to_thread(
+        recent_earthquakes, lang=_lang(deps, uid), min_mag=float(min_mag)
+    )
     if ok:
         _commit_world(deps, uid)
     await message.reply_text(body if ok else deps.tr(uid, "world_error", detail=body), parse_mode=None)
@@ -178,9 +253,11 @@ async def dispatch_world_wizard(
         ok, body = await asyncio.to_thread(calculate_report, raw, lang=lang)
         if ok:
             _commit_world(deps, user_id)
+            fx_recent.push(user_id, raw)
             # keep wizard open for another conversion
             deps.set_state_preserving_menu(user_id, {"step": "await_fx_calc"})
-            await reply_html(message, body)
+            kb = _fx_calc_keyboard(deps, user_id)
+            await reply_html(message, body, reply_markup=kb)
         else:
             await reply_plain(message, deps.tr(user_id, "world_error", detail=body))
         return True
@@ -316,27 +393,45 @@ async def start_weather_wizard(deps: WorldCommandDeps, message: Message) -> None
     await message.reply_text(deps.tr(uid, "weather_ask_city"), parse_mode=None)
 
 
+def _fx_calc_keyboard(deps: WorldCommandDeps, uid: int) -> InlineKeyboardMarkup:
+    rows: list[list[InlineKeyboardButton]] = [
+        [
+            InlineKeyboardButton("۱۰۰٬۰۰۰ تومان", callback_data="fxcalc:100000 IRT"),
+            InlineKeyboardButton("۱ دلار", callback_data="fxcalc:1 USD"),
+        ],
+        [
+            InlineKeyboardButton("۱ یورو", callback_data="fxcalc:1 EUR"),
+            InlineKeyboardButton("۱ سکه امامی", callback_data="fxcalc:1 SEKEE"),
+        ],
+        [
+            InlineKeyboardButton("۱ گرم طلا", callback_data="fxcalc:1 GOLD18"),
+            InlineKeyboardButton("۱۰٬۰۰۰٬۰۰۰ ریال", callback_data="fxcalc:10000000 IRR"),
+        ],
+    ]
+    recent = fx_recent.list_recent(uid, limit=4)
+    if recent:
+        rows.append(
+            [
+                InlineKeyboardButton(f"⏱ {q[:28]}", callback_data=f"fxcalc:{q[:60]}")
+                for q in recent[:2]
+            ]
+        )
+        if len(recent) > 2:
+            rows.append(
+                [
+                    InlineKeyboardButton(f"⏱ {q[:28]}", callback_data=f"fxcalc:{q[:60]}")
+                    for q in recent[2:4]
+                ]
+            )
+    return InlineKeyboardMarkup(rows)
+
+
 async def start_currency_wizard(deps: WorldCommandDeps, message: Message) -> None:
     from v2.core.menu_sections import MenuSection
 
     uid = message.from_user.id
     deps.set_state_preserving_menu(uid, {"step": "await_fx_calc"})
-    kb = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("۱۰۰٬۰۰۰ تومان", callback_data="fxcalc:100000 IRT"),
-                InlineKeyboardButton("۱ دلار", callback_data="fxcalc:1 USD"),
-            ],
-            [
-                InlineKeyboardButton("۱ یورو", callback_data="fxcalc:1 EUR"),
-                InlineKeyboardButton("۱ سکه امامی", callback_data="fxcalc:1 SEKEE"),
-            ],
-            [
-                InlineKeyboardButton("۱ گرم طلا", callback_data="fxcalc:1 GOLD18"),
-                InlineKeyboardButton("۱۰٬۰۰۰٬۰۰۰ ریال", callback_data="fxcalc:10000000 IRR"),
-            ],
-        ]
-    )
+    kb = _fx_calc_keyboard(deps, uid)
     if deps.set_menu_section:
         deps.set_menu_section(uid, MenuSection.WORLD)
     await reply_plain(message, deps.tr(uid, "fx_calc_ask"), reply_markup=kb)
@@ -402,6 +497,42 @@ async def handle_fx_quick_callback(
     return True
 
 
+async def handle_market_page_callback(
+    deps: WorldCommandDeps,
+    client: Any,
+    callback_query: Any,
+    board: str,
+    page: int,
+) -> bool:
+    await callback_query.answer()
+    await handle_markets(
+        deps,
+        client,
+        callback_query.message,
+        board=board,
+        edit=True,
+        page=page,
+    )
+    return True
+
+
+async def handle_quake_mag_callback(
+    deps: WorldCommandDeps,
+    client: Any,
+    callback_query: Any,
+    mag_s: str,
+) -> bool:
+    await callback_query.answer()
+    try:
+        mag = float(mag_s)
+    except ValueError:
+        mag = 4.5
+    await handle_earthquakes(
+        deps, client, callback_query.message, min_mag=mag, pick=False
+    )
+    return True
+
+
 async def handle_fx_calc_callback(
     deps: WorldCommandDeps,
     client: Any,
@@ -419,8 +550,11 @@ async def handle_fx_calc_callback(
     ok, body = await asyncio.to_thread(calculate_report, payload, lang=lang)
     if ok:
         _commit_world(deps, uid)
+        fx_recent.push(uid, payload)
         deps.set_state_preserving_menu(uid, {"step": "await_fx_calc"})
-        await reply_html(callback_query.message, body)
+        await reply_html(
+            callback_query.message, body, reply_markup=_fx_calc_keyboard(deps, uid)
+        )
     else:
         await reply_plain(
             callback_query.message,

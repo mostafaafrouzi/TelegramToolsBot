@@ -13,7 +13,13 @@ from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.core.menu_sections import MenuSection
 from v2.transfer.bale_client import BALE_MAX_BYTES
-from v2.transfer.link_direct import LinkMetadata, download_to_path, probe_metadata
+from v2.transfer.link_direct import (
+    LinkMetadata,
+    download_to_path,
+    probe_metadata,
+    telegram_upload_too_large,
+    tg_bot_upload_max,
+)
 from v2.transfer.user_credentials import load_bale_credentials, load_drive_credentials
 
 TranslateFn = Callable[..., str]
@@ -187,11 +193,28 @@ async def enqueue_downloaded_file(
     }
 
     if dest == "telegram":
-        # Deliver file into this Telegram chat (no transfer queue).
+        if telegram_upload_too_large(file_size):
+            try:
+                local_path.unlink()
+            except OSError:
+                pass
+            await message.reply_text(
+                deps.tr(
+                    user_id,
+                    "link_telegram_too_large",
+                    max_mb=tg_bot_upload_max() // (1024 * 1024),
+                    size_mb=deps.fmt_mb_bytes(file_size),
+                ),
+                parse_mode=None,
+            )
+            return
         await message.reply_text(deps.tr(user_id, "link_sending_telegram"), parse_mode=None)
         try:
             name_l = local_path.name.lower()
-            if name_l.endswith((".mp4", ".mkv", ".webm", ".mov")):
+            ctype = (getattr(meta, "content_type", "") or "").lower()
+            if name_l.endswith((".jpg", ".jpeg", ".png", ".gif", ".webp")) or ctype.startswith("image/"):
+                await message.reply_photo(str(local_path), caption=meta.title or local_path.name)
+            elif name_l.endswith((".mp4", ".mkv", ".webm", ".mov")):
                 await message.reply_video(str(local_path), caption=meta.title or local_path.name)
             elif name_l.endswith((".mp3", ".m4a", ".ogg", ".opus", ".wav")):
                 await message.reply_audio(str(local_path), caption=meta.title or local_path.name)
@@ -297,12 +320,27 @@ async def handle_link_direct_text(
         key = "link_probe_unsupported"
         if meta.detail == "yt_dlp_not_installed":
             key = "link_ytdlp_missing"
+        elif meta.detail == "youtube_needs_cookies":
+            key = "link_youtube_needs_cookies"
+        elif meta.detail == "html_landing_page":
+            key = "link_html_landing"
         elif meta.link_type == "magnet":
             key = "link_magnet_unsupported"
         await status.edit_text(deps.tr(user_id, key, detail=meta.detail), parse_mode=None)
         return True
 
+    if telegram_upload_too_large(meta.size_bytes):
+        # Still allow picking Rubika/Drive/Bale; warn in summary
+        pass
+
     summary = _format_probe_summary(deps, user_id, meta)
+    if telegram_upload_too_large(meta.size_bytes):
+        summary += "\n\n" + deps.tr(
+            user_id,
+            "link_telegram_size_warn",
+            max_mb=tg_bot_upload_max() // (1024 * 1024),
+            size_mb=deps.fmt_mb_bytes(int(meta.size_bytes or 0)),
+        )
     try:
         if meta.link_type == "youtube":
             await status.edit_text(
@@ -436,14 +474,18 @@ async def handle_link_dest_callback(
             audio_only=audio_only,
         )
     except Exception as e:
-        deps.log_event("link_direct_download_failed", user_id=user_id, error=str(e))
+        err = str(e)
+        deps.log_event("link_direct_download_failed", user_id=user_id, error=err)
+        if err == "youtube_needs_cookies":
+            msg = deps.tr(user_id, "link_youtube_needs_cookies", detail=err)
+        elif err == "html_landing_page":
+            msg = deps.tr(user_id, "link_html_landing", detail=err)
+        else:
+            msg = deps.tr(user_id, "link_download_failed", error=err[:300])
         try:
-            await anchor.edit_text(deps.tr(user_id, "link_download_failed", error=str(e)), parse_mode=None)
+            await anchor.edit_text(msg, parse_mode=None)
         except Exception:
-            await callback_query.message.reply_text(
-                deps.tr(user_id, "link_download_failed", error=str(e)),
-                parse_mode=None,
-            )
+            await callback_query.message.reply_text(msg, parse_mode=None)
         return True
 
     await enqueue_downloaded_file(deps, anchor, user_id, dest=dest, local_path=local_path, meta=meta, extra=extra)

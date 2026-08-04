@@ -494,7 +494,9 @@ def currency_convert(
     )
 
 
-def market_quotes_report(*, lang: str = "fa", section: str = "gold") -> tuple[bool, str]:
+def market_quotes_report(
+    *, lang: str = "fa", section: str = "gold", page: int = 0
+) -> tuple[bool, str]:
     """Independent market board (HTML). section: gold|usd|eur|gbp|jpy|majors|hub|all."""
     from v2.toolkit.market_board import format_board, hub_text
 
@@ -511,7 +513,45 @@ def market_quotes_report(*, lang: str = "fa", section: str = "gold") -> tuple[bo
         sec = "usd"
     if sec in ("coin", "coins"):
         sec = "gold"
-    body = format_board(sec, _quote_cache, lang=lang, fetched_at=b.fetched_at)
+    body = format_board(
+        sec, _quote_cache, lang=lang, fetched_at=b.fetched_at, page=page
+    )
     if not body:
         return False, "unknown_board" if lang == "en" else "تابلو ناشناخته"
     return True, body
+
+
+def market_digest_brief(*, lang: str = "fa") -> tuple[bool, str]:
+    """Short free daily digest: gold + USD only."""
+    from v2.core import msg_format as mf
+    from v2.toolkit.market_board import PROVIDER_LABEL_EN, PROVIDER_LABEL_FA, _LABELS_EN, _LABELS_FA
+
+    ok, bundle_or_err = get_irr_rate_bundle(force_refresh=False)
+    if not ok or not isinstance(bundle_or_err, RateBundle):
+        return False, str(bundle_or_err)
+    labels = _LABELS_EN if lang == "en" else _LABELS_FA
+    lines = [
+        mf.title("☀️", "Daily market digest" if lang == "en" else "خلاصه روزانه بازار"),
+        mf.italic(PROVIDER_LABEL_EN if lang == "en" else PROVIDER_LABEL_FA),
+    ]
+    for code in ("USD", "GOLD18", "SEKEE"):
+        q = _quote_cache.get(code)
+        if not q:
+            continue
+        name = labels.get(code, code)
+        if q.unit == "USD":
+            lines.append(mf.kv(name, f"{q.price:,.2f} USD"))
+        else:
+            lines.append(
+                mf.kv(name, f"{q.price:,.0f} ریال ≈ {q.price / 10:,.0f} تومان")
+                if lang != "en"
+                else mf.kv(name, f"{q.price:,.0f} rial ≈ {q.price / 10:,.0f} toman")
+            )
+    lines.append(
+        mf.italic(
+            "Advanced alerts are Pro/Star only"
+            if lang == "en"
+            else "هشدار پیشرفته فقط برای پلن Pro/Star"
+        )
+    )
+    return True, mf.join(*lines)

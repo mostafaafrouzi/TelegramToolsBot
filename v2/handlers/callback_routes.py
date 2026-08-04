@@ -52,6 +52,9 @@ class CallbackRouteDeps:
     handle_clear_chat_callback: Callable[..., Awaitable[bool]] | None = None
     handle_alert_kind_callback: Callable[..., Awaitable[bool]] | None = None
     handle_alert_schedule_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_market_page_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_quake_mag_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_alert_quake_mag_callback: Callable[..., Awaitable[bool]] | None = None
 
 
 async def dispatch_callback_route(client: Any, callback_query: Any, deps: CallbackRouteDeps) -> bool:
@@ -187,6 +190,27 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
 
     if data.startswith("fxcalc:") and deps.handle_fx_calc_callback:
         return await deps.handle_fx_calc_callback(
+            client, callback_query, data.split(":", 1)[1]
+        )
+
+    if data.startswith("mktpage:") and deps.handle_market_page_callback:
+        parts = data.split(":")
+        if len(parts) >= 3:
+            try:
+                page = int(parts[2])
+            except ValueError:
+                page = 0
+            return await deps.handle_market_page_callback(
+                client, callback_query, parts[1], page
+            )
+
+    if data.startswith("quake:") and deps.handle_quake_mag_callback:
+        return await deps.handle_quake_mag_callback(
+            client, callback_query, data.split(":", 1)[1]
+        )
+
+    if data.startswith("alertqmag:") and deps.handle_alert_quake_mag_callback:
+        return await deps.handle_alert_quake_mag_callback(
             client, callback_query, data.split(":", 1)[1]
         )
 

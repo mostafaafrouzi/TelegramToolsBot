@@ -114,6 +114,8 @@ from v2.handlers.world_commands import (
     handle_markets,
     handle_earthquakes,
     handle_fx_calc_callback,
+    handle_market_page_callback,
+    handle_quake_mag_callback,
     handle_fx_quick_callback,
     start_age_wizard,
     start_currency_wizard,
@@ -135,6 +137,7 @@ from v2.handlers.alert_commands import (
     AlertCommandDeps,
     dispatch_alert_wizard,
     handle_alert_kind_callback,
+    handle_alert_quake_mag_callback,
     handle_alert_schedule_callback,
     start_alert_wizard,
 )
@@ -508,12 +511,15 @@ I18N = {
         "no_worker_events": "فایل لاگ worker هنوز ساخته نشده.",
         "no_recent_jobs": "برای این چت رویداد task_done/task_failed اخیری ثبت نشده.",
         "recent_jobs_title": "آخرین کارها (worker):",
-        "btn_main_transfer": "📁 انتقال فایل",
-        "btn_main_toolkit": "🧰 ابزارها",
+        "btn_main_transfer": "📤 ارسال فایل",
+        "btn_main_network": "🌐 شبکه و IP",
+        "btn_main_crypto": "#️⃣ هش و Base64",
+        "btn_main_calc": "🧮 ابزارهای محاسباتی",
+        "btn_main_toolkit": "🧰 سایر ابزارها",
         "btn_main_miniapp": "📱 Mini App",
         "btn_main_settings": "📤 ارسال مستقیم",
-        "btn_main_link_direct": "🔗 لینک / ویدیو",
-        "btn_main_cloudflare": "☁️ Cloudflare",
+        "btn_main_link_direct": "⬇️ دانلود از لینک",
+        "btn_main_cloudflare": "☁️ مدیریت Cloudflare",
         "btn_main_ssh": "🖥 مدیریت و اتصال به سرور از طریق ربات",
         "btn_main_help": "❓ راهنما",
         "btn_main_plan_section": "📋 حساب و پلن",
@@ -782,6 +788,10 @@ I18N = {
         "btn_clear_chat": "🧹 پاک کردن چت",
         "clear_chat_confirm": "پیام‌های ربات در این چت پاک می‌شوند.\nاشتراک و تنظیماتت حفظ می‌شود.\nبرای تایید دکمه زیر را بزن.",
         "clear_chat_done": "چت پاک شد ✅ ({n} پیام ربات حذف شد). اشتراک و تنظیمات دست‌نخورده ماند.",
+        "clear_chat_done_full": "چت پاک شد ✅ ({n} پیام ربات، {u} پیام کاربر در صورت امکان). اشتراک حفظ شد.",
+        "quake_pick_mag": "حداقل شدت زلزله (ریشتر) را انتخاب کن:",
+        "alerts_ask_quake_mag": "حداقل شدت هشدار زلزله (ریشتر) را انتخاب کن:",
+        "alerts_quake_added_ok": "هشدار زلزله ثبت شد ✅ (حداقل {mag} ریشتر)",
         "clear_chat_none": "پیام قابل حذفی پیدا نشد (بعد از این آپدیت پیام‌های جدید ربات قابل پاک‌سازی‌اند).",
         "btn_world_alerts": "🔔 هشدارها",
         "alerts_paid_only": "هشدارهای زمان‌بندی فقط برای پلن Pro/Star است.",
@@ -811,6 +821,14 @@ I18N = {
         "link_quality_best_set": "کیفیت بهترین حالت انتخاب شد. حالا مقصد را انتخاب کن.",
         "link_need_rubika": "روبیکا متصل نیست. `/rubika_connect`",
         "link_probe_unsupported": "این لینک قابل دانلود نیست. ({detail})",
+        "link_youtube_needs_cookies": "یوتیوب ربات را بلاک کرده (bot-check).\nادمین باید فایل کوکی Netscape را روی سرور بگذارد و `YTDLP_COOKIES` را در `.env` ست کند.\nراهنما: https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies",
+        "link_html_landing": "این آدرس صفحه وب است نه فایل مستقیم. لینک دانلود واقعی پیدا نشد.",
+        "link_telegram_too_large": "فایل {size_mb}MB است؛ سقف ارسال در تلگرام برای ربات حدود {max_mb}MB است.\nمقصد روبیکا/درایو را انتخاب کن یا فایل کوچک‌تر بفرست.",
+        "link_telegram_size_warn": "⚠️ سایز تقریبی {size_mb}MB — ارسال به تلگرام ممکن است به‌خاطر سقف {max_mb}MB شکست بخورد. روبیکا/درایو بهتر است.",
+        "link_youtube_needs_cookies": "YouTube blocked the bot (bot-check).\nAdmin must place a Netscape cookies file and set `YTDLP_COOKIES` in `.env`.\nGuide: https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies",
+        "link_html_landing": "This URL is a web page, not a direct file. No download URL found.",
+        "link_telegram_too_large": "File is {size_mb}MB; Telegram bot upload limit is about {max_mb}MB.\nPick Rubika/Drive or a smaller file.",
+        "link_telegram_size_warn": "⚠️ About {size_mb}MB — Telegram send may fail (limit ~{max_mb}MB). Prefer Rubika/Drive.",
         "link_ytdlp_missing": "یوتیوب نیاز به `yt-dlp` روی سرور دارد.",
         "link_magnet_unsupported": "لینک magnet هنوز پشتیبانی نمی‌شود.",
         "link_session_expired": "انتخاب منقضی شد — لینک را دوباره بفرست.",
@@ -821,7 +839,7 @@ I18N = {
         "link_downloading": "در حال دانلود روی سرور…",
         "link_download_failed": "دانلود ناموفق: {error}",
         "link_download_done_queue": "دانلود شد؛ در صف ارسال…",
-        "link_media_hint": "در بخش لینک/ویدیو باید لینک بفرستی. برای ارسال فایل از «📁 انتقال فایل» مقصد را انتخاب کن.",
+        "link_media_hint": "در بخش ⬇️ دانلود از لینک باید لینک بفرستی. برای ارسال فایل از «📤 ارسال فایل» مقصد را انتخاب کن.",
         "cf_menu_title": "☁️ Cloudflare\nاتصال per-user با API Token. مشاهده و ایجاد/حذف DNS با تأیید.",
         "cf_ask_token": (
             "☁️ اتصال Cloudflare (گام‌به‌گام)\n\n"
@@ -993,21 +1011,30 @@ I18N = {
         "drive_download_send_only": "شناسه فایل Google Drive را بفرست:",
         "ssh_get_usage": "استفاده: `/ssh_get <server_id> <remote_path>`",
         "help_short": (
-            "راهنمای سریع:\n\n"
-            "🏠 /menu · زبان /lang · منوی شیشه‌ای /imenu\n"
-            "📁 انتقال: /rubika_connect · /bale_connect · /drive_connect\n"
-            "🧰 ابزارها: /dns · /myip · /ping · /md5 · منوی محاسبات\n"
-            "🌍 جهان: /world_markets · /world_currency · /world_weather\n"
-            "📰 فید: /feeds · /feed_add\n\n"
-            "مصرف و پلن: /usage · /plan · /purchase · /plan_compare\n"
-            "وضعیت شبکه: /netstatus · حذف کار: /del <job_id>"
+            "📖 راهنمای کامل ربات\n\n"
+            "🏠 /menu — منوی اصلی\n"
+            "📤 ارسال فایل — روبیکا / بله / گوگل‌درایو / SSH / ارسال مستقیم\n"
+            "⬇️ دانلود از لینک — لینک مستقیم، تصویر، PDF، ویدیو (یوتیوب با کوکی سرور)\n"
+            "🌐 شبکه و IP — DNS، Ping، Whois، IP Info، پورت، SSL\n"
+            "#️⃣ هش و Base64 — MD5، SHA256، Encode/Decode\n"
+            "🧮 ابزارهای محاسباتی — مالی، ریاضی، واحد، ارقام\n"
+            "🌍 بازار و آب‌وهوا — تابلوها، ماشین‌حساب ارز (متن آزاد مثل `100 دلار`)، زلزله با فیلتر ریشتر، هشدار Pro\n"
+            "📰 فیدها — RSS و اعلان\n"
+            "☁️ مدیریت Cloudflare — DNS دامنه\n"
+            "🖥 مدیریت سرور — SSH از تلگرام\n"
+            "📋 حساب و پلن — /usage · /plan · /purchase\n"
+            "🧹 پاک کردن چت — حذف پیام‌های ربات (و در صورت اجازه، پیام‌های نزدیک کاربر)\n\n"
+            "زبان: /lang · منوی شیشه‌ای: /imenu · حذف کار: /del <job_id>\n"
+            "وضعیت شبکه: /netstatus"
+        ),
+        "help_short_admin_extra": (
+            "🛡 ادمین:\n"
+            "/admin · /loghelp · لاگ‌ها و مصرف\n"
+            "YTDLP_COOKIES برای یوتیوب · MINIAPP_BASE_URL برای مینی‌اپ"
         ),
         "help_short_admin": (
-            "راهنمای سریع (ادمین):\n\n"
-            "🏠 /menu · 📁 انتقال · 🧰 ابزارها · 📰 /feeds\n"
-            "پنل ادمین: /admin\n"
-            "لاگ: /loghelp\n"
-            "مصرف: /usage · پلن: /plan · خرید: /purchase"
+            "🛡 میان‌بر ادمین:\n"
+            "/admin · /loghelp · /usage · /plan"
         ),
         "loghelp_body": (
             "اگر ارسال فایل مشکل داشت:\n\n"
@@ -1159,7 +1186,7 @@ I18N = {
         "confirm_send_suffix": "به روبیکا همین حالا ارسال شود؟",
         "btn_confirm_send": "✅ تأیید ارسال",
         "btn_cancel_send": "❌ لغو",
-        "btn_main_world": "🌍 جهان و زمان",
+        "btn_main_world": "🌍 بازار و آب‌وهوا",
         "failed_detail_title": "آخرین خطاهای ثبت‌شده برای نشست شما:",
         "confirm_cancelled": "ارسال لغو شد.",
         "confirm_already_handled": "این درخواست قبلاً پردازش شده است.",
@@ -1299,8 +1326,8 @@ I18N = {
         "media_pick_dest": "مقصد ارسال فایل را انتخاب کن:",
         "media_dest_session_expired": "انتخاب منقضی شد — فایل را دوباره بفرست.",
         "inline_main_title": "میان‌بر منو — بخش را انتخاب کن (ادامه با دکمه‌های پایین صفحه):",
-        "inline_world_menu": "🌍 جهان",
-        "inline_world_title": "ابزارهای جهان و زمان",
+        "inline_world_menu": "🌍 بازار و آب‌وهوا",
+        "inline_world_title": "بازار، ارز، آب‌وهوا و هشدارها",
         "btn_world_weather": "🌤 آب‌وهوا",
         "btn_world_time": "🕒 ساعت جهانی",
         "btn_world_calendar": "📅 تقویم",
@@ -1312,7 +1339,7 @@ I18N = {
         "weather_ask_city": "نام شهر را بفرست (مثلاً Tehran):",
         "timezone_ask_place": "نام شهر یا منطقه زمانی را بفرست (مثلاً Tehran یا Asia/Tehran):",
         "age_ask_date": "تاریخ تولد را بفرست (YYYY/MM/DD میلادی یا شمسی):",
-        "fx_calc_ask": "مبلغ را با واحد بفرست:\nمثال: ۱۰۰۰۰۰ تومان · ۵۰۰۰۰۰۰ ریال · ۵۰ دلار · ۱ سکه امامی\nیا از دکمه‌های زیر استفاده کن:",
+        "fx_calc_ask": "مبلغ و واحد را آزاد بنویس، مثلاً:\n`100000 تومان` · `50 دلار` · `1 سکه امامی`\nیا از دکمه‌های آماده / اخیر استفاده کن:",
         "currency_ask_amount": "مبلغ را بفرست (عدد) یا از دکمه‌های سریع استفاده کن:",
         "currency_ask_pair": "ارز مبدأ و مقصد را مرحله‌به‌مرحله می‌گیریم.",
         "currency_bad_amount": "مبلغ نامعتبر است.",
@@ -1517,12 +1544,15 @@ I18N = {
         "no_worker_events": "Worker log file not found yet.",
         "no_recent_jobs": "No recent task_done/task_failed for this chat.",
         "recent_jobs_title": "Recent jobs (worker):",
-        "btn_main_transfer": "📁 File transfer",
-        "btn_main_toolkit": "🧰 Tools",
+        "btn_main_transfer": "📤 Send files",
+        "btn_main_network": "🌐 Network & IP",
+        "btn_main_crypto": "#️⃣ Hash & Base64",
+        "btn_main_calc": "🧮 Calculators",
+        "btn_main_toolkit": "🧰 More tools",
         "btn_main_miniapp": "📱 Mini App",
         "btn_main_settings": "📤 Direct send",
-        "btn_main_link_direct": "🔗 Link / video",
-        "btn_main_cloudflare": "☁️ Cloudflare",
+        "btn_main_link_direct": "⬇️ Download from link",
+        "btn_main_cloudflare": "☁️ مدیریت Cloudflare",
         "btn_main_ssh": "🖥 Server Management via Bot",
         "btn_main_help": "❓ Help",
         "btn_main_plan_section": "📋 Account & plan",
@@ -1777,6 +1807,10 @@ I18N = {
         "btn_clear_chat": "🧹 Clear chat",
         "clear_chat_confirm": "Bot messages in this chat will be deleted.\nYour plan and settings stay intact.\nTap the button below to confirm.",
         "clear_chat_done": "Chat cleared ✅ ({n} bot messages deleted). Plan/settings unchanged.",
+        "clear_chat_done_full": "Chat cleared ✅ ({n} bot msgs, {u} user msgs if allowed). Plan kept.",
+        "quake_pick_mag": "Pick minimum earthquake magnitude (Richter):",
+        "alerts_ask_quake_mag": "Pick minimum Richter for quake alerts:",
+        "alerts_quake_added_ok": "Quake alert saved ✅ (min {mag} Richter)",
         "clear_chat_none": "No deletable bot messages found yet (new bot replies after this update are tracked).",
         "btn_world_alerts": "🔔 Alerts",
         "alerts_paid_only": "Scheduled alerts are Pro/Star only.",
@@ -1965,24 +1999,33 @@ I18N = {
         "drive_download_usage": "Usage: `/drive_download <google_drive_file_id>`",
         "drive_download_send_only": "Send a Google Drive file id:",
         "ssh_get_usage": "Usage: `/ssh_get <server_id> <remote_path>`",
-                "help_short": (
-            "Quick help:\n\n"
-            "🏠 Menu: /menu\n"
-            "📁 Transfer: /rubika_connect · /bale_connect · /drive_connect\n"
-            "🧰 Tools: /dns · /myip · /ping · /md5\n"
-            "📰 Feeds: /feeds · 🌍 World from main menu\n\n"
-            "Usage & plans: /usage · /plan · /purchase · /plan_compare\n"
-            "Network: /netstatus · Cancel job: /del <job_id>\n"
-            "If something fails, send the job_id to support."
+        "help_short": (
+            "📖 Full bot guide\n\n"
+            "🏠 /menu — main menu\n"
+            "📤 Send files — Rubika / Bale / Drive / SSH / direct\n"
+            "⬇️ Download from link — direct/image/PDF/video (YouTube needs server cookies)\n"
+            "🌐 Network & IP — DNS, Ping, Whois, IP Info, port, SSL\n"
+            "#️⃣ Hash & Base64 — MD5, SHA256, Encode/Decode\n"
+            "🧮 Calculators — finance, math, units, digits\n"
+            "🌍 Markets & weather — boards, free-form FX calc, quake Richter filter, Pro alerts\n"
+            "📰 Feeds — RSS\n"
+            "☁️ Cloudflare — DNS\n"
+            "🖥 Server — SSH from Telegram\n"
+            "📋 Account — /usage · /plan · /purchase\n"
+            "🧹 Clear chat — delete bot messages (and nearby user msgs if API allows)\n\n"
+            "Language: /lang · Glass menu: /imenu · Cancel job: /del <job_id>\n"
+            "Network: /netstatus"
+        ),
+        "help_short_admin_extra": (
+            "🛡 Admin:\n"
+            "/admin · /loghelp · logs & usage\n"
+            "YTDLP_COOKIES for YouTube · MINIAPP_BASE_URL for Mini App"
         ),
         "help_short_admin": (
-            "Quick help (admin):\n\n"
-            "🏠 /menu · tools · /feeds\n"
-            "Admin panel: /admin\n"
-            "Logs: /loghelp\n"
-            "Usage: /usage · plan: /plan · purchase: /purchase"
+            "🛡 Admin shortcuts:\n"
+            "/admin · /loghelp · /usage · /plan"
         ),
-                "loghelp_body": (
+        "loghelp_body": (
             "If a transfer failed:\n\n"
             "1) Copy the job_id from the queued message.\n"
             "2) Send that id to support.\n"
@@ -2135,7 +2178,7 @@ I18N = {
         "confirm_send_suffix": "Send to Rubika now?",
         "btn_confirm_send": "✅ Confirm send",
         "btn_cancel_send": "❌ Cancel",
-        "btn_main_world": "🌍 World & time",
+        "btn_main_world": "🌍 Markets & weather",
         "failed_detail_title": "Recent failures for your Rubika session:",
         "confirm_cancelled": "Send cancelled.",
         "confirm_already_handled": "This request was already handled.",
@@ -2273,8 +2316,8 @@ I18N = {
         "media_pick_dest": "Choose where to send this file:",
         "media_dest_session_expired": "Selection expired — send the file again.",
         "inline_main_title": "Menu shortcut — pick a section (continue with the reply keyboard):",
-        "inline_world_menu": "🌍 World",
-        "inline_world_title": "World & time tools",
+        "inline_world_menu": "🌍 Markets & weather",
+        "inline_world_title": "Markets, FX, weather & alerts",
         "btn_world_weather": "🌤 Weather",
         "btn_world_time": "🕒 World clock",
         "btn_world_calendar": "📅 Calendar",
@@ -2286,7 +2329,7 @@ I18N = {
         "weather_ask_city": "Send a city name (e.g. London):",
         "timezone_ask_place": "Send a city or IANA zone (e.g. London or Europe/London):",
         "age_ask_date": "Send birth date as YYYY/MM/DD (Gregorian or Solar Hijri):",
-        "fx_calc_ask": "Send amount with unit:\ne.g. 100000 toman · 50 USD · 1 sekkee\nor tap a quick button:",
+        "fx_calc_ask": "Type any amount + unit freely, e.g.:\n`100000 toman` · `50 USD` · `1 sekkee`\nor use quick / recent buttons:",
         "currency_ask_amount": "Send an amount (number) or use a quick button:",
         "currency_ask_pair": "We will ask source and target step by step.",
         "currency_bad_amount": "Invalid amount.",
@@ -3744,6 +3787,18 @@ async def rss_poll_loop():
             await maybe_send_daily_digest(app, queue, tr, log_event=log_event)
         except Exception as e:
             log_event("world_digest_error", error=str(e))
+        try:
+            from v2.handlers.market_digest import maybe_send_market_digest
+
+            await maybe_send_market_digest(
+                app,
+                list_user_ids=lambda: queue.list_activity_user_ids(limit=500),
+                tr=tr,
+                get_lang=get_lang,
+                log_event=log_event,
+            )
+        except Exception as e:
+            log_event("market_digest_error", error=str(e))
 
 
 def _create_stub_purchase_checkout(user_id: int) -> tuple[int, str]:
@@ -3815,6 +3870,7 @@ BASIC_COMMAND_DEPS = BasicCommandDeps(
     app_version=APP_VERSION,
     clear_state=clear_state,
     connection_checklist=connection_checklist_text,
+    is_admin=is_admin,
 )
 
 SESSION_SETTINGS_COMMAND_DEPS = SessionSettingsCommandDeps(
@@ -5343,6 +5399,7 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
         "/world_weather": world_weather_handler,
         "/world_calendar": world_calendar_handler,
         "/world_currency": world_currency_handler,
+        "/world_alerts": world_alerts_handler,
         "/world_markets": world_markets_handler,
         "/world_gold": world_gold_handler,
         "/world_usd": world_usd_handler,
@@ -5687,6 +5744,15 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     handle_clear_chat_callback=lambda c, cq, a: handle_clear_chat_callback(CLEAR_CHAT_DEPS, c, cq, a),
     handle_alert_kind_callback=lambda c, cq, k: handle_alert_kind_callback(ALERT_COMMAND_DEPS, c, cq, k),
     handle_alert_schedule_callback=lambda c, cq, s: handle_alert_schedule_callback(ALERT_COMMAND_DEPS, c, cq, s),
+    handle_market_page_callback=lambda c, cq, b, p: handle_market_page_callback(
+        WORLD_COMMAND_DEPS, c, cq, b, p
+    ),
+    handle_quake_mag_callback=lambda c, cq, m: handle_quake_mag_callback(
+        WORLD_COMMAND_DEPS, c, cq, m
+    ),
+    handle_alert_quake_mag_callback=lambda c, cq, m: handle_alert_quake_mag_callback(
+        ALERT_COMMAND_DEPS, c, cq, m
+    ),
 )
 
 

@@ -194,12 +194,24 @@ def _hist_line(q: Quote, *, lang: str) -> str:
     return mf.kv(label, " · ".join(parts))
 
 
+_PAGE_SIZE = 6
+
+
+def board_page_count(board: str) -> int:
+    meta = BOARDS.get((board or "").lower())
+    if not meta:
+        return 1
+    n = len(meta[2])
+    return max(1, (n + _PAGE_SIZE - 1) // _PAGE_SIZE)
+
+
 def format_board(
     board: str,
     quotes: dict[str, Quote],
     *,
     lang: str = "fa",
     fetched_at: float = 0.0,
+    page: int = 0,
 ) -> str:
     meta = BOARDS.get((board or "").lower())
     if not meta:
@@ -208,6 +220,13 @@ def format_board(
     title = title_en if lang == "en" else title_fa
     labels = _LABELS_EN if lang == "en" else _LABELS_FA
     provider = PROVIDER_LABEL_EN if lang == "en" else PROVIDER_LABEL_FA
+    pages = board_page_count(board)
+    page = max(0, min(int(page or 0), pages - 1))
+    # Paginate only crowded boards (majors); others stay single-page
+    if (board or "").lower() == "majors" and pages > 1:
+        start = page * _PAGE_SIZE
+        codes = codes[start : start + _PAGE_SIZE]
+        title = f"{title} ({page + 1}/{pages})"
     blocks = [
         mf.title("", title),
         mf.italic(provider),
@@ -252,9 +271,9 @@ def format_board(
                 )
             )
     tip = (
-        "Use FX calculator in World menu"
+        "Use FX calculator from Markets & weather menu"
         if lang == "en"
-        else "برای تبدیل از منوی جهان → ماشین‌حساب ارز استفاده کن"
+        else "برای تبدیل از منوی بازار و آب‌وهوا → ماشین‌حساب ارز استفاده کن"
     )
     blocks.append("")
     blocks.append(mf.italic(tip))

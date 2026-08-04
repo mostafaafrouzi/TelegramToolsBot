@@ -80,6 +80,29 @@ async def handle_alert_kind_callback(
     deps.set_state_preserving_menu(
         uid, {"step": "await_alert_asset", "alert_kind": kind}
     )
+    if kind == "quake":
+        # For quake: skip free-text city; ask Richter filter via buttons
+        deps.set_state_preserving_menu(
+            uid,
+            {
+                "step": "await_alert_schedule",
+                "alert_kind": "quake",
+                "alert_asset": "",
+            },
+        )
+        kb = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("ساعتی", callback_data="alertsch:hourly"),
+                    InlineKeyboardButton("روزانه", callback_data="alertsch:daily"),
+                    InlineKeyboardButton("هفتگی", callback_data="alertsch:weekly"),
+                ]
+            ]
+        )
+        await reply_plain(
+            callback_query.message, deps.tr(uid, "alerts_ask_schedule"), reply_markup=kb
+        )
+        return True
     hint = {
         "fx": "alerts_ask_fx_asset",
         "gold": "alerts_ask_gold_asset",
@@ -152,6 +175,34 @@ async def handle_alert_schedule_callback(
     await callback_query.answer()
     if state.get("step") != "await_alert_schedule":
         return True
+    kind = str(state.get("alert_kind") or "fx")
+    if kind == "quake":
+        deps.set_state_preserving_menu(
+            uid,
+            {
+                "step": "await_alert_quake_mag",
+                "alert_kind": "quake",
+                "alert_asset": state.get("alert_asset") or "",
+                "alert_schedule": schedule,
+            },
+        )
+        kb = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton("≥ ۴", callback_data="alertqmag:4"),
+                    InlineKeyboardButton("≥ ۴.۵", callback_data="alertqmag:4.5"),
+                    InlineKeyboardButton("≥ ۵", callback_data="alertqmag:5"),
+                ],
+                [
+                    InlineKeyboardButton("≥ ۵.۵", callback_data="alertqmag:5.5"),
+                    InlineKeyboardButton("≥ ۶", callback_data="alertqmag:6"),
+                ],
+            ]
+        )
+        await reply_plain(
+            callback_query.message, deps.tr(uid, "alerts_ask_quake_mag"), reply_markup=kb
+        )
+        return True
     deps.set_state_preserving_menu(
         uid,
         {
@@ -162,4 +213,34 @@ async def handle_alert_schedule_callback(
         },
     )
     await reply_plain(callback_query.message, deps.tr(uid, "alerts_ask_spike"))
+    return True
+
+
+async def handle_alert_quake_mag_callback(
+    deps: AlertCommandDeps, client: Any, callback_query: Any, mag_s: str
+) -> bool:
+    uid = callback_query.from_user.id
+    state = deps.get_state(uid)
+    await callback_query.answer()
+    if state.get("step") != "await_alert_quake_mag":
+        return True
+    try:
+        mag = float(mag_s)
+    except ValueError:
+        mag = 4.5
+    ok, err = store.add_alert(
+        uid,
+        kind="quake",
+        asset=str(state.get("alert_asset") or ""),
+        schedule=str(state.get("alert_schedule") or "daily"),
+        spike_pct=mag,  # reuse spike_pct column as min Richter
+    )
+    deps.clear_state(uid)
+    if not ok:
+        await reply_plain(callback_query.message, deps.tr(uid, "alerts_add_fail", detail=err))
+        return True
+    await reply_plain(
+        callback_query.message,
+        deps.tr(uid, "alerts_quake_added_ok", mag=f"{mag:g}"),
+    )
     return True

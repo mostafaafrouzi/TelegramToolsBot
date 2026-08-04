@@ -13,6 +13,9 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     # Main
     "btn_main_transfer": "/show_transfer_menu",
     "btn_main_toolkit": "/show_toolkit_menu",
+    "btn_main_network": "/show_toolkit_network_menu",
+    "btn_main_crypto": "/show_toolkit_crypto_menu",
+    "btn_main_calc": "/show_toolkit_calc_menu",
     "btn_main_plan_section": "/show_plan_menu",
     "btn_main_settings": "/show_settings_menu",
     "btn_main_link_direct": "/show_link_direct_menu",
@@ -375,13 +378,15 @@ def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboa
     items = [
         tr(user_id, "btn_main_transfer"),
         tr(user_id, "btn_main_link_direct"),
-        tr(user_id, "btn_main_toolkit"),
-        tr(user_id, "btn_main_miniapp"),
+        tr(user_id, "btn_main_network"),
+        tr(user_id, "btn_main_crypto"),
+        tr(user_id, "btn_main_calc"),
         tr(user_id, "btn_main_world"),
         tr(user_id, "btn_main_feed"),
         tr(user_id, "btn_main_ssh"),
         tr(user_id, "btn_main_cloudflare"),
         tr(user_id, "btn_main_plan_section"),
+        tr(user_id, "btn_main_miniapp"),
         tr(user_id, "btn_main_help"),
     ]
     if is_admin:
