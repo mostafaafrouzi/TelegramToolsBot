@@ -165,29 +165,27 @@ def weather_report(city: str, *, lang: str = "fa", forecast_days: int = 3) -> tu
         sunset = _fmt_sun((daily.get("sunset") or [""])[0])
         uv = (daily.get("uv_index_max") or [None])[0]
 
+        from v2.core import msg_format as mf
+
         if lang == "en":
-            lines = [
-                f"🌤 Weather — {label}",
-                "",
-                "Now",
-                f"• {temp}°C · {cond}",
-                f"• Humidity {hum}% · Wind {wind} km/h",
-                "",
-                "Today",
-                f"• Low {tmin}°C · High {tmax}°C · UV {uv}",
-                f"• Sunrise {sunrise} · Sunset {sunset}",
+            blocks = [
+                mf.title("🌤", f"Weather — {label}"),
+                mf.section("Now"),
+                mf.kv("Temp", f"{temp}°C · {cond}"),
+                mf.kv("Humidity / Wind", f"{hum}% · {wind} km/h"),
+                mf.section("Today"),
+                mf.kv("Range / UV", f"{tmin}–{tmax}°C · UV {uv}"),
+                mf.kv("Sun", f"{sunrise} → {sunset}"),
             ]
         else:
-            lines = [
-                f"🌤 آب‌وهوا — {label}",
-                "",
-                "الان",
-                f"• {temp}°C · {cond}",
-                f"• رطوبت {hum}% · باد {wind} کیلومتر/ساعت",
-                "",
-                "امروز",
-                f"• کمینه {tmin}°C · بیشینه {tmax}°C · UV {uv}",
-                f"• طلوع {sunrise} · غروب {sunset}",
+            blocks = [
+                mf.title("🌤", f"آب‌وهوا — {label}"),
+                mf.section("الان"),
+                mf.kv("دما", f"{temp}°C · {cond}"),
+                mf.kv("رطوبت / باد", f"{hum}% · {wind} کیلومتر/ساعت"),
+                mf.section("امروز"),
+                mf.kv("بازه / UV", f"{tmin}–{tmax}°C · UV {uv}"),
+                mf.kv("خورشید", f"{sunrise} → {sunset}"),
             ]
 
         dates = daily.get("time") or []
@@ -195,8 +193,7 @@ def weather_report(city: str, *, lang: str = "fa", forecast_days: int = 3) -> tu
         dmin = daily.get("temperature_2m_min") or []
         dcodes = daily.get("weather_code") or []
         if len(dates) > 1:
-            lines.append("")
-            lines.append("📅 Forecast" if lang == "en" else "📅 پیش‌بینی")
+            blocks.append(mf.section("📅 Forecast" if lang == "en" else "📅 پیش‌بینی"))
             for i in range(1, min(len(dates), days)):
                 d = dates[i]
                 try:
@@ -206,8 +203,8 @@ def weather_report(city: str, *, lang: str = "fa", forecast_days: int = 3) -> tu
                 lo = dmin[i] if i < len(dmin) else "?"
                 hi = dmax[i] if i < len(dmax) else "?"
                 cond_d = wmo_label(dcodes[i] if i < len(dcodes) else None, lang=lang)
-                lines.append(f"• {d_short} · {lo}–{hi}°C · {cond_d}")
-        return True, "\n".join(lines)
+                blocks.append(mf.line(f"{d_short} · {lo}–{hi}°C · {cond_d}"))
+        return True, mf.join(*blocks)
     except Exception as e:
         return False, str(e)[:400]
 

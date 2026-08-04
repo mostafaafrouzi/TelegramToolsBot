@@ -117,7 +117,7 @@ class FxIrrTests(unittest.TestCase):
         clear_fx_cache()
         bundle = RateBundle(
             rates={"USD": 1_900_000.0, "EUR": 2_100_000.0, "GBP": 2_400_000.0, "USDT": 1_905_000.0},
-            source="TGJU",
+            source="بازار آزاد ایران",
             market="free_market",
             fetched_at=1_700_000_000.0,
         )
@@ -125,9 +125,10 @@ class FxIrrTests(unittest.TestCase):
             ok, body = currency_convert(1, "USD", "IRR", lang="fa")
         self.assertTrue(ok)
         self.assertIn("IRR", body)
-        self.assertIn("TGJU", body)
+        self.assertNotIn("TGJU", body.upper())
+        self.assertNotIn("tgju", body.lower())
         self.assertIn("بازار آزاد", body)
-        self.assertIn("1900000", body.replace(",", ""))
+        self.assertIn("1900000", body.replace(",", "").replace("٬", ""))
 
     def test_official_fallback_labeled(self):
         from v2.toolkit.fx_light import RateBundle, clear_fx_cache, currency_convert

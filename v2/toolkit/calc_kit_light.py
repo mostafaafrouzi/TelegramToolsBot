@@ -31,18 +31,21 @@ _ONES = (
 )
 _TENS = ("", "", "بیست", "سی", "چهل", "پنجاه", "شصت", "هفتاد", "هشتاد", "نود")
 _HUNDREDS = ("", "صد", "دویست", "سیصد", "چهارصد", "پانصد", "ششصد", "هفتصد", "هشتصد", "نهصد")
-_SCALES = ("", "هزار", "میلیون", "میلیارد", "تریلیون")
+_SCALES = ("", "هزار", "میلیون", "میلیارد", "تریلیون", "کوآدریلیون", "کوینتیلیون")
 
 
 def _parse_num(raw: str) -> Optional[float]:
-    s = (raw or "").strip().replace(",", "").replace("٬", "").replace("،", "")
+    s = (raw or "").strip().replace(",", "").replace("٬", "").replace("،", "").replace("٫", ".")
     s = s.replace("۰", "0").replace("۱", "1").replace("۲", "2").replace("۳", "3")
     s = s.replace("۴", "4").replace("۵", "5").replace("۶", "6").replace("۷", "7")
     s = s.replace("۸", "8").replace("۹", "9")
     try:
-        return float(s)
+        v = float(s)
     except ValueError:
         return None
+    if v != v or v in (float("inf"), float("-inf")):  # NaN / inf
+        return None
+    return v
 
 
 def percent_of(part: float, whole: float) -> tuple[bool, str]:
@@ -74,6 +77,8 @@ def apply_percent(value: float, pct: float, *, mode: str = "of") -> tuple[bool, 
 def loan_emi(principal: float, annual_rate_pct: float, months: int) -> tuple[bool, str]:
     if principal <= 0 or months <= 0:
         return False, "مبلغ و تعداد ماه باید مثبت باشد."
+    if annual_rate_pct < 0:
+        return False, "نرخ نمی‌تواند منفی باشد."
     r = (annual_rate_pct / 100.0) / 12.0
     if r == 0:
         emi = principal / months
@@ -96,6 +101,8 @@ def loan_emi(principal: float, annual_rate_pct: float, months: int) -> tuple[boo
 def deposit_interest(principal: float, annual_rate_pct: float, months: int) -> tuple[bool, str]:
     if principal <= 0 or months <= 0:
         return False, "مبلغ و مدت باید مثبت باشد."
+    if annual_rate_pct < 0:
+        return False, "نرخ نمی‌تواند منفی باشد."
     interest = principal * (annual_rate_pct / 100.0) * (months / 12.0)
     return True, (
         "سود سپرده (ساده)\n"
@@ -167,6 +174,7 @@ _UNIT_TABLES: dict[str, dict[str, float]] = {
     "volume": {"l": 1.0, "ml": 0.001, "m3": 1000.0, "gal": 3.785411784},
     "speed": {"mps": 1.0, "kph": 1 / 3.6, "mph": 0.44704},
     "data": {"b": 1.0, "kb": 1024.0, "mb": 1024**2, "gb": 1024**3, "tb": 1024**4},
+    "area": {"m2": 1.0, "km2": 1e6, "cm2": 1e-4, "ha": 10000.0, "acre": 4046.8564224, "ft2": 0.09290304},
 }
 
 
@@ -195,7 +203,7 @@ def convert_unit(kind: str, amount: float, frm: str, to: str) -> tuple[bool, str
         return True, f"{amount:g} {f.upper()} = {out:,.4f} {t.upper()}"
     table = _UNIT_TABLES.get(k)
     if not table:
-        return False, "نوع: length|weight|volume|speed|data|temp"
+        return False, "نوع: length|weight|volume|speed|data|temp|area"
     if f not in table or t not in table:
         return False, f"واحدهای {k}: {', '.join(sorted(table))}"
     base = amount * table[f]
@@ -226,14 +234,18 @@ def base_convert(value: str, base_from: int, base_to: int) -> tuple[bool, str]:
 def binary_text(mode: str, payload: str) -> tuple[bool, str]:
     m = (mode or "").lower()
     if m in ("to", "encode", "bin"):
-        bits = " ".join(format(ord(ch), "08b") for ch in payload)
+        data = (payload or "").encode("utf-8")
+        bits = " ".join(format(b, "08b") for b in data)
         return True, bits or "(empty)"
     if m in ("from", "decode", "text"):
         parts = payload.replace(" ", "")
         if len(parts) % 8 != 0 or not re.fullmatch(r"[01]+", parts or ""):
             return False, "بایت‌های ۸بیتی ۰/۱ بفرست."
-        chars = [chr(int(parts[i : i + 8], 2)) for i in range(0, len(parts), 8)]
-        return True, "".join(chars)
+        try:
+            data = bytes(int(parts[i : i + 8], 2) for i in range(0, len(parts), 8))
+            return True, data.decode("utf-8")
+        except Exception:
+            return False, "رشته باینری به UTF-8 معتبر نیست."
     return False, "mode: to|from"
 
 
@@ -263,7 +275,10 @@ def random_numbers(count: int, lo: float, hi: float, *, integer: bool = True) ->
     vals = []
     for _ in range(count):
         if integer:
-            vals.append(str(random.randint(int(lo), int(hi))))
+            a, b = math.ceil(lo), math.floor(hi)
+            if a > b:
+                return False, "بازه صحیح معتبری وجود ندارد."
+            vals.append(str(random.randint(a, b)))
         else:
             vals.append(f"{random.uniform(lo, hi):.4f}")
     return True, "اعداد تصادفی:\n" + ", ".join(vals)
@@ -277,10 +292,16 @@ def math_mean(nums: list[float]) -> tuple[bool, str]:
 
 
 def math_power(base: float, exp: float) -> tuple[bool, str]:
+    if base == 0 and exp < 0:
+        return False, "صفر به توان منفی تعریف نشده است."
     try:
         out = base**exp
-    except OverflowError:
-        return False, "نتیجه خیلی بزرگ است."
+    except (OverflowError, ZeroDivisionError):
+        return False, "نتیجه تعریف‌نشده یا خیلی بزرگ است."
+    if isinstance(out, complex):
+        return False, "نتیجه مختلط است؛ پایه و توان را عوض کن."
+    if out != out or out in (float("inf"), float("-inf")):
+        return False, "نتیجه نامعتبر است."
     return True, f"{base:g} ^ {exp:g} = {out:,.6g}"
 
 
@@ -384,3 +405,68 @@ def english_case(text: str, mode: str) -> tuple[bool, str]:
     if m in ("title", "عنوان"):
         return True, text.title()
     return False, "mode: upper|lower|title"
+
+
+def bmi(weight_kg: float, height_cm: float) -> tuple[bool, str]:
+    if weight_kg <= 0 or height_cm <= 0:
+        return False, "وزن و قد باید مثبت باشند."
+    h = height_cm / 100.0
+    val = weight_kg / (h * h)
+    if val < 18.5:
+        cat = "کم‌وزن"
+    elif val < 25:
+        cat = "نرمال"
+    elif val < 30:
+        cat = "اضافه‌وزن"
+    else:
+        cat = "چاق"
+    return True, f"BMI = {val:.2f}\nوضعیت تقریبی: {cat}\n(صرفاً اطلاع عمومی — جایگزین مشاوره پزشکی نیست)"
+
+
+def compound_deposit(principal: float, annual_rate_pct: float, months: int) -> tuple[bool, str]:
+    if principal <= 0 or months <= 0 or annual_rate_pct < 0:
+        return False, "مقادیر نامعتبر است."
+    r = annual_rate_pct / 100.0 / 12.0
+    total = principal * ((1 + r) ** months)
+    interest = total - principal
+    return True, (
+        "سود سپرده مرکب (ماهانه)\n"
+        f"اصل: {principal:,.0f}\n"
+        f"نرخ سالانه: {annual_rate_pct:g}٪\n"
+        f"مدت: {months} ماه\n"
+        f"سود: {interest:,.0f}\n"
+        f"جمع: {total:,.0f}"
+    )
+
+
+def percent_error(actual: float, measured: float) -> tuple[bool, str]:
+    if actual == 0:
+        return False, "مقدار واقعی صفر است."
+    err = abs(measured - actual) / abs(actual) * 100.0
+    return True, f"خطای نسبی: {err:,.4f}٪"
+
+
+def math_log(n: float, base: float = 10.0) -> tuple[bool, str]:
+    if n <= 0 or base <= 0 or base == 1:
+        return False, "برای لگاریتم، عدد و مبنا باید مثبت و مبنا ≠ ۱ باشد."
+    return True, f"log_{base:g}({n:g}) = {math.log(n, base):,.6g}"
+
+
+def linear_eq(a: float, b: float) -> tuple[bool, str]:
+    # ax + b = 0
+    if a == 0:
+        return False, "ضریب a نباید صفر باشد."
+    x = -b / a
+    return True, f"{a:g}x + {b:g} = 0\nx = {x:,.6g}"
+
+
+def quadratic_eq(a: float, b: float, c: float) -> tuple[bool, str]:
+    if a == 0:
+        return linear_eq(b, c)
+    disc = b * b - 4 * a * c
+    if disc < 0:
+        return True, f"دلتا منفی ({disc:g}) — ریشه حقیقی ندارد."
+    s = math.sqrt(disc)
+    x1 = (-b + s) / (2 * a)
+    x2 = (-b - s) / (2 * a)
+    return True, f"Δ = {disc:g}\nx₁ = {x1:,.6g}\nx₂ = {x2:,.6g}"

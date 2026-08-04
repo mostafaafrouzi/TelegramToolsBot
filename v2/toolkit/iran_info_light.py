@@ -116,7 +116,12 @@ _NID: dict[str, str] = {
 
 def plate_lookup(code: str) -> tuple[bool, str]:
     raw = (code or "").strip()
-    m = re.search(r"(\d{2})", raw)
+    # Prefer «ایران 22» / trailing two digits over first match in longer numbers.
+    m = re.search(r"(?:ایران|iran)\s*(\d{2})\b", raw, flags=re.I)
+    if not m:
+        m = re.search(r"(\d{2})\s*$", raw)
+    if not m:
+        m = re.search(r"\b(\d{2})\b", raw)
     if not m:
         return False, "کد دو رقمی پلاک را بفرست (مثل 22 یا ایران 22)."
     key = m.group(1)
@@ -126,13 +131,30 @@ def plate_lookup(code: str) -> tuple[bool, str]:
     return True, f"کد پلاک {key}: {city}"
 
 
+def _nid_checksum_ok(digits: str) -> Optional[bool]:
+    if len(digits) != 10 or not digits.isdigit():
+        return None
+    if digits == digits[0] * 10:
+        return False
+    s = sum(int(digits[i]) * (10 - i) for i in range(9)) % 11
+    check = int(digits[9])
+    return check == s if s < 2 else check == 11 - s
+
+
 def national_id_city(nid: str) -> tuple[bool, str]:
     digits = re.sub(r"\D", "", nid or "")
     if len(digits) < 3:
         return False, "حداقل ۳ رقم اول کد ملی را بفرست."
     prefix = digits[:3]
     city = _NID.get(prefix)
+    lines = []
     if city:
-        return True, f"پیش‌شماره {prefix}: {city}"
-    # try first 2 as weak hint not available — keep honest
-    return True, f"پیش‌شماره {prefix}: در فهرست رایج نبود (برای دقت، ۱۰ رقم کامل در سامانه رسمی)."
+        lines.append(f"پیش‌شماره {prefix}: {city}")
+    else:
+        lines.append(f"پیش‌شماره {prefix}: در فهرست رایج نبود.")
+    chk = _nid_checksum_ok(digits)
+    if chk is True:
+        lines.append("رقم کنترل ۱۰رقمی: معتبر به نظر می‌رسد.")
+    elif chk is False:
+        lines.append("رقم کنترل ۱۰رقمی: نامعتبر.")
+    return True, "\n".join(lines)

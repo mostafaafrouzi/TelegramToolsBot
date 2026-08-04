@@ -99,6 +99,12 @@ class ReplyRouteDeps:
     extra_slash_handlers: dict[str, MessageHandler]
     build_admin_broadcast_menu: MenuBuilder | None = None
     show_toolkit_calc_menu_handler: MessageHandler | None = None
+    show_calc_finance_menu_handler: MessageHandler | None = None
+    show_calc_numbers_menu_handler: MessageHandler | None = None
+    show_calc_convert_menu_handler: MessageHandler | None = None
+    show_calc_math_menu_handler: MessageHandler | None = None
+    show_calc_text_menu_handler: MessageHandler | None = None
+    show_calc_other_menu_handler: MessageHandler | None = None
 
 
 async def _run_slash(handler: MessageHandler, client: ClientRef, message: Message, command: str) -> None:
@@ -168,6 +174,19 @@ async def dispatch_reply_keyboard_route(
         if deps.show_toolkit_calc_menu_handler:
             await deps.show_toolkit_calc_menu_handler(client, message)
         return True
+    _calc_cat = {
+        "/show_calc_finance_menu": "show_calc_finance_menu_handler",
+        "/show_calc_numbers_menu": "show_calc_numbers_menu_handler",
+        "/show_calc_convert_menu": "show_calc_convert_menu_handler",
+        "/show_calc_math_menu": "show_calc_math_menu_handler",
+        "/show_calc_text_menu": "show_calc_text_menu_handler",
+        "/show_calc_other_menu": "show_calc_other_menu_handler",
+    }
+    if mapped in _calc_cat:
+        h = getattr(deps, _calc_cat[mapped], None)
+        if h:
+            await h(client, message)
+        return True
     if mapped == "/show_rubika_menu":
         await deps.show_rubika_menu_handler(client, message)
         return True
@@ -205,14 +224,16 @@ async def dispatch_reply_keyboard_route(
         if user_id not in deps.admin_ids:
             await message.reply_text(tr(user_id, "admin_denied"))
             return True
-        deps.set_menu_section(user_id, MenuSection.ADMIN)
         if mapped == "/show_admin_users_menu":
+            deps.set_menu_section(user_id, MenuSection.ADMIN_USERS)
             title = tr(user_id, "admin_users_menu_title")
             menu = deps.build_admin_users_menu(user_id)
         elif mapped == "/show_admin_billing_menu":
+            deps.set_menu_section(user_id, MenuSection.ADMIN_BILLING)
             title = tr(user_id, "admin_billing_menu_title")
             menu = deps.build_admin_billing_menu(user_id)
         elif mapped == "/show_admin_broadcast_menu":
+            deps.set_menu_section(user_id, MenuSection.ADMIN_BROADCAST)
             title = tr(user_id, "admin_broadcast_menu_title")
             menu = (
                 deps.build_admin_broadcast_menu(user_id)
@@ -220,6 +241,7 @@ async def dispatch_reply_keyboard_route(
                 else deps.build_admin_menu(user_id)
             )
         else:
+            deps.set_menu_section(user_id, MenuSection.ADMIN_MAINTENANCE)
             title = tr(user_id, "admin_maintenance_menu_title")
             menu = deps.build_admin_maintenance_menu(user_id)
         await message.reply_text(title, reply_markup=menu, parse_mode=None)

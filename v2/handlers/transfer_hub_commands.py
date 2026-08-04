@@ -76,12 +76,23 @@ async def handle_show_bale_menu(deps: TransferHubDeps, client: Any, message: Mes
     )
 
 
+async def _reply_need_connect(deps: TransferHubDeps, message: Message, uid: int, key: str, *, kind: str) -> None:
+    from v2.core.connect_cta import connect_keyboard
+
+    kb = connect_keyboard(
+        bale=(kind == "bale"),
+        drive=(kind == "drive"),
+        lang="en" if deps.tr(uid, "btn_back_main") == "Back" else "fa",
+    )
+    await message.reply_text(deps.tr(uid, key), reply_markup=kb, parse_mode=None)
+
+
 async def handle_bale_status(deps: TransferHubDeps, client: Any, message: Message) -> None:
     uid = message.from_user.id
     deps.set_menu_section(uid, MenuSection.BALE)
     creds = load_bale_credentials(deps.queue, uid)
     if not creds.bot_token:
-        await message.reply_text(deps.tr(uid, "bale_not_connected"), parse_mode=None)
+        await _reply_need_connect(deps, message, uid, "bale_not_connected", kind="bale")
         return
     ok, detail = BaleTransferAdapter().healthcheck(creds.bot_token)
     chat_detail = ""
@@ -111,7 +122,7 @@ async def handle_bale_set_chat(
     token, _chat = deps.get_bale_credentials(uid)
     parts = (message.text or "").split(maxsplit=1)
     if not token:
-        await message.reply_text(deps.tr(uid, "bale_not_connected"), parse_mode=None)
+        await _reply_need_connect(deps, message, uid, "bale_not_connected", kind="bale")
         return
     if len(parts) < 2 or not parts[1].strip():
         if set_state_preserving_menu:
@@ -144,7 +155,7 @@ async def handle_drive_status(deps: TransferHubDeps, client: Any, message: Messa
     deps.set_menu_section(uid, MenuSection.DRIVE)
     dc = load_drive_credentials(deps.queue, deps.base_dir, uid)
     if not dc.ready:
-        await message.reply_text(deps.tr(uid, "drive_not_connected"), parse_mode=None)
+        await _reply_need_connect(deps, message, uid, "drive_not_connected", kind="drive")
         return
     ok, detail = GoogleDriveTransferAdapter().healthcheck(
         service_account_path=str(dc.service_account_path) if dc.service_account_path else None,
@@ -163,7 +174,7 @@ async def handle_drive_ls(deps: TransferHubDeps, client: Any, message: Message) 
     deps.set_menu_section(uid, MenuSection.DRIVE)
     dc = load_drive_credentials(deps.queue, deps.base_dir, uid)
     if not dc.ready:
-        await message.reply_text(deps.tr(uid, "drive_not_connected"), parse_mode=None)
+        await _reply_need_connect(deps, message, uid, "drive_not_connected", kind="drive")
         return
     parts = (message.text or "").split(maxsplit=1)
     folder_id = parts[1].strip() if len(parts) > 1 and parts[1].strip() else dc.folder_id
@@ -329,7 +340,7 @@ async def handle_drive_download_command(
     parts = (message.text or "").split(maxsplit=1)
     dc = load_drive_credentials(deps.queue, deps.base_dir, uid)
     if not dc.ready:
-        await message.reply_text(deps.tr(uid, "drive_not_connected"), parse_mode=None)
+        await _reply_need_connect(deps, message, uid, "drive_not_connected", kind="drive")
         return
     if len(parts) < 2 or not parts[1].strip():
         if set_state_preserving_menu:

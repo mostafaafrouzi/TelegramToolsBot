@@ -82,6 +82,43 @@ def convert_date(date_str: str, *, lang: str = "fa") -> tuple[bool, str]:
         return False, str(e)[:200]
 
 
+def add_days(date_str: str, days: int, *, lang: str = "fa") -> tuple[bool, str]:
+    """Add (or subtract) calendar days to a Gregorian/Solar date."""
+    from datetime import timedelta
+
+    ok, parsed = _parse_birth_date(date_str)
+    if not ok:
+        detail = str(parsed)
+        if lang == "en":
+            return False, f"Invalid date ({detail}). Use YYYY/MM/DD."
+        return False, f"تاریخ نامعتبر ({detail}). فرمت: YYYY/MM/DD."
+    base: date = parsed  # type: ignore[assignment]
+    try:
+        days_i = int(days)
+    except (TypeError, ValueError):
+        return False, "invalid_days" if lang == "en" else "تعداد روز نامعتبر است."
+    if abs(days_i) > 36500:
+        return False, "days_out_of_range" if lang == "en" else "بازه روزها خیلی بزرگ است."
+    result = base + timedelta(days=days_i)
+    try:
+        import jdatetime
+
+        j = jdatetime.date.fromgregorian(date=result)
+        if lang == "en":
+            return True, (
+                f"📅 Add days\nStart: {base.isoformat()}\nDays: {days_i:+d}\n"
+                f"Gregorian: {result.isoformat()}\nSolar: {j.strftime('%Y/%m/%d')}"
+            )
+        return True, (
+            f"📅 افزودن روز\nشروع: {base.isoformat()}\nروز: {days_i:+d}\n"
+            f"میلادی: {result.isoformat()}\nشمسی: {j.strftime('%Y/%m/%d')}"
+        )
+    except ImportError:
+        if lang == "en":
+            return True, f"📅 Add days\nStart: {base.isoformat()}\n→ {result.isoformat()}"
+        return True, f"📅 افزودن روز\nشروع: {base.isoformat()}\n→ {result.isoformat()}"
+
+
 def date_diff(a: str, b: str, *, lang: str = "fa") -> tuple[bool, str]:
     ok1, d1 = _parse_birth_date(a)
     ok2, d2 = _parse_birth_date(b)

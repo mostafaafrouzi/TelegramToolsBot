@@ -15,6 +15,67 @@ from v2.transfer.ssh_client import sftp_list
 
 TranslateFn = Callable[..., str]
 
+
+def _ssh_auth_keyboard(uid: int, tr: TranslateFn) -> InlineKeyboardMarkup:
+    fa = tr(uid, "btn_back_main") != "Back"
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "🔑 رمز عبور" if fa else "🔑 Password",
+                    callback_data="sshauth:password",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📄 چسباندن کلید" if fa else "📄 Paste key",
+                    callback_data="sshauth:key",
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    "📎 فایل کلید" if fa else "📎 Key file",
+                    callback_data="sshauth:file",
+                )
+            ],
+        ]
+    )
+
+
+async def handle_ssh_auth_callback(
+    deps: SshWizardDeps,
+    client: Any,
+    callback_query: Any,
+    method: str,
+) -> bool:
+    uid = callback_query.from_user.id
+    state = deps.get_state(uid)
+    if state.get("step") != "await_ssh_add_auth":
+        await callback_query.answer()
+        return True
+    method = (method or "").strip().lower()
+    await callback_query.answer()
+    msg = callback_query.message
+    if method == "password":
+        deps.set_state_preserving_menu(uid, {**state, "step": "await_ssh_add_password"})
+        await msg.reply_text(deps.tr(uid, "ssh_wizard_ask_password"), parse_mode=None)
+        return True
+    if method == "key":
+        deps.set_state_preserving_menu(uid, {**state, "step": "await_ssh_add_key_paste"})
+        await msg.reply_text(deps.tr(uid, "ssh_wizard_ask_key_paste"), parse_mode=None)
+        return True
+    if method == "file":
+        deps.set_state_preserving_menu(uid, {**state, "step": "await_ssh_add_key_file"})
+        await msg.reply_text(deps.tr(uid, "ssh_wizard_ask_key_file"), parse_mode=None)
+        return True
+    await msg.reply_text(
+        deps.tr(uid, "ssh_wizard_ask_auth"),
+        reply_markup=_ssh_auth_keyboard(uid, deps.tr),
+        parse_mode=None,
+    )
+    return True
+
+
 _SSH_ADD_STEPS = frozenset(
     {
         "await_ssh_add_label",
@@ -331,7 +392,11 @@ async def dispatch_ssh_wizard(
             user_id,
             {**state, "step": "await_ssh_add_auth", "ssh_w_user": raw[:64]},
         )
-        await message.reply_text(deps.tr(user_id, "ssh_wizard_ask_auth"), parse_mode=None)
+        await message.reply_text(
+            deps.tr(user_id, "ssh_wizard_ask_auth"),
+            reply_markup=_ssh_auth_keyboard(user_id, deps.tr),
+            parse_mode=None,
+        )
         return True
 
     if step == "await_ssh_add_auth":
@@ -351,7 +416,11 @@ async def dispatch_ssh_wizard(
         if raw:
             await finish_ssh_add_from_state(deps, message, user_id, state, ssh_secret=raw)
             return True
-        await message.reply_text(deps.tr(user_id, "ssh_wizard_ask_auth"), parse_mode=None)
+        await message.reply_text(
+            deps.tr(user_id, "ssh_wizard_ask_auth"),
+            reply_markup=_ssh_auth_keyboard(user_id, deps.tr),
+            parse_mode=None,
+        )
         return True
 
     if step == "await_ssh_add_password":

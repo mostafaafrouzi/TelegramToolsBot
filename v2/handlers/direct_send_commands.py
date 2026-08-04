@@ -24,6 +24,7 @@ class DirectSendCommandDeps:
     get_drive_ready: Callable[[int], bool]
     build_settings_menu: Callable[[int], Any]
     build_main_menu: Callable[[int], Any]
+    build_transfer_menu: Callable[[int], Any] | None = None
 
 
 def _verify_target(deps: DirectSendCommandDeps, uid: int, target: str) -> Optional[str]:
@@ -73,7 +74,7 @@ async def handle_direct_mode(deps: DirectSendCommandDeps, client: Any, message: 
         deps.set_direct_mode_target(uid, None)
         await message.reply_text(
             deps.tr(uid, "direct_off"),
-            reply_markup=deps.build_main_menu(uid),
+            reply_markup=(deps.build_transfer_menu(uid) if deps.build_transfer_menu else deps.build_main_menu(uid)),
         )
         return
 

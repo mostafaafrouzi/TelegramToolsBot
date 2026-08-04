@@ -19,6 +19,7 @@ _NOBITEX_URL = "https://api.nobitex.ir/market/stats"
 _cache: dict[str, Any] = {"ts": 0.0, "bundle": None}
 _gold_cache: dict[str, float] = {}
 _gold_cache_ts: float = 0.0
+_quote_cache: dict[str, Any] = {}  # code -> market_board.Quote
 
 
 @dataclass(frozen=True)
@@ -86,7 +87,21 @@ def _tgju_pick(current: dict, *keys: str) -> Optional[float]:
     return None
 
 
+def _tgju_node(current: dict, *keys: str) -> Any:
+    for key in keys:
+        node = current.get(key)
+        if node is not None:
+            return node
+    return None
+
+
 def _fetch_tgju_bundle() -> Optional[RateBundle]:
+    from v2.toolkit.market_board import (
+        PROVIDER_LABEL_FA,
+        parse_quote_node,
+        record_snapshots,
+    )
+
     try:
         r = requests.get(_TGJU_URL, timeout=12)
         r.raise_for_status()
@@ -99,6 +114,20 @@ def _fetch_tgju_bundle() -> Optional[RateBundle]:
             return None
         usd = _to_rial(usd_raw, prefer_toman_band=True)
         rates: dict[str, float] = {"USD": usd}
+        quotes: dict[str, Any] = {}
+        usd_q = parse_quote_node("USD", _tgju_node(current, "price_dollar_rl", "price_dollar_dt"), unit="IRR")
+        if usd_q:
+            quotes["USD"] = usd_q.__class__(
+                code="USD",
+                price=usd,
+                unit="IRR",
+                d=usd_q.d,
+                dp=usd_q.dp,
+                dt=usd_q.dt,
+                ts=usd_q.ts,
+                high=usd_q.high,
+                low=usd_q.low,
+            )
         fx_map = {
             "EUR": ("price_eur", "price_eur_ex"),
             "GBP": ("price_gbp",),
@@ -110,50 +139,75 @@ def _fetch_tgju_bundle() -> Optional[RateBundle]:
             "CHF": ("price_chf",),
             "AUD": ("price_aud",),
             "SAR": ("price_sar",),
+            "SEK": ("price_sek",),
+            "NOK": ("price_nok",),
+            "NZD": ("price_nzd",),
+            "KRW": ("price_krw",),
+            "INR": ("price_inr",),
             "IQD": ("price_iqd",),
             "RUB": ("price_rub",),
         }
         for code, keys in fx_map.items():
-            raw = _tgju_pick(current, *keys)
-            if raw:
-                # TGJU free-market FX quotes are already in rial (not toman).
-                rates[code] = float(raw)
-        # Swedish krona (optional major)
-        sek = _tgju_pick(current, "price_sek")
-        if sek:
-            rates["SEK"] = float(sek)
-        usdt_raw = _tgju_pick(current, "usdt-irr", "price_usdt")
-        if usdt_raw:
-            usdt = _to_rial(usdt_raw, prefer_toman_band=True)
-            if usd > 500_000 and usdt < usd * 0.4:
+            node = _tgju_node(current, *keys)
+            q = parse_quote_node(code, node, unit="IRR")
+            if q:
+                rates[code] = q.price
+                quotes[code] = q
+        # USDT: prefer Nobitex later; avoid stale usdt-irr if wildly off
+        usdt_node = _tgju_node(current, "usdt-irr", "price_usdt")
+        usdt_q = parse_quote_node("USDT", usdt_node, unit="IRR")
+        usdt = None
+        if usdt_q:
+            usdt = _to_rial(usdt_q.price, prefer_toman_band=True)
+            ts = usdt_q.ts or ""
+            if ts.startswith("2020") or ts.startswith("2021"):
+                usdt = None
+            elif usd > 500_000 and usdt < usd * 0.4:
                 usdt *= 10.0
-            if abs(usdt - usd) / usd > 0.35:
-                usdt = usd
-            rates["USDT"] = usdt
-        else:
-            rates["USDT"] = usd
-        global _gold_cache, _gold_cache_ts
+            elif abs(usdt - usd) / usd > 0.35:
+                usdt = None
+        if usdt is None:
+            usdt = usd
+        rates["USDT"] = usdt
+        if usdt_q:
+            quotes["USDT"] = usdt_q.__class__(
+                code="USDT",
+                price=usdt,
+                unit="IRR",
+                d=usdt_q.d,
+                dp=usdt_q.dp,
+                dt=usdt_q.dt,
+                ts=usdt_q.ts,
+                high=usdt_q.high,
+                low=usdt_q.low,
+            )
+        global _gold_cache, _gold_cache_ts, _quote_cache
         gold: dict[str, float] = {}
-        oz = _tgju_pick(current, "ons")
-        if oz:
-            gold["XAU_OZ"] = float(oz)
-        for code, keys in (
-            ("MESGHAL", ("mesghal",)),
-            ("GOLD18", ("tgju_gold_irg18",)),
-            ("SEKEE", ("sekee", "retail_sekee")),
-            ("SEKEB", ("sekeb", "retail_sekeb")),
-            ("NIM", ("nim", "retail_nim")),
-            ("ROB", ("rob", "retail_rob")),
-            ("GERAMI", ("gerami", "retail_gerami")),
+        for code, keys, unit in (
+            ("XAU_OZ", ("ons",), "USD"),
+            ("XAG_OZ", ("silver",), "USD"),
+            ("MESGHAL", ("mesghal",), "IRR"),
+            ("GOLD18", ("tgju_gold_irg18",), "IRR"),
+            ("SEKEE", ("sekee", "retail_sekee"), "IRR"),
+            ("SEKEB", ("sekeb", "retail_sekeb"), "IRR"),
+            ("NIM", ("nim", "retail_nim"), "IRR"),
+            ("ROB", ("rob", "retail_rob"), "IRR"),
+            ("GERAMI", ("gerami", "retail_gerami"), "IRR"),
         ):
-            raw = _tgju_pick(current, *keys)
-            if raw:
-                gold[code] = float(raw)
+            q = parse_quote_node(code, _tgju_node(current, *keys), unit=unit)
+            if q:
+                gold[code] = q.price
+                quotes[code] = q
         _gold_cache = gold
         _gold_cache_ts = time.time()
+        _quote_cache = quotes
+        try:
+            record_snapshots(quotes)
+        except Exception:
+            pass
         return RateBundle(
             rates=rates,
-            source="TGJU",
+            source=PROVIDER_LABEL_FA,
             market="free_market",
             fetched_at=time.time(),
         )
@@ -406,96 +460,58 @@ def currency_convert(
     unit = converted_f / amount if amount else converted_f
     usd_irr = bundle.rates.get("USD") or 0.0
     toman_per_usd = usd_irr / 10.0 if usd_irr else 0.0
-    src_line_fa = f"منبع: {bundle.source}"
-    src_line_en = f"Source: {bundle.source}"
+    from v2.core import msg_format as mf
+    from v2.toolkit.market_board import PROVIDER_LABEL_EN, PROVIDER_LABEL_FA
+
     if bundle.market == "official":
-        src_line_fa += " (بین‌بانکی/رسمی — ممکن است با بازار آزاد فرق داشته باشد)"
-        src_line_en += " (official/interbank — may differ from free market)"
+        src = (
+            "Official / interbank (may differ from free market)"
+            if lang == "en"
+            else "بین‌بانکی/رسمی (ممکن است با بازار آزاد فرق داشته باشد)"
+        )
     elif bundle.market == "free_market":
-        src_line_fa += " (بازار آزاد ایران)"
-        src_line_en += " (Iran free market)"
+        src = PROVIDER_LABEL_EN if lang == "en" else PROVIDER_LABEL_FA
+    else:
+        src = bundle.source
     ts = _fmt_ts(bundle.fetched_at, lang)
 
     if lang == "en":
-        return True, (
-            f"💱 Currency convert\n\n"
-            f"{amount:g} {_display_code(fc)} = {converted_f:,.2f} {_display_code(tc)}\n"
-            f"Rate: 1 {_display_code(fc)} ≈ {unit:,.4f} {_display_code(tc)}\n\n"
-            f"USD free market ≈ {usd_irr:,.0f} IRR ({toman_per_usd:,.0f} toman)\n"
-            f"{src_line_en}\n"
-            f"Updated: {ts}"
+        return True, mf.join(
+            mf.title("💱", "Currency convert"),
+            mf.kv("Result", f"{amount:g} {_display_code(fc)} = {converted_f:,.2f} {_display_code(tc)}"),
+            mf.kv("Rate", f"1 {_display_code(fc)} ≈ {unit:,.4f} {_display_code(tc)}"),
+            mf.kv("USD", f"{usd_irr:,.0f} IRR ({toman_per_usd:,.0f} toman)"),
+            mf.kv("Market", src),
+            mf.updated_line(ts, lang=lang),
         )
-    return True, (
-        f"💱 تبدیل ارز\n\n"
-        f"{amount:g} {_display_code(fc)} = {converted_f:,.2f} {_display_code(tc)}\n"
-        f"نرخ: 1 {_display_code(fc)} ≈ {unit:,.4f} {_display_code(tc)}\n\n"
-        f"دلار آزاد ≈ {usd_irr:,.0f} ریال ({toman_per_usd:,.0f} تومان)\n"
-        f"{src_line_fa}\n"
-        f"به‌روزرسانی: {ts}"
+    return True, mf.join(
+        mf.title("💱", "تبدیل ارز"),
+        mf.kv("نتیجه", f"{amount:g} {_display_code(fc)} = {converted_f:,.2f} {_display_code(tc)}"),
+        mf.kv("نرخ", f"1 {_display_code(fc)} ≈ {unit:,.4f} {_display_code(tc)}"),
+        mf.kv("دلار", f"{usd_irr:,.0f} ریال ({toman_per_usd:,.0f} تومان)"),
+        mf.kv("بازار", src),
+        mf.updated_line(ts, lang=lang),
     )
 
 
-_MARKET_FX_ORDER = (
-    "USD", "EUR", "GBP", "JPY", "AED", "TRY", "CNY", "CAD", "CHF",
-    "AUD", "SAR", "SEK", "IQD", "RUB", "USDT",
-)
-_MARKET_GOLD_ORDER = (
-    "XAU_OZ", "MESGHAL", "GOLD18", "SEKEE", "SEKEB", "NIM", "ROB", "GERAMI",
-)
-_MARKET_LABELS_FA = {
-    "USD": "دلار آمریکا", "EUR": "یورو", "GBP": "پوند", "JPY": "ین ژاپن",
-    "AED": "درهم امارات", "TRY": "لیر ترکیه", "CNY": "یوآن چین", "CAD": "دلار کانادا",
-    "CHF": "فرانک سوئیس", "AUD": "دلار استرالیا", "SAR": "ریال سعودی", "SEK": "کرون سوئد",
-    "IQD": "دینار عراق", "RUB": "روبل روسیه", "USDT": "تتر",
-    "XAU_OZ": "انس طلا (دلار)", "MESGHAL": "مثقال طلا", "GOLD18": "طلای ۱۸ عیار (گرم)",
-    "SEKEE": "سکه امامی", "SEKEB": "سکه بهار آزادی", "NIM": "نیم سکه", "ROB": "ربع سکه",
-    "GERAMI": "سکه گرمی",
-}
-_MARKET_LABELS_EN = {
-    "USD": "US Dollar", "EUR": "Euro", "GBP": "Pound", "JPY": "Yen",
-    "AED": "UAE Dirham", "TRY": "Turkish Lira", "CNY": "Yuan", "CAD": "Canadian Dollar",
-    "CHF": "Swiss Franc", "AUD": "Australian Dollar", "SAR": "Saudi Riyal", "SEK": "Swedish Krona",
-    "IQD": "Iraqi Dinar", "RUB": "Ruble", "USDT": "Tether",
-    "XAU_OZ": "Gold ounce (USD)", "MESGHAL": "Gold mesghal", "GOLD18": "18k gold /g",
-    "SEKEE": "Emami coin", "SEKEB": "Bahar Azadi coin", "NIM": "Half coin", "ROB": "Quarter coin",
-    "GERAMI": "Gram coin",
-}
+def market_quotes_report(*, lang: str = "fa", section: str = "gold") -> tuple[bool, str]:
+    """Independent market board (HTML). section: gold|usd|eur|gbp|jpy|majors|hub|all."""
+    from v2.toolkit.market_board import format_board, hub_text
 
-
-def market_quotes_report(*, lang: str = "fa", section: str = "all") -> tuple[bool, str]:
-    """TGJU-inspired board: major FX + gold/coins (free market)."""
     ok, bundle_or_err = get_irr_rate_bundle(force_refresh=False)
     if not ok or not isinstance(bundle_or_err, RateBundle):
         return False, str(bundle_or_err)
     b = bundle_or_err
-    labels = _MARKET_LABELS_EN if lang == "en" else _MARKET_LABELS_FA
-    lines: list[str] = []
-    lines.append("Iran free-market board" if lang == "en" else "تابلوی نرخ آزاد (الهام از TGJU)")
-    lines.append(("Source: " if lang == "en" else "منبع: ") + b.source)
-    lines.append(("Updated: " if lang == "en" else "به‌روزرسانی: ") + _fmt_ts(b.fetched_at, lang))
-    sec = (section or "all").lower()
-    if sec in ("all", "fx", "currency"):
-        lines.append("")
-        lines.append("FX" if lang == "en" else "ارزها (ریال)")
-        for code in _MARKET_FX_ORDER:
-            val = b.rates.get(code)
-            if not val:
-                continue
-            name = labels.get(code, code)
-            lines.append(f"• {name} ({code}): {val:,.0f} IRR ≈ {val/10.0:,.0f} toman")
-    if sec in ("all", "gold", "coin"):
-        lines.append("")
-        lines.append("Gold / coins" if lang == "en" else "طلا و سکه")
-        gold = _gold_cache if _gold_cache else {}
-        for code in _MARKET_GOLD_ORDER:
-            val = gold.get(code)
-            if not val:
-                continue
-            name = labels.get(code, code)
-            if code == "XAU_OZ":
-                lines.append(f"• {name}: {val:,.2f} USD")
-            else:
-                lines.append(f"• {name}: {val:,.0f} IRR ≈ {val/10.0:,.0f} toman")
-    lines.append("")
-    lines.append("Convert: /world_currency" if lang == "en" else "تبدیل: /world_currency")
-    return True, chr(10).join(lines)
+    sec = (section or "gold").lower().strip()
+    if sec in ("hub", "menu", "all"):
+        return True, hub_text(lang=lang)
+    if sec in ("fx", "currency"):
+        sec = "majors"
+    if sec in ("dollar", "us"):
+        sec = "usd"
+    if sec in ("coin", "coins"):
+        sec = "gold"
+    body = format_board(sec, _quote_cache, lang=lang, fetched_at=b.fetched_at)
+    if not body:
+        return False, "unknown_board" if lang == "en" else "تابلو ناشناخته"
+    return True, body

@@ -9,6 +9,7 @@ from typing import Any, Callable, Optional
 from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from v2.toolkit.calendar_light import age_report, calendar_report
+from v2.core.msg_format import reply_html
 from v2.toolkit.fx_light import currency_convert, market_quotes_report
 from v2.toolkit.timezone_light import timezone_report
 from v2.toolkit.weather_light import air_quality_report, recent_earthquakes, weather_report
@@ -71,20 +72,31 @@ def _commit_world(deps: WorldCommandDeps, uid: int) -> None:
             pass
 
 
-async def handle_markets(deps: WorldCommandDeps, client: Any, message: Message) -> None:
+async def handle_markets(deps: WorldCommandDeps, client: Any, message: Message, *, board: str = "") -> None:
     uid = message.from_user.id
     if not await _guard_world(deps, uid, message):
         return
-    section = "all"
-    parts = (message.text or "").split(maxsplit=1)
-    if len(parts) > 1:
-        arg = parts[1].strip().lower()
-        if arg in ("fx", "currency", "gold", "coin", "all"):
-            section = arg
+    section = (board or "").strip().lower()
+    if not section:
+        parts = (message.text or "").split(maxsplit=1)
+        if len(parts) > 1:
+            section = parts[1].strip().lower()
+        else:
+            section = "hub"
     ok, body = await asyncio.to_thread(market_quotes_report, lang=_lang(deps, uid), section=section)
     if ok:
         _commit_world(deps, uid)
-    await message.reply_text(body if ok else deps.tr(uid, "world_error", detail=body), parse_mode=None)
+        from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
+        kb = InlineKeyboardMarkup(
+            [[InlineKeyboardButton(deps.tr(uid, "btn_world_currency"), callback_data="imenu:currency")]]
+        )
+        if "<b>" in body:
+            await reply_html(message, body, reply_markup=kb)
+        else:
+            await message.reply_text(body, reply_markup=kb, parse_mode=None)
+        return
+    await message.reply_text(deps.tr(uid, "world_error", detail=body), parse_mode=None)
 
 
 async def handle_calendar(deps: WorldCommandDeps, client: Any, message: Message) -> None:
@@ -93,7 +105,7 @@ async def handle_calendar(deps: WorldCommandDeps, client: Any, message: Message)
         return
     body = await asyncio.to_thread(calendar_report, lang=_lang(deps, uid))
     _commit_world(deps, uid)
-    await message.reply_text(body, parse_mode=None)
+    await message.reply_text(body, parse_mode=None)  # plain calendar is fine
 
 
 async def handle_earthquakes(deps: WorldCommandDeps, client: Any, message: Message) -> None:
@@ -138,11 +150,53 @@ async def dispatch_world_wizard(
         return True
 
     if step == "await_currency_amount":
-        deps.set_state_preserving_menu(user_id, {"step": "await_currency_pair", "amount": text.strip()})
-        await message.reply_text(deps.tr(user_id, "currency_ask_pair"), parse_mode=None)
+        amount_s = text.strip()
+        try:
+            float(amount_s.replace(",", ""))
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "currency_bad_amount"), parse_mode=None)
+            return True
+        await _after_currency_amount(deps, user_id, amount_s, message)
+        return True
+
+    if step == "await_currency_from":
+        fc = text.strip().upper()
+        if not fc:
+            await message.reply_text(deps.tr(user_id, "currency_ask_from"), parse_mode=None)
+            return True
+        deps.set_state_preserving_menu(
+            user_id, {"step": "await_currency_to", "amount": state.get("amount"), "from_code": fc}
+        )
+        await message.reply_text(deps.tr(user_id, "currency_ask_to"), parse_mode=None)
+        return True
+
+    if step == "await_currency_to":
+        amount_s = str(state.get("amount") or "").strip()
+        fc = str(state.get("from_code") or "").strip().upper()
+        tc = text.strip().upper()
+        try:
+            amount = float(amount_s.replace(",", ""))
+        except ValueError:
+            await message.reply_text(deps.tr(user_id, "currency_bad_amount"), parse_mode=None)
+            return True
+        if not tc:
+            await message.reply_text(deps.tr(user_id, "currency_ask_to"), parse_mode=None)
+            return True
+        if not await _guard_world(deps, user_id, message):
+            deps.clear_state(user_id)
+            return True
+        ok, body = await asyncio.to_thread(currency_convert, amount, fc, tc, lang=lang)
+        if ok:
+            _commit_world(deps, user_id)
+        deps.clear_state(user_id)
+        if ok and "<b>" in body:
+            await reply_html(message, body)
+        else:
+            await message.reply_text(body if ok else deps.tr(user_id, "world_error", detail=body), parse_mode=None)
         return True
 
     if step == "await_currency_pair":
+        # Back-compat: "USD IRR" still accepted
         amount_s = str(state.get("amount") or text).strip()
         try:
             amount = float(amount_s.replace(",", ""))
@@ -150,8 +204,15 @@ async def dispatch_world_wizard(
             await message.reply_text(deps.tr(user_id, "currency_bad_amount"), parse_mode=None)
             return True
         parts = text.strip().split()
+        if len(parts) == 1 and parts[0].isalpha():
+            deps.set_state_preserving_menu(
+                user_id, {"step": "await_currency_to", "amount": amount_s, "from_code": parts[0].upper()}
+            )
+            await message.reply_text(deps.tr(user_id, "currency_ask_to"), parse_mode=None)
+            return True
         if len(parts) < 2:
-            await message.reply_text(deps.tr(user_id, "currency_ask_pair"), parse_mode=None)
+            deps.set_state_preserving_menu(user_id, {"step": "await_currency_from", "amount": amount_s})
+            await message.reply_text(deps.tr(user_id, "currency_ask_from"), parse_mode=None)
             return True
         if not await _guard_world(deps, user_id, message):
             deps.clear_state(user_id)
@@ -160,7 +221,10 @@ async def dispatch_world_wizard(
         if ok:
             _commit_world(deps, user_id)
         deps.clear_state(user_id)
-        await message.reply_text(body if ok else deps.tr(user_id, "world_error", detail=body), parse_mode=None)
+        if ok and "<b>" in body:
+            await reply_html(message, body)
+        else:
+            await message.reply_text(body if ok else deps.tr(user_id, "world_error", detail=body), parse_mode=None)
         return True
 
     if step == "await_timezone_place":
@@ -222,6 +286,21 @@ async def start_currency_wizard(deps: WorldCommandDeps, message: Message) -> Non
     if deps.set_menu_section:
         deps.set_menu_section(uid, MenuSection.WORLD)
     await message.reply_text(deps.tr(uid, "currency_ask_amount"), reply_markup=kb, parse_mode=None)
+
+
+# After amount, go to from-code (not combined pair)
+async def _after_currency_amount(deps: WorldCommandDeps, user_id: int, amount_s: str, message: Message) -> None:
+    deps.set_state_preserving_menu(user_id, {"step": "await_currency_from", "amount": amount_s})
+    kb = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("USD", callback_data="fxfrom:USD"),
+                InlineKeyboardButton("EUR", callback_data="fxfrom:EUR"),
+                InlineKeyboardButton("IRR", callback_data="fxfrom:IRR"),
+            ]
+        ]
+    )
+    await message.reply_text(deps.tr(user_id, "currency_ask_from"), reply_markup=kb, parse_mode=None)
 
 
 async def start_timezone_wizard(deps: WorldCommandDeps, message: Message) -> None:

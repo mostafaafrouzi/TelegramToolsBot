@@ -29,6 +29,17 @@ def _log_bot_reply(user_id: int, text: str, *, handler: str) -> None:
     log_interaction("bot_reply", user_id=user_id, handler=handler, text=text)
 
 
+async def _reply_cf_need_connect(deps: "CloudflareCommandDeps", message: Message, uid: int) -> None:
+    from v2.core.connect_cta import connect_keyboard
+
+    lang = "en" if deps.tr(uid, "btn_back_main") == "Back" else "fa"
+    await message.reply_text(
+        deps.tr(uid, "cf_not_connected"),
+        reply_markup=connect_keyboard(cloudflare=True, lang=lang),
+        parse_mode=None,
+    )
+
+
 @dataclass(frozen=True)
 class CloudflareCommandDeps:
     tr: TranslateFn
@@ -140,7 +151,7 @@ async def dispatch_cloudflare_wizard(message: Message, user_id: int, state: dict
         token = deps.get_token(user_id)
         if not token:
             deps.clear_state(user_id)
-            await message.reply_text(deps.tr(user_id, "cf_not_connected"), parse_mode=None)
+            await _reply_cf_need_connect(deps, message, user_id)
             return True
         ok, detail = await asyncio.to_thread(
             create_dns_record,
@@ -247,7 +258,7 @@ async def handle_cf_status(deps: CloudflareCommandDeps, client: Any, message: Me
     deps.set_menu_section(uid, MenuSection.CLOUDFLARE)
     token = deps.get_token(uid)
     if not token:
-        await message.reply_text(deps.tr(uid, "cf_not_connected"), parse_mode=None)
+        await _reply_cf_need_connect(deps, message, uid)
         return
     ok, detail = await asyncio.to_thread(verify_token, token)
     await message.reply_text(
@@ -261,7 +272,7 @@ async def handle_cf_zones(deps: CloudflareCommandDeps, client: Any, message: Mes
     deps.set_menu_section(uid, MenuSection.CLOUDFLARE)
     token = deps.get_token(uid)
     if not token:
-        await message.reply_text(deps.tr(uid, "cf_not_connected"), parse_mode=None)
+        await _reply_cf_need_connect(deps, message, uid)
         return
     ok, detail = await asyncio.to_thread(list_zones, token)
     await message.reply_text(
@@ -275,7 +286,7 @@ async def handle_cf_dns(deps: CloudflareCommandDeps, client: Any, message: Messa
     deps.set_menu_section(uid, MenuSection.CLOUDFLARE)
     token = deps.get_token(uid)
     if not token:
-        await message.reply_text(deps.tr(uid, "cf_not_connected"), parse_mode=None)
+        await _reply_cf_need_connect(deps, message, uid)
         return
     parts = (message.text or "").split(maxsplit=2)
     if len(parts) >= 2 and parts[1].strip():
@@ -301,7 +312,7 @@ async def prompt_cf_dns_zone_picker(
     uid = message.from_user.id
     token = deps.get_token(uid)
     if not token:
-        await message.reply_text(deps.tr(uid, "cf_not_connected"), parse_mode=None)
+        await _reply_cf_need_connect(deps, message, uid)
         return
     ok, rows = await asyncio.to_thread(list_zones_rows, token)
     if not ok:

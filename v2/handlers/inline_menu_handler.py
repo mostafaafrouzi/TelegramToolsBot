@@ -48,6 +48,11 @@ class InlineMenuDeps:
     plan_compare_handler: Callable[..., Awaitable[None]] | None = None
     show_feed_menu_handler: Callable[..., Awaitable[None]] | None = None
     calc_kit_deps: Any = None
+    show_transfer_menu_handler: Callable[..., Awaitable[None]] | None = None
+    show_toolkit_menu_handler: Callable[..., Awaitable[None]] | None = None
+    show_world_menu_handler: Callable[..., Awaitable[None]] | None = None
+    show_plan_menu_handler: Callable[..., Awaitable[None]] | None = None
+    show_settings_menu_handler: Callable[..., Awaitable[None]] | None = None
 
 
 _IMENU_ACTIONS = frozenset(
@@ -177,7 +182,11 @@ async def dispatch_inline_menu_callback(
         return True
     if k == "markets":
         await callback_query.answer()
-        await handle_markets(deps.world_deps, client, msg)
+        await handle_markets(deps.world_deps, client, msg, board="hub")
+        return True
+    if k in ("gold", "usd", "eur", "gbp", "jpy", "majors"):
+        await callback_query.answer()
+        await handle_markets(deps.world_deps, client, msg, board=k)
         return True
     if k == "toolkit_calc":
         await callback_query.answer()
@@ -279,24 +288,35 @@ async def dispatch_inline_menu_callback(
         await deps.admin_handler(client, msg)
         return True
 
-    hub_keys = frozenset(
-        {
-            "main",
-            "toolkit",
-            "toolkit_net",
-            "toolkit_crypto",
-            "world",
-            "transfer",
-            "settings",
-            "plan",
-            "link",
-        }
-    )
-    if k in hub_keys:
-        if k != "main":
-            maybe_disable_direct_mode(
-                user_id, deps.get_direct_mode_target, deps.set_direct_mode_target
-            )
+    # Hybrid: top-level shortcuts open Reply keyboards (not a parallel inline tree).
+    reply_hub = {
+        "transfer": deps.show_transfer_menu_handler,
+        "toolkit": deps.show_toolkit_menu_handler,
+        "world": deps.show_world_menu_handler,
+        "feeds": deps.show_feed_menu_handler,
+        "plan": deps.show_plan_menu_handler,
+        "settings": deps.show_settings_menu_handler,
+        "link": deps.show_link_direct_menu_handler,
+    }
+    if k in reply_hub and reply_hub[k]:
+        maybe_disable_direct_mode(
+            user_id, deps.get_direct_mode_target, deps.set_direct_mode_target
+        )
+        await callback_query.answer()
+        await reply_hub[k](client, msg)
+        return True
+
+    if k == "main":
+        await callback_query.answer()
+        await show_inline_menu(deps, client, msg, user_id, "main", edit=True)
+        return True
+
+    # In-tool submenus only (network/crypto/calc pickers stay inline).
+    tool_keys = frozenset({"toolkit_net", "toolkit_crypto", "toolkit_calc"})
+    if k in tool_keys:
+        maybe_disable_direct_mode(
+            user_id, deps.get_direct_mode_target, deps.set_direct_mode_target
+        )
         await callback_query.answer()
         await show_inline_menu(deps, client, msg, user_id, k, edit=True)
         return True

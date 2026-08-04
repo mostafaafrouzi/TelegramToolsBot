@@ -20,6 +20,7 @@ def _kb(rows: list[list[InlineKeyboardButton]]) -> InlineKeyboardMarkup:
 
 
 def build_inline_main(uid: int, tr: Translator, *, is_admin: bool) -> tuple[str, InlineKeyboardMarkup]:
+    """One-shot shortcut to reply menus — not a parallel navigation tree."""
     body = tr(uid, "inline_main_title")
     rows = [
         _row(
@@ -27,16 +28,12 @@ def build_inline_main(uid: int, tr: Translator, *, is_admin: bool) -> tuple[str,
             InlineKeyboardButton(tr(uid, "btn_main_toolkit"), callback_data="imenu:toolkit"),
         ),
         _row(
-            InlineKeyboardButton(tr(uid, "btn_main_link_direct"), callback_data="imenu:link"),
-            InlineKeyboardButton(tr(uid, "btn_main_settings"), callback_data="imenu:settings"),
+            InlineKeyboardButton(tr(uid, "inline_world_menu"), callback_data="imenu:world"),
+            InlineKeyboardButton(tr(uid, "btn_main_feed"), callback_data="imenu:feeds"),
         ),
         _row(
             InlineKeyboardButton(tr(uid, "btn_main_plan_section"), callback_data="imenu:plan"),
             InlineKeyboardButton(tr(uid, "btn_main_help"), callback_data="imenu:help"),
-        ),
-        _row(
-            InlineKeyboardButton(tr(uid, "inline_world_menu"), callback_data="imenu:world"),
-            InlineKeyboardButton(tr(uid, "btn_main_feed"), callback_data="imenu:feeds"),
         ),
     ]
     if is_admin:
@@ -172,9 +169,14 @@ def build_inline_world(uid: int, tr: Translator) -> tuple[str, InlineKeyboardMar
         ),
         _row(
             InlineKeyboardButton(tr(uid, "btn_world_currency"), callback_data="imenu:currency"),
-            InlineKeyboardButton(tr(uid, "btn_world_markets"), callback_data="imenu:markets"),
+            InlineKeyboardButton(tr(uid, "btn_world_gold"), callback_data="imenu:gold"),
         ),
         _row(
+            InlineKeyboardButton(tr(uid, "btn_world_usd"), callback_data="imenu:usd"),
+            InlineKeyboardButton(tr(uid, "btn_world_eur"), callback_data="imenu:eur"),
+        ),
+        _row(
+            InlineKeyboardButton(tr(uid, "btn_world_majors"), callback_data="imenu:majors"),
             InlineKeyboardButton(tr(uid, "btn_world_earthquake"), callback_data="imenu:quake"),
         ),
         _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
@@ -206,6 +208,7 @@ def build_inline_transfer(uid: int, tr: Translator) -> tuple[str, InlineKeyboard
             InlineKeyboardButton(tr(uid, "btn_transfer_drive"), callback_data="imenu:drive"),
             InlineKeyboardButton(tr(uid, "btn_transfer_files"), callback_data="imenu:files"),
         ),
+        _row(InlineKeyboardButton(tr(uid, "btn_main_settings"), callback_data="imenu:settings")),
         _row(InlineKeyboardButton(tr(uid, "btn_back_main"), callback_data="imenu:main")),
     ]
     return body, _kb(rows)

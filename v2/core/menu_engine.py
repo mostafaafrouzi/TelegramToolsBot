@@ -67,6 +67,20 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_toolkit_network": "/show_toolkit_network_menu",
     "btn_toolkit_crypto": "/show_toolkit_crypto_menu",
     "btn_toolkit_calc": "/show_toolkit_calc_menu",
+    "btn_calc_cat_finance": "/show_calc_finance_menu",
+    "btn_calc_cat_numbers": "/show_calc_numbers_menu",
+    "btn_calc_cat_convert": "/show_calc_convert_menu",
+    "btn_calc_cat_math": "/show_calc_math_menu",
+    "btn_calc_cat_text": "/show_calc_text_menu",
+    "btn_calc_cat_other": "/show_calc_other_menu",
+    "btn_back_calc": "/show_toolkit_calc_menu",
+    "btn_calc_bmi": "/calc_bmi",
+    "btn_calc_compound": "/calc_compound",
+    "btn_calc_log": "/calc_log",
+    "btn_calc_pct_error": "/calc_pct_error",
+    "btn_calc_linear": "/calc_linear",
+    "btn_calc_quadratic": "/calc_quadratic",
+    "btn_calc_add_days": "/calc_add_days",
     "btn_calc_percent": "/calc_percent",
     "btn_calc_loan": "/calc_loan",
     "btn_calc_deposit": "/calc_deposit",
@@ -93,6 +107,12 @@ _I18N_BUTTON_ROUTES: Dict[str, str] = {
     "btn_calc_case": "/calc_case",
     "btn_calc_wordcount": "/calc_wordcount",
     "btn_world_markets": "/world_markets",
+    "btn_world_gold": "/world_gold",
+    "btn_world_usd": "/world_usd",
+    "btn_world_eur": "/world_eur",
+    "btn_world_gbp": "/world_gbp",
+    "btn_world_jpy": "/world_jpy",
+    "btn_world_majors": "/world_majors",
     "btn_tool_dns": "/dns",
     "btn_tool_myip": "/myip",
     "btn_tool_ping": "/ping",
@@ -232,13 +252,14 @@ _SECTION_I18N_PRIORITY: Dict[str, frozenset[str]] = {
             "btn_cf_disconnect",
         }
     ),
-    "rubika": frozenset({"btn_rub_connect", "btn_rub_status"}),
+    "rubika": frozenset({"btn_rub_connect", "btn_rub_status", "btn_back_transfer"}),
     "bale": frozenset(
         {
             "btn_bale_connect",
             "btn_bale_status",
             "btn_bale_set_chat",
             "btn_bale_disconnect",
+            "btn_back_transfer",
         }
     ),
     "drive": frozenset(
@@ -248,8 +269,10 @@ _SECTION_I18N_PRIORITY: Dict[str, frozenset[str]] = {
             "btn_drive_ls",
             "btn_drive_download_help",
             "btn_drive_disconnect",
+            "btn_back_transfer",
         }
     ),
+    "files": frozenset({"btn_back_transfer"}),
     "settings": frozenset(
         {
             "btn_direct_rubika_on",
@@ -259,9 +282,30 @@ _SECTION_I18N_PRIORITY: Dict[str, frozenset[str]] = {
             "btn_direct_bale_off",
             "btn_direct_drive_off",
             "btn_netstatus",
+            "btn_back_transfer",
         }
     ),
+    "transfer": frozenset({"btn_back_main", "btn_main_settings"}),
+    "toolkit": frozenset({"btn_back_main"}),
+    "toolkit_network": frozenset({"btn_back_toolkit"}),
+    "toolkit_crypto": frozenset({"btn_back_toolkit"}),
+    "toolkit_calc": frozenset({"btn_back_toolkit"}),
+    "toolkit_calc_cat": frozenset({"btn_back_calc"}),
+    "admin": frozenset({"btn_back_main"}),
+    "admin_users": frozenset({"btn_back_admin"}),
+    "admin_billing": frozenset({"btn_back_admin"}),
+    "admin_maintenance": frozenset({"btn_back_admin"}),
+    "admin_broadcast": frozenset({"btn_back_admin"}),
+    "world": frozenset({"btn_back_main"}),
+    "feed": frozenset({"btn_back_main"}),
+    "plan": frozenset({"btn_back_main"}),
+    "ssh": frozenset({"btn_back_main"}),
+    "link_direct": frozenset({"btn_back_main"}),
 }
+
+_BACK_KEYS = frozenset(
+    {"btn_back_main", "btn_back_transfer", "btn_back_toolkit", "btn_back_admin", "btn_back_calc"}
+)
 
 
 def resolve_reply_button_route(
@@ -294,6 +338,14 @@ def resolve_reply_button_route(
             for key in matches:
                 if key in preferred:
                     return _I18N_BUTTON_ROUTES[key]
+        # Shared "Back" label: pick section-aware back key first.
+        back_hits = [k for k in matches if k in _BACK_KEYS]
+        if back_hits and preferred:
+            for key in back_hits:
+                if key in preferred:
+                    return _I18N_BUTTON_ROUTES[key]
+        if back_hits:
+            return _I18N_BUTTON_ROUTES[back_hits[0]]
         return _I18N_BUTTON_ROUTES[matches[0]]
     return None
 
@@ -327,7 +379,6 @@ def build_main_menu(user_id: int, tr: Translator, is_admin: bool) -> ReplyKeyboa
         tr(user_id, "btn_main_ssh"),
         tr(user_id, "btn_main_cloudflare"),
         tr(user_id, "btn_main_plan_section"),
-        tr(user_id, "btn_main_settings"),
         tr(user_id, "btn_main_help"),
     ]
     if is_admin:
@@ -373,6 +424,7 @@ def build_transfer_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_transfer_bale"),
                 tr(user_id, "btn_transfer_drive"),
                 tr(user_id, "btn_transfer_files"),
+                tr(user_id, "btn_main_settings"),
             ],
             3,
         )
@@ -389,7 +441,12 @@ def build_world_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
                 tr(user_id, "btn_world_calendar"),
                 tr(user_id, "btn_world_age"),
                 tr(user_id, "btn_world_currency"),
-                tr(user_id, "btn_world_markets"),
+                tr(user_id, "btn_world_gold"),
+                tr(user_id, "btn_world_usd"),
+                tr(user_id, "btn_world_eur"),
+                tr(user_id, "btn_world_gbp"),
+                tr(user_id, "btn_world_jpy"),
+                tr(user_id, "btn_world_majors"),
                 tr(user_id, "btn_world_earthquake"),
             ],
             3,
@@ -404,7 +461,7 @@ def build_rubika_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
             [tr(user_id, "btn_rub_connect"), tr(user_id, "btn_rub_status")],
             3,
         )
-        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_transfer")]]
     )
 
 
@@ -419,7 +476,7 @@ def build_bale_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
             ],
             3,
         )
-        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_transfer")]]
     )
 
 
@@ -435,7 +492,7 @@ def build_drive_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
             ],
             3,
         )
-        + [[tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_transfer")]]
     )
 
 
@@ -494,7 +551,7 @@ def build_toolkit_network_menu(user_id: int, tr: Translator) -> ReplyKeyboardMar
             ],
             3,
         )
-        + [[tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_toolkit")]]
     )
 
 
@@ -512,7 +569,7 @@ def build_toolkit_crypto_menu(user_id: int, tr: Translator) -> ReplyKeyboardMark
             ],
             3,
         )
-        + [[tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_toolkit")]]
     )
 
 
@@ -520,35 +577,101 @@ def build_toolkit_calc_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup
     return _reply(
         _grid(
             [
-                tr(user_id, "btn_calc_percent"),
-                tr(user_id, "btn_calc_loan"),
-                tr(user_id, "btn_calc_deposit"),
-                tr(user_id, "btn_calc_rial"),
-                tr(user_id, "btn_calc_words"),
-                tr(user_id, "btn_calc_unit"),
-                tr(user_id, "btn_calc_base"),
-                tr(user_id, "btn_calc_binary"),
-                tr(user_id, "btn_calc_fuel"),
-                tr(user_id, "btn_calc_plate"),
-                tr(user_id, "btn_calc_nid"),
-                tr(user_id, "btn_calc_datediff"),
-                tr(user_id, "btn_calc_dateconv"),
-                tr(user_id, "btn_calc_random"),
-                tr(user_id, "btn_calc_mean"),
-                tr(user_id, "btn_calc_power"),
-                tr(user_id, "btn_calc_sqrt"),
-                tr(user_id, "btn_calc_fact"),
-                tr(user_id, "btn_calc_prime"),
-                tr(user_id, "btn_calc_ielts"),
-                tr(user_id, "btn_calc_cig"),
-                tr(user_id, "btn_calc_rect"),
-                tr(user_id, "btn_calc_square"),
-                tr(user_id, "btn_calc_case"),
-                tr(user_id, "btn_calc_wordcount"),
+                tr(user_id, "btn_calc_cat_finance"),
+                tr(user_id, "btn_calc_cat_numbers"),
+                tr(user_id, "btn_calc_cat_convert"),
+                tr(user_id, "btn_calc_cat_math"),
+                tr(user_id, "btn_calc_cat_text"),
+                tr(user_id, "btn_calc_cat_other"),
             ],
-            3,
+            2,
         )
-        + [[tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_toolkit")]]
+    )
+
+
+def _calc_cat_menu(user_id: int, tr: Translator, keys: list[str]) -> ReplyKeyboardMarkup:
+    return _reply(_grid([tr(user_id, k) for k in keys], 3) + [[tr(user_id, "btn_back_calc")]])
+
+
+def build_calc_finance_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _calc_cat_menu(
+        user_id,
+        tr,
+        [
+            "btn_calc_percent",
+            "btn_calc_loan",
+            "btn_calc_deposit",
+            "btn_calc_compound",
+            "btn_calc_rial",
+            "btn_calc_fuel",
+            "btn_calc_cig",
+            "btn_calc_bmi",
+        ],
+    )
+
+
+def build_calc_numbers_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _calc_cat_menu(
+        user_id,
+        tr,
+        [
+            "btn_calc_words",
+            "btn_calc_random",
+            "btn_calc_mean",
+            "btn_calc_base",
+            "btn_calc_binary",
+            "btn_calc_pct_error",
+        ],
+    )
+
+
+def build_calc_convert_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _calc_cat_menu(
+        user_id,
+        tr,
+        [
+            "btn_calc_unit",
+            "btn_calc_datediff",
+            "btn_calc_dateconv",
+            "btn_calc_add_days",
+            "btn_calc_plate",
+            "btn_calc_nid",
+        ],
+    )
+
+
+def build_calc_math_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _calc_cat_menu(
+        user_id,
+        tr,
+        [
+            "btn_calc_power",
+            "btn_calc_sqrt",
+            "btn_calc_fact",
+            "btn_calc_prime",
+            "btn_calc_log",
+            "btn_calc_linear",
+            "btn_calc_quadratic",
+            "btn_calc_rect",
+            "btn_calc_square",
+        ],
+    )
+
+
+def build_calc_text_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _calc_cat_menu(
+        user_id,
+        tr,
+        ["btn_calc_case", "btn_calc_wordcount"],
+    )
+
+
+def build_calc_other_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
+    return _calc_cat_menu(
+        user_id,
+        tr,
+        ["btn_calc_ielts"],
     )
 
 
@@ -557,7 +680,7 @@ def build_files_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
         [
             [tr(user_id, "btn_send_content")],
             [tr(user_id, "btn_queue"), tr(user_id, "btn_clear_all")],
-            [tr(user_id, "btn_back_transfer"), tr(user_id, "btn_back_main")],
+            [tr(user_id, "btn_back_transfer")],
         ]
     )
 
@@ -566,7 +689,7 @@ def build_toolkit_zip_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
     return _reply(
         [
             [tr(user_id, "btn_zip_start"), tr(user_id, "btn_zip_end")],
-            [tr(user_id, "btn_back_toolkit"), tr(user_id, "btn_back_main")],
+            [tr(user_id, "btn_back_toolkit")],
         ]
     )
 
@@ -617,11 +740,15 @@ def build_settings_menu(
     elif target == "drive":
         rows.append([tr(user_id, "btn_direct_drive_off")])
     rows.append([tr(user_id, "btn_netstatus")])
-    rows.append([tr(user_id, "btn_back_main")])
+    rows.append([tr(user_id, "btn_back_transfer")])
     flat: List[str] = []
     for row in rows:
         flat.extend(row)
-    back = flat.pop() if flat and flat[-1] == tr(user_id, "btn_back_main") else tr(user_id, "btn_back_main")
+    back = (
+        flat.pop()
+        if flat and flat[-1] == tr(user_id, "btn_back_transfer")
+        else tr(user_id, "btn_back_transfer")
+    )
     body = [x for x in flat if x != back]
     return _reply(_grid(body, 3) + [[back]])
 
@@ -661,7 +788,7 @@ def build_admin_broadcast_menu(user_id: int, tr: Translator) -> ReplyKeyboardMar
             ],
             3,
         )
-        + [[tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")]]
+        + [[tr(user_id, "btn_back_admin")]]
     )
 
 
@@ -671,7 +798,7 @@ def build_admin_users_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarkup:
             [tr(user_id, "btn_admin_users_list")],
             [tr(user_id, "btn_admin_tier_help"), tr(user_id, "btn_admin_bonus_help")],
             [tr(user_id, "btn_admin_clear_prefs_help")],
-            [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
+            [tr(user_id, "btn_back_admin")],
         ]
     )
 
@@ -682,7 +809,7 @@ def build_admin_billing_menu(user_id: int, tr: Translator) -> ReplyKeyboardMarku
             [tr(user_id, "btn_admin_payment_lookup_help")],
             [tr(user_id, "btn_admin_payment_status_help")],
             [tr(user_id, "btn_admin_reconcile")],
-            [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
+            [tr(user_id, "btn_back_admin")],
         ]
     )
 
@@ -693,6 +820,6 @@ def build_admin_maintenance_menu(user_id: int, tr: Translator) -> ReplyKeyboardM
             [tr(user_id, "btn_admin_cleanup"), tr(user_id, "btn_admin_version")],
             [tr(user_id, "btn_admin_service_status"), tr(user_id, "btn_admin_tail_logs")],
             [tr(user_id, "btn_admin_job_help"), tr(user_id, "btn_netstatus")],
-            [tr(user_id, "btn_back_admin"), tr(user_id, "btn_back_main")],
+            [tr(user_id, "btn_back_admin")],
         ]
     )

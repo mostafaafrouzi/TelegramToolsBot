@@ -31,6 +31,7 @@ class ToolkitNetExtraDeps:
     toolkit_network_light_enabled: bool
     toolkit_quota_try: Callable[[int], tuple[bool, str]]
     toolkit_quota_commit: Callable[[int], None]
+    get_state: Callable[[int], dict] | None = None
 
 
 async def _run_tool(
@@ -97,18 +98,28 @@ async def handle_port_check(deps: ToolkitNetExtraDeps, client: Any, message: Mes
         return
     raw = payload_after_command(message.text or "").strip()
     if not raw:
-        deps.set_state_preserving_menu(uid, {"step": "await_toolkit_port_check"})
-        await message.reply_text(deps.tr(uid, "toolkit_port_check_send_only"), parse_mode=None)
+        deps.set_state_preserving_menu(uid, {"step": "await_toolkit_port_host"})
+        await message.reply_text(deps.tr(uid, "toolkit_port_ask_host"), parse_mode=None)
         return
     parts = raw.split()
+    if len(parts) == 1:
+        deps.set_state_preserving_menu(
+            uid, {"step": "await_toolkit_port_port", "port_host": parts[0][:255]}
+        )
+        await message.reply_text(deps.tr(uid, "toolkit_port_ask_port"), parse_mode=None)
+        return
     if len(parts) < 2:
-        await message.reply_text(deps.tr(uid, "toolkit_port_check_send_only"), parse_mode=None)
+        deps.set_state_preserving_menu(uid, {"step": "await_toolkit_port_host"})
+        await message.reply_text(deps.tr(uid, "toolkit_port_ask_host"), parse_mode=None)
         return
     host, port_s = parts[0], parts[1]
     try:
         port = int(port_s)
     except ValueError:
-        await message.reply_text(deps.tr(uid, "toolkit_port_check_send_only"), parse_mode=None)
+        deps.set_state_preserving_menu(
+            uid, {"step": "await_toolkit_port_port", "port_host": host[:255]}
+        )
+        await message.reply_text(deps.tr(uid, "toolkit_port_ask_port"), parse_mode=None)
         return
     ok, quota_msg = deps.toolkit_quota_try(uid)
     if not ok:
@@ -176,8 +187,8 @@ async def dispatch_toolkit_net_extra_wizard(
         fn, send_only = blacklist_check_report, "toolkit_blacklist_send_only"
     elif step == "await_toolkit_ssl":
         fn, send_only = ssl_cert_report, "toolkit_ssl_send_only"
-    elif step == "await_toolkit_port_check":
-        fn, send_only = None, "toolkit_port_check_send_only"
+    elif step in ("await_toolkit_port_check", "await_toolkit_port_host", "await_toolkit_port_port"):
+        fn, send_only = None, "toolkit_port_ask_host"
     else:
         return False
 
@@ -187,19 +198,46 @@ async def dispatch_toolkit_net_extra_wizard(
         return True
 
     raw = (text or "").strip()
-    if step == "await_toolkit_port_check":
+    if step == "await_toolkit_port_host":
         if not raw:
-            await message.reply_text(deps.tr(user_id, send_only), parse_mode=None)
+            await message.reply_text(deps.tr(user_id, "toolkit_port_ask_host"), parse_mode=None)
             return True
-        parts = raw.split()
-        if len(parts) < 2:
-            await message.reply_text(deps.tr(user_id, send_only), parse_mode=None)
-            return True
-        host, port_s = parts[0], parts[1]
+        host = raw.split()[0][:255]
+        deps.set_state_preserving_menu(
+            user_id, {"step": "await_toolkit_port_port", "port_host": host}
+        )
+        await message.reply_text(deps.tr(user_id, "toolkit_port_ask_port"), parse_mode=None)
+        return True
+    if step in ("await_toolkit_port_port", "await_toolkit_port_check"):
+        state = deps.get_state(user_id) if deps.get_state else {}
+        host = ""
+        port_s = ""
+        if step == "await_toolkit_port_port":
+            host = str((state or {}).get("port_host") or "")
+            if not raw:
+                await message.reply_text(deps.tr(user_id, "toolkit_port_ask_port"), parse_mode=None)
+                return True
+            port_s = raw.split()[0]
+        else:
+            if not raw:
+                await message.reply_text(deps.tr(user_id, "toolkit_port_ask_host"), parse_mode=None)
+                return True
+            parts = raw.split()
+            if len(parts) < 2:
+                deps.set_state_preserving_menu(
+                    user_id, {"step": "await_toolkit_port_port", "port_host": parts[0][:255]}
+                )
+                await message.reply_text(deps.tr(user_id, "toolkit_port_ask_port"), parse_mode=None)
+                return True
+            host, port_s = parts[0], parts[1]
         try:
             port = int(port_s)
         except ValueError:
-            await message.reply_text(deps.tr(user_id, send_only), parse_mode=None)
+            await message.reply_text(deps.tr(user_id, "toolkit_port_ask_port"), parse_mode=None)
+            return True
+        if not host:
+            deps.set_state_preserving_menu(user_id, {"step": "await_toolkit_port_host"})
+            await message.reply_text(deps.tr(user_id, "toolkit_port_ask_host"), parse_mode=None)
             return True
         ok, quota_msg = deps.toolkit_quota_try(user_id)
         if not ok:

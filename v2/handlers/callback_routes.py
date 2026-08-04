@@ -44,6 +44,10 @@ class CallbackRouteDeps:
     handle_cf_dns_delete_callback: Callable[..., Awaitable[bool]]
     handle_ssh_op_callback: Callable[..., Awaitable[bool]]
     dispatch_drive_auth_callback: Callable[..., Awaitable[bool]]
+    handle_cta_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_calc_mode_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_fx_from_callback: Callable[..., Awaitable[bool]] | None = None
+    handle_ssh_auth_callback: Callable[..., Awaitable[bool]] | None = None
 
 
 async def dispatch_callback_route(client: Any, callback_query: Any, deps: CallbackRouteDeps) -> bool:
@@ -164,6 +168,22 @@ async def dispatch_callback_route(client: Any, callback_query: Any, deps: Callba
             return False
         return await deps.handle_fx_quick_callback(
             client, callback_query, parts[1], parts[2], parts[3]
+        )
+
+    if data.startswith("cta:") and deps.handle_cta_callback:
+        return await deps.handle_cta_callback(client, callback_query, data.split(":", 1)[1])
+
+    if data.startswith("calcmode:") and deps.handle_calc_mode_callback:
+        parts = data.split(":")
+        if len(parts) >= 3:
+            return await deps.handle_calc_mode_callback(client, callback_query, parts[1], parts[2])
+
+    if data.startswith("fxfrom:") and deps.handle_fx_from_callback:
+        return await deps.handle_fx_from_callback(client, callback_query, data.split(":", 1)[1])
+
+    if data.startswith("sshauth:") and deps.handle_ssh_auth_callback:
+        return await deps.handle_ssh_auth_callback(
+            client, callback_query, data.split(":", 1)[1]
         )
 
     if data.startswith("feedview:"):

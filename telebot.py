@@ -189,6 +189,7 @@ from v2.handlers.toolkit_net_extra_commands import (
 from v2.handlers.ssh_wizard import (
     SshWizardDeps,
     dispatch_ssh_wizard,
+    handle_ssh_auth_callback,
     handle_ssh_op_callback,
     start_ssh_add_wizard,
     start_ssh_op_wizard,
@@ -210,6 +211,12 @@ from v2.handlers.cloudflare_commands import (
 from v2.handlers.toolkit_menu_commands import (
     ToolkitMenuDeps,
     handle_show_toolkit_calc_menu,
+    handle_show_calc_finance_menu,
+    handle_show_calc_numbers_menu,
+    handle_show_calc_convert_menu,
+    handle_show_calc_math_menu,
+    handle_show_calc_text_menu,
+    handle_show_calc_other_menu,
     handle_show_toolkit_crypto_menu,
     handle_show_toolkit_menu,
     handle_show_toolkit_network_menu,
@@ -419,7 +426,7 @@ I18N = {
             "📰 فیدخوان — RSS / یوتیوب / X با push و خلاصه روزانه\n"
             "☁️ Cloudflare — DNS شخصی · 📋 حساب — پلن و مصرف\n\n"
             "هر بخش منو راهنمای همان بخش را نشان می‌دهد.\n"
-            "/menu · /help · /lang · /imenu · /world_markets"
+            "/menu · /help · /lang · /world_gold"
         ),
         "onboard_next_steps": "از کجا شروع کنیم؟",
         "onboard_checklist": "وضعیت اتصال (اختیاری):\n{rubika} روبیکا\n{bale} بله\n{drive} گوگل درایو",
@@ -437,11 +444,11 @@ I18N = {
         ),
         "menu_intro": (
             "🏠 منوی اصلی\n\n"
-            "📁 انتقال — فایل به روبیکا/بله/درایو/SSH\n"
+            "📁 انتقال — روبیکا/بله/درایو/فایل و ارسال مستقیم\n"
             "🧰 ابزارها — شبکه، هش، محاسبات\n"
-            "🌍 جهان — آب‌وهوا، ارز/طلا، تقویم\n"
+            "🌍 جهان — آب‌وهوا، ارز، طلا، تقویم\n"
             "📰 فیدخوان — RSS و اعلان\n"
-            "📋 حساب — پلن و صف · ⚙️ ارسال مستقیم\n\n"
+            "📋 حساب — پلن و صف\n\n"
             "در هر بخش راهنمای همان منو نشان داده می‌شود."
         ),
         "plan_menu_opened": (
@@ -452,12 +459,12 @@ I18N = {
         "lang_saved": "زبان ذخیره شد.",
         "transfer_menu_title": (
             "📁 انتقال فایل\n\n"
-            "فایل/رسانه را بفرست یا مقصد را از قبل وصل کن.\n"
-            "💬 روبیکا — اتصال نشست و ارسال به چت/کانال\n"
-            "📨 بله — ربات و چت مقصد خودت\n"
+            "مقصد را وصل کن، بعد فایل بفرست یا ارسال مستقیم را روشن کن.\n"
+            "💬 روبیکا — اتصال و ارسال\n"
+            "📨 بله — ربات و چت مقصد\n"
             "☁️ درایو — آپلود به Google Drive\n"
-            "🖥 SSH — آپلود/دانلود روی سرور\n"
-            "📦 فایل و صف — صف کارها و ZIP"
+            "📦 فایل و صف — صف کارها و ZIP\n"
+            "📤 ارسال مستقیم — بدون انتخاب مقصد هر بار"
         ),
         "toolkit_menu_title": (
             "🧰 ابزارها\n\n"
@@ -502,9 +509,9 @@ I18N = {
         "btn_main_help": "❓ راهنما",
         "btn_main_plan_section": "📋 حساب و پلن",
         "btn_main_admin": "🛡 پنل ادمین",
-        "btn_back_main": "🏠 منوی اصلی",
-        "btn_back_transfer": "◀️ انتقال",
-        "btn_back_toolkit": "◀️ ابزارها",
+        "btn_back_main": "برگشت",
+        "btn_back_transfer": "برگشت",
+        "btn_back_toolkit": "برگشت",
         "btn_transfer_rubika": "💬 روبیکا",
         "btn_transfer_bale": "📨 بله",
         "btn_transfer_drive": "☁️ درایو",
@@ -520,6 +527,12 @@ I18N = {
         "btn_toolkit_network": "🌐 شبکه و IP",
         "btn_toolkit_crypto": "🔐 هش و Base64",
         "btn_toolkit_calc": "🧮 محاسبات",
+        "calc_cat_finance_title": "💰 مالی",
+        "calc_cat_numbers_title": "🔢 اعداد",
+        "calc_cat_convert_title": "🔄 تبدیل",
+        "calc_cat_math_title": "∑ ریاضی",
+        "calc_cat_text_title": "📝 متن",
+        "calc_cat_other_title": "🧩 سایر",
         "toolkit_calc_menu_title": (
             "🧮 محاسبات\n"
             "ابزارهای مستقل (الهام از kitset) — هر دکمه راهنمای ورودی خودش را دارد.\n"
@@ -528,6 +541,20 @@ I18N = {
             "• پلاک و پیش‌شماره کد ملی / اختلاف تاریخ\n"
             "• ریاضی پایه، IELTS، مصرف بنزین/سیگار"
         ),
+        "btn_calc_cat_finance": "💰 مالی",
+        "btn_calc_cat_numbers": "🔢 اعداد",
+        "btn_calc_cat_convert": "🔄 تبدیل",
+        "btn_calc_cat_math": "∑ ریاضی",
+        "btn_calc_cat_text": "📝 متن",
+        "btn_calc_cat_other": "🧩 سایر",
+        "btn_back_calc": "برگشت",
+        "btn_calc_bmi": "⚖ BMI",
+        "btn_calc_compound": "📈 سود مرکب",
+        "btn_calc_log": "㏒ لگاریتم",
+        "btn_calc_pct_error": "٪ خطا",
+        "btn_calc_linear": "𝒙 معادله خطی",
+        "btn_calc_quadratic": "𝒙² درجه۲",
+        "btn_calc_add_days": "📅 افزودن روز",
         "btn_calc_percent": "٪ درصد",
         "btn_calc_loan": "🏦 قسط وام",
         "btn_calc_deposit": "💰 سود سپرده",
@@ -579,10 +606,18 @@ I18N = {
         "calc_hint_square": "مربع\nضلع را بفرست.",
         "calc_hint_case": "حروف انگلیسی\nفرمت: `upper|lower|title متن`",
         "calc_hint_wordcount": "شمارش متن\nمتن را بفرست.",
-        "btn_world_markets": "📈 ارز و طلا",
+        "btn_world_markets": "🏛 تابلوها",
+        "btn_world_gold": "🥇 طلا و سکه",
+        "btn_world_usd": "💵 دلار",
+        "btn_world_eur": "💶 یورو",
+        "btn_world_gbp": "💷 پوند",
+        "btn_world_jpy": "💴 ین",
+        "btn_world_majors": "🌍 ارزهای مهم",
+        "currency_ask_from": "ارز مبدأ را بفرست (مثل USD) یا از دکمه‌ها انتخاب کن:",
+        "currency_ask_to": "ارز مقصد را بفرست (مثل IRR):",
         "world_menu_title": (
             "🌍 جهان\n\n"
-            "ابزارهای زمان، آب‌وهوا و بازار ایران (الهام از TGJU).\n\n"
+            "ابزارهای زمان، آب‌وهوا و بازار ایران (بازار آزاد ایران).\n\n"
             "🌤 آب‌وهوا — وضعیت و کیفیت هوا بر اساس شهر\n"
             "🕒 ساعت جهانی — زمان محلی شهر/منطقه زمانی\n"
             "📅 تقویم — امروز میلادی و شمسی\n"
@@ -625,7 +660,7 @@ I18N = {
         "btn_admin_users": "👥 کاربران",
         "btn_admin_billing": "💳 مالی",
         "btn_admin_maintenance": "🧹 نگهداری",
-        "btn_back_admin": "◀️ ادمین",
+        "btn_back_admin": "برگشت",
         "btn_admin_version": "🏷 نسخه",
         "btn_admin_tier_help": "ارتقای پلن",
         "btn_admin_bonus_help": "افزودن حجم",
@@ -759,16 +794,18 @@ I18N = {
         "link_media_hint": "در بخش لینک/ویدیو باید لینک بفرستی. برای ارسال فایل از «📁 انتقال فایل» مقصد را انتخاب کن.",
         "cf_menu_title": "☁️ Cloudflare\nاتصال per-user با API Token. مشاهده و ایجاد/حذف DNS با تأیید.",
         "cf_ask_token": (
-            "📖 راهنمای اتصال Cloudflare:\n\n"
-            "1️⃣ به dash.cloudflare.com/profile/api-tokens بروید\n"
-            "2️⃣ روی Create Token کلیک کنید\n"
-            "3️⃣ دسترسی Zone/DNS Read و Edit را انتخاب کنید\n"
-            "4️⃣ توکن ساخته‌شده را همینجا بفرستید"
+            "☁️ اتصال Cloudflare (گام‌به‌گام)\n\n"
+            "۱) وارد حساب Cloudflare شو\n"
+            "۲) برو به: پروفایل → API Tokens → Create Token\n"
+            "۳) قالب Edit zone DNS را انتخاب کن (خواندن/ویرایش DNS دامنه)\n"
+            "۴) دامنه را محدود کن و Create بزن\n"
+            "۵) توکن را کپی کن و همین‌جا بفرست (مثل رمز است؛ به کسی نده)\n\n"
+            "لینک مستقیم: https://dash.cloudflare.com/profile/api-tokens"
         ),
         "cf_token_invalid": "توکن Cloudflare نامعتبر است: {detail}",
         "cf_connected_ok": "Cloudflare متصل شد ✅ وضعیت توکن: {detail}",
         "cf_disconnected": "اتصال Cloudflare قطع شد.",
-        "cf_not_connected": "Cloudflare متصل نیست. از دکمه اتصال یا `/cf_connect` استفاده کن.",
+        "cf_not_connected": "Cloudflare هنوز متصل نیست.\nبرای اتصال دکمه زیر را بزن.",
         "cf_status_ok": "Cloudflare OK ✅ {detail}",
         "cf_status_bad": "Cloudflare نامعتبر است: {detail}",
         "cf_zones_result": "دامنه‌ها:\n{detail}",
@@ -811,7 +848,7 @@ I18N = {
         ),
         "queue_processing_none": "`—`",
         "queue_processing_detail": "`{job_id}` نوع `{task_type}` — `{file}` (~{size})",
-        "bale_not_connected": "بله متصل نیست. `/bale_connect` — ربات بله خودت را بساز و توکن را وارد کن.",
+        "bale_not_connected": "بله هنوز متصل نیست.\nبرای اتصال دکمه زیر را بزن.",
         "bale_ask_token": (
             "📖 راهنمای اتصال بله:\n\n"
             "1️⃣ اپلیکیشن بله را باز کنید\n"
@@ -824,7 +861,13 @@ I18N = {
         "bale_token_ok": "ربات بله تأیید شد (@{bot}).\nحالا `chat_id` مقصد را بفرست (گروه/کاربر در بله).",
         "bale_chat_id_empty": "chat_id خالی است. دوباره بفرست.",
         "bale_chat_invalid": "chat_id بله تأیید نشد: {detail}",
-        "bale_connected_ok": "بله متصل شد ✅ مقصد: `{chat_id}`",
+        "bale_connected_ok": (
+            "بله متصل شد ✅\n"
+            "مقصد: {chat_id}\n\n"
+            "چطور فایل بفرستی:\n"
+            "• در منوی بله بمان و فایل را مستقیم بفرست\n"
+            "• یا 📁 انتقال → 📤 ارسال مستقیم → مستقیم بله"
+        ),
         "bale_already_connected": "بله قبلاً متصل است. برای اتصال مجدد `/bale_disconnect` سپس `/bale_connect`.",
         "bale_disconnected": "اتصال بله قطع شد.",
         "btn_bale_connect": "🔗 اتصال بله",
@@ -833,10 +876,15 @@ I18N = {
         "btn_bale_disconnect": "❌ قطع بله",
         "bale_status_no_chat": "توکن OK ({detail}). chat_id نداری — در ویزارد `/bale_connect` ادامه بده.",
         "bale_status_ok": "بله: chat_id=`{chat_id}` — {detail}",
-        "bale_set_chat_usage": "استفاده: `/bale_set_chat <bale_chat_id>` (بعد از `/bale_connect`)",
+        "bale_set_chat_usage": (
+            "شناسه چت بله را بفرست.\n"
+            "اگر نمی‌دانی chat_id چیست: ربات را به گروه اضافه کن یا در چت خصوصی "
+            "یک پیام بفرست و از ابزار «آیدی من» استفاده کن؛ یا عدد منفی گروه را از ادمین بپرس."
+        ),
         "bale_set_chat_saved": "مقصد بله ذخیره شد: `{chat_id}`",
         "drive_not_connected": (
-            "گوگل درایو متصل نیست. `/drive_connect` — ورود با Google یا آپلود JSON سرویس‌اکانت."
+            "گوگل درایو هنوز متصل نیست.\n"
+            "برای شروع دکمه «اتصال درایو» را بزن — ورود با Google ساده‌ترین راه است."
         ),
         "drive_connect_choose": "روش اتصال Google Drive را انتخاب کن:",
         "btn_drive_auth_sa": "📄 سرویس‌اکانت (JSON)",
@@ -851,17 +899,25 @@ I18N = {
         "drive_oauth_code_empty": "کد authorization خالی است.",
         "drive_oauth_not_configured": "ورود Google روی سرور فعال نیست (OAuth env).",
         "drive_ask_sa_json": (
-            "📖 اتصال Google Drive (۲ مرحله)\n\n"
-            "مرحله ۱ — فایل JSON سرویس‌اکانت را به‌صورت **سند** بفرست.\n"
-            "(راهنمای کامل: console.cloud.google.com → Drive API → Service Account → Keys)\n\n"
-            "مرحله ۲ — بعد از آپلود، لینک یا ID پوشه Drive را می‌فرسی."
+            "☁️ اتصال Google Drive\n\n"
+            "پیشنهادی: از دکمه «ورود با Google» استفاده کن (ساده‌تر برای همه).\n\n"
+            "حالت پیشرفته — فقط اگر فایل JSON سرویس‌اکانت داری:\n"
+            "۱) همان فایل JSON را به‌صورت سند اینجا بفرست\n"
+            "۲) بعد لینک پوشه‌ای که می‌خواهی فایل‌ها آنجا بروند را بفرست\n"
+            "۳) پوشه را با ایمیل سرویس‌اکانت به‌صورت Editor به‌اشتراک بگذار"
         ),
         "drive_sa_already_uploaded": "فایل JSON قبلاً ذخیره شده ✅\nپوشه را با این ایمیل Share کن:\n`{email}`\n\nحالا لینک پوشه یا folder ID را بفرست.",
         "drive_share_email_hint": "✅ JSON دریافت شد.\nپوشه Drive را با این ایمیل **Editor** کن:\n`{email}`",
         "drive_ask_folder_id": "لینک پوشه Drive یا folder ID را بفرست (مثلاً `https://drive.google.com/drive/folders/XXXX`):",
         "drive_folder_empty": "folder_id خالی است.",
-        "drive_sa_missing_retry": "فایل سرویس‌اکانت پیدا نشد. دوباره `/drive_connect`.",
-        "drive_connected_ok": "درایو متصل شد ✅ folder=`{folder_id}`",
+        "drive_sa_missing_retry": "فایل سرویس‌اکانت پیدا نشد. دوباره اتصال درایو را شروع کن.",
+        "drive_connected_ok": (
+            "درایو متصل شد ✅\n"
+            "پوشه: {folder_id}\n\n"
+            "چطور فایل بفرستی:\n"
+            "• در منوی درایو بمان و فایل را بفرست\n"
+            "• یا 📁 انتقال → 📤 ارسال مستقیم → مستقیم درایو"
+        ),
         "drive_disconnected": "اتصال درایو قطع شد.",
         "btn_drive_connect": "🔗 اتصال درایو",
         "btn_drive_status": "✅ وضعیت درایو",
@@ -872,7 +928,7 @@ I18N = {
         "drive_status_line": "درایو ({mode}): {ok}\n{detail}",
         "drive_ls_result": "فایل‌های Drive:\n{detail}",
         "drive_ls_error": "لیست Drive ناموفق: {error}",
-        "ssh_list_empty": "هیچ سرور SSH ثبت نشده. `/ssh_add label host port user`",
+        "ssh_list_empty": "هیچ سرور SSH ثبت نشده. از دکمه «افزودن سرور» استفاده کن.",
         "ssh_list_title": "سرورهای SSH:",
         "ssh_list_row": "#{id} · {label}\n  {ssh_user}@{host}:{port}",
         "ssh_add_usage": "استفاده: `/ssh_add <label> <host> <port> <user> [password]`\nیا دکمه «➕ افزودن سرور» را بزن تا مرحله‌به‌مرحله راهنمایی شوی.",
@@ -880,12 +936,7 @@ I18N = {
         "ssh_wizard_ask_host": "آدرس host یا IP سرور را بفرست:",
         "ssh_wizard_ask_port": "پورت SSH را بفرست (معمولاً `22`):",
         "ssh_wizard_ask_user": "نام کاربر SSH را بفرست (مثلاً `root`):",
-        "ssh_wizard_ask_auth": (
-            "روش ورود را انتخاب کن:\n"
-            "• `password` یا `1` — رمز عبور\n"
-            "• `key` یا `2` — چسباندن متن کلید خصوصی PEM\n"
-            "• `file` یا `3` — ارسال فایل `.pem` / `.key` به‌عنوان سند"
-        ),
+        "ssh_wizard_ask_auth": "روش ورود را با یکی از دکمه‌های زیر انتخاب کن:",
         "ssh_wizard_ask_password": "رمز SSH را بفرست (در پیام بعدی حذف می‌شود):",
         "ssh_wizard_ask_key_paste": (
             "متن کامل کلید خصوصی PEM را در یک پیام بفرست "
@@ -947,7 +998,7 @@ I18N = {
             "- /opt/tele2rub/queue/worker_events.jsonl\n"
             "- /tmp/tele2rub-installer.jsonl"
         ),
-        "rubika_not_connected": "روبیکا متصل نیست. از `/rubika_connect` استفاده کن.",
+        "rubika_not_connected": "روبیکا هنوز متصل نیست.\nبرای اتصال دکمه زیر را بزن.",
         "rubika_checking": "در حال بررسی وضعیت واقعی اتصال روبیکا ...",
         "rubika_ok": (
             "اتصال روبیکا فعال و معتبر است ✅\n"
@@ -972,7 +1023,7 @@ I18N = {
         "rubika_passkey_needed": "این شماره نیاز به PassKey دارد. PassKey روبیکا را ارسال کن.",
         "rubika_code_sent": "کد ارسال شد. کد تایید روبیکا را بفرست.",
         "rubika_send_code_error": "خطا در ارسال کد روبیکا: {error}",
-        "rubika_connected_ok": "روبیکا با موفقیت متصل شد ✅",
+        "rubika_connected_ok": ("روبیکا متصل شد ✅\n\n""چطور فایل بفرستی:\n""• 📁 انتقال → 📤 ارسال مستقیم → مستقیم روبیکا را روشن کن، بعد فایل بفرست\n""• یا فایل را بفرست و مقصد را از دکمه‌ها انتخاب کن"),
         "rubika_bad_code": "کد تایید نامعتبر یا خطای ورود: {error}",
         "version_line": "telegramtorubika `{version}`",
         "update_notice": (
@@ -1188,6 +1239,8 @@ I18N = {
         "btn_tool_ssl": "🔒 SSL Check",
         "toolkit_http_headers_send_only": "آدرس URL را بفرست (مثلاً example.com)",
         "toolkit_website_status_send_only": "آدرس سایت را بفرست",
+        "toolkit_port_ask_host": "آدرس host یا IP را بفرست:",
+        "toolkit_port_ask_port": "شماره پورت را بفرست (مثلاً ۸۰ یا ۴۴۳):",
         "toolkit_port_check_send_only": "هاست و پورت را بفرست: `google.com 443`",
         "toolkit_subnet_send_only": "شبکه CIDR بفرست: `192.168.1.0/24`",
         "toolkit_blacklist_send_only": "IP را برای بررسی بلک‌لیست بفرست",
@@ -1215,7 +1268,7 @@ I18N = {
         ),
         "media_pick_dest": "مقصد ارسال فایل را انتخاب کن:",
         "media_dest_session_expired": "انتخاب منقضی شد — فایل را دوباره بفرست.",
-        "inline_main_title": "منوی شیشه‌ای — گزینه را انتخاب کن:",
+        "inline_main_title": "میان‌بر منو — بخش را انتخاب کن (ادامه با دکمه‌های پایین صفحه):",
         "inline_world_menu": "🌍 جهان",
         "inline_world_title": "ابزارهای جهان و زمان",
         "btn_world_weather": "🌤 آب‌وهوا",
@@ -1230,7 +1283,7 @@ I18N = {
         "timezone_ask_place": "نام شهر یا منطقه زمانی را بفرست (مثلاً Tehran یا Asia/Tehran):",
         "age_ask_date": "تاریخ تولد را بفرست (YYYY/MM/DD میلادی یا شمسی):",
         "currency_ask_amount": "مبلغ را بفرست (عدد) یا از دکمه‌های سریع استفاده کن:",
-        "currency_ask_pair": "از و به را بفرست، مثلاً: `USD IRR` یا `EUR USD`",
+        "currency_ask_pair": "ارز مبدأ و مقصد را مرحله‌به‌مرحله می‌گیریم.",
         "currency_bad_amount": "مبلغ نامعتبر است.",
         "rss_ask_url": "آدرس فید RSS/Atom را بفرست:",
         "rss_bad_url": "آدرس http/https معتبر بفرست.",
@@ -1375,7 +1428,7 @@ I18N = {
             "📰 Feed Reader — RSS / YouTube / X with push & digest\n"
             "☁️ Cloudflare — personal DNS · 📋 Account — plan & usage\n\n"
             "Each menu section shows its own short guide.\n"
-            "/menu · /help · /lang · /imenu · /world_markets"
+            "/menu · /help · /lang · /world_gold"
         ),
         "onboard_next_steps": "Where do you want to start?",
         "onboard_checklist": "Optional connections:\n{rubika} Rubika\n{bale} Bale\n{drive} Google Drive",
@@ -1443,9 +1496,9 @@ I18N = {
         "btn_main_help": "❓ Help",
         "btn_main_plan_section": "📋 Account & plan",
         "btn_main_admin": "🛡 Admin",
-        "btn_back_main": "🏠 Main menu",
-        "btn_back_transfer": "◀️ Transfer",
-        "btn_back_toolkit": "◀️ Tools",
+        "btn_back_main": "Back",
+        "btn_back_transfer": "Back",
+        "btn_back_toolkit": "Back",
         "btn_transfer_rubika": "💬 Rubika",
         "btn_transfer_bale": "📨 Bale",
         "btn_transfer_drive": "☁️ Drive",
@@ -1461,11 +1514,31 @@ I18N = {
         "btn_toolkit_network": "🌐 Network & IP",
         "btn_toolkit_crypto": "🔐 Hash & Base64",
         "btn_toolkit_calc": "🧮 Calculators",
+        "calc_cat_finance_title": "💰 Finance",
+        "calc_cat_numbers_title": "🔢 Numbers",
+        "calc_cat_convert_title": "🔄 Convert",
+        "calc_cat_math_title": "∑ Math",
+        "calc_cat_text_title": "📝 Text",
+        "calc_cat_other_title": "🧩 Other",
         "toolkit_calc_menu_title": (
             "🧮 Calculators\n"
             "Independent tools (kitset-inspired). Each button shows its own input guide.\n"
             "Percent / loan / deposit / rial↔toman · units · plate/NID · dates · math"
         ),
+        "btn_calc_cat_finance": "💰 Finance",
+        "btn_calc_cat_numbers": "🔢 Numbers",
+        "btn_calc_cat_convert": "🔄 Convert",
+        "btn_calc_cat_math": "∑ Math",
+        "btn_calc_cat_text": "📝 Text",
+        "btn_calc_cat_other": "🧩 Other",
+        "btn_back_calc": "Back",
+        "btn_calc_bmi": "⚖ BMI",
+        "btn_calc_compound": "📈 Compound",
+        "btn_calc_log": "㏒ Log",
+        "btn_calc_pct_error": "% Error",
+        "btn_calc_linear": "𝒙 Linear eq",
+        "btn_calc_quadratic": "𝒙² Quadratic",
+        "btn_calc_add_days": "📅 Add days",
         "btn_calc_percent": "% Percent",
         "btn_calc_loan": "🏦 Loan EMI",
         "btn_calc_deposit": "💰 Deposit",
@@ -1517,10 +1590,18 @@ I18N = {
         "calc_hint_square": "Square\nSend side length.",
         "calc_hint_case": "Case\n`upper|lower|title text`",
         "calc_hint_wordcount": "Word count\nSend text.",
-        "btn_world_markets": "📈 FX & Gold",
+        "btn_world_markets": "🏛 Boards",
+        "btn_world_gold": "🥇 Gold & coins",
+        "btn_world_usd": "💵 USD",
+        "btn_world_eur": "💶 EUR",
+        "btn_world_gbp": "💷 GBP",
+        "btn_world_jpy": "💴 JPY",
+        "btn_world_majors": "🌍 Major FX",
+        "currency_ask_from": "Send source currency (e.g. USD) or tap a button:",
+        "currency_ask_to": "Send target currency (e.g. IRR):",
         "world_menu_title": (
             "🌍 World\n\n"
-            "Time, weather, and Iran free-market board (TGJU-inspired).\n\n"
+            "Time, weather, and Iran free-market board (Iran free market).\n\n"
             "🌤 Weather · 🕒 Time · 📅 Calendar · 🎂 Age\n"
             "💱 Convert · 📈 FX & Gold board · 🌋 Earthquakes"
         ),
@@ -1558,7 +1639,7 @@ I18N = {
         "btn_admin_users": "👥 Users",
         "btn_admin_billing": "💳 Billing",
         "btn_admin_maintenance": "🧹 Maintenance",
-        "btn_back_admin": "◀️ Admin",
+        "btn_back_admin": "Back",
         "btn_admin_version": "🏷 Version",
         "btn_admin_tier_help": "Set tier",
         "btn_admin_bonus_help": "Add quota",
@@ -1689,7 +1770,7 @@ I18N = {
         "cf_token_invalid": "Invalid Cloudflare token: {detail}",
         "cf_connected_ok": "Cloudflare linked ✅ token status: {detail}",
         "cf_disconnected": "Cloudflare disconnected.",
-        "cf_not_connected": "Cloudflare is not linked. Use Connect or `/cf_connect`.",
+        "cf_not_connected": "Cloudflare is not linked yet.\nTap the button below to connect.",
         "cf_status_ok": "Cloudflare OK ✅ {detail}",
         "cf_status_bad": "Cloudflare invalid: {detail}",
         "cf_zones_result": "Zones:\n{detail}",
@@ -1732,7 +1813,7 @@ I18N = {
         ),
         "queue_processing_none": "`—`",
         "queue_processing_detail": "`{job_id}` type `{task_type}` — `{file}` (~{size})",
-        "bale_not_connected": "Bale is not linked. Use `/bale_connect` with your own Bale bot token.",
+        "bale_not_connected": "Bale is not linked yet.\nTap the button below to connect.",
         "bale_ask_token": (
             "📖 How to connect Bale:\n\n"
             "1️⃣ Open Bale app\n"
@@ -1745,7 +1826,12 @@ I18N = {
         "bale_token_ok": "Bale bot verified (@{bot}). Send the destination `chat_id`.",
         "bale_chat_id_empty": "chat_id is empty.",
         "bale_chat_invalid": "Bale chat_id check failed: {detail}",
-        "bale_connected_ok": "Bale linked ✅ destination: `{chat_id}`",
+        "bale_connected_ok": (
+            "Bale linked ✅ chat: `{chat_id}`\n\n"
+            "How to send:\n"
+            "• Transfer → Direct send → turn on Bale, then send a file\n"
+            "• Or send a file and pick Bale as destination"
+        ),
         "bale_already_connected": "Bale already linked. `/bale_disconnect` then `/bale_connect` to replace.",
         "bale_disconnected": "Bale disconnected.",
         "btn_bale_connect": "🔗 Bale Connect",
@@ -1754,9 +1840,15 @@ I18N = {
         "btn_bale_disconnect": "❌ Bale Disconnect",
         "bale_status_no_chat": "Token OK ({detail}). Missing chat_id — continue `/bale_connect`.",
         "bale_status_ok": "Bale: chat_id=`{chat_id}` — {detail}",
-        "bale_set_chat_usage": "Usage: `/bale_set_chat <bale_chat_id>` (after `/bale_connect`)",
+        "bale_set_chat_usage": (
+            "Send the Bale chat_id.\n"
+            "Tip: add the bot to a group, or ask an admin for the numeric chat id."
+        ),
         "bale_set_chat_saved": "Bale destination saved: `{chat_id}`",
-        "drive_not_connected": "Google Drive not linked. Use `/drive_connect` — Google sign-in or service-account JSON.",
+        "drive_not_connected": (
+            "Google Drive is not linked yet.\n"
+            "Tap Connect Drive — Google sign-in is the easiest path."
+        ),
         "drive_connect_choose": "Choose how to connect Google Drive:",
         "btn_drive_auth_sa": "📄 Service account (JSON)",
         "btn_drive_auth_oauth": "🔐 Sign in with Google",
@@ -1778,7 +1870,7 @@ I18N = {
         "drive_share_email_hint": "✅ JSON received.\nShare the Drive folder with (Editor):\n`{email}`",
         "drive_ask_folder_id": "Send the Drive folder URL or folder ID:",
         "drive_folder_empty": "folder_id is empty.",
-        "drive_sa_missing_retry": "Service account file missing. Run `/drive_connect` again.",
+        "drive_sa_missing_retry": "Service account file missing. Start Drive connect again.",
         "drive_connected_ok": "Drive linked ✅ folder=`{folder_id}`",
         "drive_disconnected": "Drive disconnected.",
         "btn_drive_connect": "🔗 Drive Connect",
@@ -1790,7 +1882,7 @@ I18N = {
         "drive_status_line": "Drive ({mode}): {ok}\n{detail}",
         "drive_ls_result": "Drive files:\n{detail}",
         "drive_ls_error": "Drive list failed: {error}",
-        "ssh_list_empty": "No SSH servers. Use `/ssh_add label host port user`",
+        "ssh_list_empty": "No SSH servers yet. Use the Add server button.",
         "ssh_list_title": "SSH servers:",
         "ssh_list_row": "#{id} · {label}\n  {ssh_user}@{host}:{port}",
         "ssh_add_usage": "Usage: `/ssh_add <label> <host> <port> <user> [password]`\nOr tap «➕ Add server» for a step-by-step wizard.",
@@ -1798,12 +1890,7 @@ I18N = {
         "ssh_wizard_ask_host": "Send the server host or IP:",
         "ssh_wizard_ask_port": "Send the SSH port (usually `22`):",
         "ssh_wizard_ask_user": "Send the SSH username (e.g. `root`):",
-        "ssh_wizard_ask_auth": (
-            "Choose auth method:\n"
-            "• `password` or `1` — password\n"
-            "• `key` or `2` — paste PEM private key text\n"
-            "• `file` or `3` — send a `.pem` / `.key` file as a document"
-        ),
+        "ssh_wizard_ask_auth": "Pick an auth method with the buttons below:",
         "ssh_wizard_ask_password": "Send the SSH password:",
         "ssh_wizard_ask_key_paste": "Paste the full PEM private key in one message (from `-----BEGIN` to `-----END`):",
         "ssh_wizard_ask_key_file": "Send the private key file (`.pem` or `.key`) as a **document** (not a photo).",
@@ -1860,7 +1947,7 @@ I18N = {
             "- /opt/tele2rub/queue/bot_events.jsonl\n"
             "- /opt/tele2rub/queue/worker_events.jsonl"
         ),
-        "rubika_not_connected": "Rubika is not linked. Use `/rubika_connect`.",
+        "rubika_not_connected": "Rubika is not linked yet.\nTap the button below to connect.",
         "rubika_checking": "Checking live Rubika session...",
         "rubika_ok": (
             "Rubika session is valid ✅\n"
@@ -1885,7 +1972,12 @@ I18N = {
         "rubika_passkey_needed": "This number needs a PassKey. Send your Rubika PassKey.",
         "rubika_code_sent": "Code sent. Send the Rubika verification code.",
         "rubika_send_code_error": "Error sending Rubika code: {error}",
-        "rubika_connected_ok": "Rubika linked successfully ✅",
+        "rubika_connected_ok": (
+            "Rubika linked ✅\n\n"
+            "How to send:\n"
+            "• Transfer → Direct send → Rubika on, then send a file\n"
+            "• Or send a file and pick the destination"
+        ),
         "rubika_bad_code": "Invalid code or sign-in error: {error}",
         "version_line": "telegramtorubika `{version}`",
         "update_notice": (
@@ -2099,6 +2191,8 @@ I18N = {
         "btn_tool_ssl": "🔒 SSL check",
         "toolkit_http_headers_send_only": "Send a URL (e.g. example.com)",
         "toolkit_website_status_send_only": "Send a website URL",
+        "toolkit_port_ask_host": "Send host or IP:",
+        "toolkit_port_ask_port": "Send port number (e.g. 80 or 443):",
         "toolkit_port_check_send_only": "Send host and port: `google.com 443`",
         "toolkit_subnet_send_only": "Send CIDR: `192.168.1.0/24`",
         "toolkit_blacklist_send_only": "Send an IP to check blacklists",
@@ -2126,7 +2220,7 @@ I18N = {
         ),
         "media_pick_dest": "Choose where to send this file:",
         "media_dest_session_expired": "Selection expired — send the file again.",
-        "inline_main_title": "Glass menu — pick a section:",
+        "inline_main_title": "Menu shortcut — pick a section (continue with the reply keyboard):",
         "inline_world_menu": "🌍 World",
         "inline_world_title": "World & time tools",
         "btn_world_weather": "🌤 Weather",
@@ -2141,7 +2235,7 @@ I18N = {
         "timezone_ask_place": "Send a city or IANA zone (e.g. London or Europe/London):",
         "age_ask_date": "Send birth date as YYYY/MM/DD (Gregorian or Solar Hijri):",
         "currency_ask_amount": "Send an amount (number) or use a quick button:",
-        "currency_ask_pair": "Send from/to, e.g. `USD IRR` or `EUR USD`",
+        "currency_ask_pair": "We will ask source and target step by step.",
         "currency_bad_amount": "Invalid amount.",
         "rss_ask_url": "Send an RSS/Atom feed URL:",
         "rss_bad_url": "Send a valid http(s) URL.",
@@ -2473,6 +2567,30 @@ def build_toolkit_crypto_menu(user_id: int) -> ReplyKeyboardMarkup:
 
 def build_toolkit_calc_menu(user_id: int) -> ReplyKeyboardMarkup:
     return menu_engine.build_toolkit_calc_menu(user_id, tr)
+
+
+def build_calc_finance_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_calc_finance_menu(user_id, tr)
+
+
+def build_calc_numbers_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_calc_numbers_menu(user_id, tr)
+
+
+def build_calc_convert_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_calc_convert_menu(user_id, tr)
+
+
+def build_calc_math_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_calc_math_menu(user_id, tr)
+
+
+def build_calc_text_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_calc_text_menu(user_id, tr)
+
+
+def build_calc_other_menu(user_id: int) -> ReplyKeyboardMarkup:
+    return menu_engine.build_calc_other_menu(user_id, tr)
 
 
 def build_toolkit_zip_menu(user_id: int) -> ReplyKeyboardMarkup:
@@ -3663,6 +3781,7 @@ DIRECT_SEND_COMMAND_DEPS = DirectSendCommandDeps(
     get_drive_ready=lambda uid: load_drive_credentials(queue, BASE_DIR, uid).ready,
     build_settings_menu=build_settings_menu,
     build_main_menu=build_main_menu,
+    build_transfer_menu=build_transfer_menu,
 )
 
 LINK_DIRECT_COMMAND_DEPS = LinkDirectCommandDeps(
@@ -3754,6 +3873,7 @@ TOOLKIT_NET_EXTRA_DEPS = ToolkitNetExtraDeps(
     toolkit_network_light_enabled=TOOLKIT_NETWORK_LIGHT,
     toolkit_quota_try=_toolkit_quota_try,
     toolkit_quota_commit=_toolkit_quota_commit,
+    get_state=get_state,
 )
 
 async def safe_delete_user_message(message: Message):
@@ -3807,6 +3927,12 @@ TOOLKIT_MENU_DEPS = ToolkitMenuDeps(
     build_toolkit_network_menu=build_toolkit_network_menu,
     build_toolkit_crypto_menu=build_toolkit_crypto_menu,
     build_toolkit_calc_menu=build_toolkit_calc_menu,
+    build_calc_finance_menu=build_calc_finance_menu,
+    build_calc_numbers_menu=build_calc_numbers_menu,
+    build_calc_convert_menu=build_calc_convert_menu,
+    build_calc_math_menu=build_calc_math_menu,
+    build_calc_text_menu=build_calc_text_menu,
+    build_calc_other_menu=build_calc_other_menu,
 )
 
 CALC_KIT_DEPS = CalcKitDeps(
@@ -3874,6 +4000,26 @@ async def show_transfer_menu_handler(client: Client, message: Message):
     await handle_show_transfer_menu(TRANSFER_HUB_DEPS, client, message)
 
 
+async def show_plan_menu_handler(client: Client, message: Message):
+    uid = message.from_user.id
+    set_menu_section(uid, MenuSection.PLAN)
+    await message.reply_text(
+        tr(uid, "plan_menu_opened"),
+        reply_markup=build_plan_menu(uid),
+        parse_mode=None,
+    )
+
+
+async def show_settings_menu_handler(client: Client, message: Message):
+    uid = message.from_user.id
+    set_menu_section(uid, MenuSection.SETTINGS)
+    await message.reply_text(
+        tr(uid, "settings_menu_title"),
+        reply_markup=build_settings_menu(uid),
+        parse_mode=None,
+    )
+
+
 async def show_toolkit_menu_handler(client: Client, message: Message):
     await handle_show_toolkit_menu(TOOLKIT_MENU_DEPS, client, message)
 
@@ -3888,6 +4034,30 @@ async def show_toolkit_crypto_menu_handler(client: Client, message: Message):
 
 async def show_toolkit_calc_menu_handler(client: Client, message: Message):
     await handle_show_toolkit_calc_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_calc_finance_menu_handler(client: Client, message: Message):
+    await handle_show_calc_finance_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_calc_numbers_menu_handler(client: Client, message: Message):
+    await handle_show_calc_numbers_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_calc_convert_menu_handler(client: Client, message: Message):
+    await handle_show_calc_convert_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_calc_math_menu_handler(client: Client, message: Message):
+    await handle_show_calc_math_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_calc_text_menu_handler(client: Client, message: Message):
+    await handle_show_calc_text_menu(TOOLKIT_MENU_DEPS, client, message)
+
+
+async def show_calc_other_menu_handler(client: Client, message: Message):
+    await handle_show_calc_other_menu(TOOLKIT_MENU_DEPS, client, message)
 
 
 async def show_rubika_menu_handler(client: Client, message: Message):
@@ -4283,7 +4453,11 @@ async def enqueue_rubika_text_message(message: Message, text_body: str) -> None:
     user_id = message.from_user.id
     session_name = get_user_session(user_id)
     if not session_name:
-        await message.reply_text(tr(user_id, "rubika_not_connected"))
+        from v2.core.connect_cta import connect_keyboard
+        await message.reply_text(
+            tr(user_id, "rubika_not_connected"),
+            reply_markup=connect_keyboard(rubika=True),
+        )
         return
     text_body = (text_body or "").strip()
     if not text_body:
@@ -4584,6 +4758,31 @@ async def world_currency_handler(client: Client, message: Message):
 async def world_markets_handler(client: Client, message: Message):
     await handle_markets(WORLD_COMMAND_DEPS, client, message)
 
+
+async def world_gold_handler(client: Client, message: Message):
+    await handle_markets(WORLD_COMMAND_DEPS, client, message, board="gold")
+
+
+async def world_usd_handler(client: Client, message: Message):
+    await handle_markets(WORLD_COMMAND_DEPS, client, message, board="usd")
+
+
+async def world_eur_handler(client: Client, message: Message):
+    await handle_markets(WORLD_COMMAND_DEPS, client, message, board="eur")
+
+
+async def world_gbp_handler(client: Client, message: Message):
+    await handle_markets(WORLD_COMMAND_DEPS, client, message, board="gbp")
+
+
+async def world_jpy_handler(client: Client, message: Message):
+    await handle_markets(WORLD_COMMAND_DEPS, client, message, board="jpy")
+
+
+async def world_majors_handler(client: Client, message: Message):
+    await handle_markets(WORLD_COMMAND_DEPS, client, message, board="majors")
+
+
 async def calc_percent_handler(client: Client, message: Message):
     await run_calc_command(CALC_KIT_DEPS, message, "percent")
 
@@ -4682,6 +4881,35 @@ async def calc_case_handler(client: Client, message: Message):
 
 async def calc_wordcount_handler(client: Client, message: Message):
     await run_calc_command(CALC_KIT_DEPS, message, "wordcount")
+
+async def calc_bmi_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "bmi")
+
+
+async def calc_compound_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "compound")
+
+
+async def calc_log_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "log")
+
+
+async def calc_pct_error_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "pct_error")
+
+
+async def calc_linear_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "linear")
+
+
+async def calc_quadratic_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "quadratic")
+
+
+async def calc_add_days_handler(client: Client, message: Message):
+    await run_calc_command(CALC_KIT_DEPS, message, "add_days")
+
+
 
 
 
@@ -4970,6 +5198,12 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
     show_toolkit_network_menu_handler=show_toolkit_network_menu_handler,
     show_toolkit_crypto_menu_handler=show_toolkit_crypto_menu_handler,
     show_toolkit_calc_menu_handler=show_toolkit_calc_menu_handler,
+    show_calc_finance_menu_handler=show_calc_finance_menu_handler,
+    show_calc_numbers_menu_handler=show_calc_numbers_menu_handler,
+    show_calc_convert_menu_handler=show_calc_convert_menu_handler,
+    show_calc_math_menu_handler=show_calc_math_menu_handler,
+    show_calc_text_menu_handler=show_calc_text_menu_handler,
+    show_calc_other_menu_handler=show_calc_other_menu_handler,
     show_rubika_menu_handler=show_rubika_menu_handler,
     show_bale_menu_handler=show_bale_menu_handler,
     show_drive_menu_handler=show_drive_menu_handler,
@@ -5019,6 +5253,12 @@ REPLY_ROUTE_DEPS = ReplyRouteDeps(
         "/world_calendar": world_calendar_handler,
         "/world_currency": world_currency_handler,
         "/world_markets": world_markets_handler,
+        "/world_gold": world_gold_handler,
+        "/world_usd": world_usd_handler,
+        "/world_eur": world_eur_handler,
+        "/world_gbp": world_gbp_handler,
+        "/world_jpy": world_jpy_handler,
+        "/world_majors": world_majors_handler,
         "/calc_percent": calc_percent_handler,
         "/calc_loan": calc_loan_handler,
         "/calc_deposit": calc_deposit_handler,
@@ -5182,6 +5422,11 @@ INLINE_MENU_DEPS = InlineMenuDeps(
     plan_compare_handler=plan_compare_handler,
     show_feed_menu_handler=show_feed_menu_handler,
     calc_kit_deps=CALC_KIT_DEPS,
+    show_transfer_menu_handler=show_transfer_menu_handler,
+    show_toolkit_menu_handler=show_toolkit_menu_handler,
+    show_world_menu_handler=show_world_menu_handler,
+    show_plan_menu_handler=show_plan_menu_handler,
+    show_settings_menu_handler=show_settings_menu_handler,
 )
 
 
@@ -5252,6 +5497,54 @@ def google_oauth_http_callback(telegram_user_id: int, code: str) -> tuple[bool, 
     return True, ""
 
 
+
+async def _cta_callback_route(client: Client, callback_query, action: str) -> bool:
+    await callback_query.answer()
+    msg = callback_query.message
+    msg.from_user = callback_query.from_user
+    if action == "rubika_connect":
+        await rubika_connect_handler(client, msg)
+    elif action == "bale_connect":
+        await bale_connect_handler(client, msg)
+    elif action == "drive_connect":
+        await drive_connect_handler(client, msg)
+    elif action == "cf_connect":
+        await cf_connect_handler(client, msg)
+    elif action == "direct_menu":
+        uid = callback_query.from_user.id
+        set_menu_section(uid, MenuSection.SETTINGS)
+        await msg.reply_text(
+            tr(uid, "settings_menu_title"),
+            reply_markup=build_settings_menu(uid),
+            parse_mode=None,
+        )
+    elif action == "transfer_menu":
+        await show_transfer_menu_handler(client, msg)
+    elif action == "netstatus":
+        await netstatus_handler(client, msg)
+    elif action == "purchase":
+        await purchase_handler(client, msg)
+    return True
+
+
+async def _calc_mode_callback_route(client: Client, callback_query, tool: str, mode: str) -> bool:
+    from v2.handlers.calc_kit_commands import handle_calc_mode_callback
+    return await handle_calc_mode_callback(CALC_KIT_DEPS, client, callback_query, tool, mode)
+
+
+async def _fx_from_callback_route(client: Client, callback_query, code: str) -> bool:
+    uid = callback_query.from_user.id
+    state = get_state(uid)
+    amount = state.get("amount")
+    if not amount:
+        await callback_query.answer("amount?", show_alert=True)
+        return True
+    set_state_preserving_menu(uid, {"step": "await_currency_to", "amount": amount, "from_code": code.upper()})
+    await callback_query.answer()
+    await callback_query.message.reply_text(tr(uid, "currency_ask_to"), parse_mode=None)
+    return True
+
+
 CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
     tr=tr,
     get_state=get_state,
@@ -5295,6 +5588,10 @@ CALLBACK_ROUTE_DEPS = CallbackRouteDeps(
         SSH_WIZARD_DEPS, c, cq, op, sid
     ),
     dispatch_drive_auth_callback=_drive_auth_callback_route,
+    handle_cta_callback=_cta_callback_route,
+    handle_calc_mode_callback=_calc_mode_callback_route,
+    handle_fx_from_callback=_fx_from_callback_route,
+    handle_ssh_auth_callback=lambda c, cq, m: handle_ssh_auth_callback(SSH_WIZARD_DEPS, c, cq, m),
 )
 
 
